@@ -1,0 +1,45 @@
+{
+  "appId": "com.aurora.player",
+  "productName": "Aurora Player",
+  "directories": {
+    "output": "release"
+  },
+  "afterPack": "scripts/after-pack.mjs",
+  "npmRebuild": false,
+  "files": [
+    "dist-main/**/*",
+    "dist/renderer/**/*",
+    "package.json",
+    "!node_modules/ffprobe-static/bin/darwin/**/*",
+    "!node_modules/ffprobe-static/bin/linux/**/*",
+    "!node_modules/ffprobe-static/bin/win32/ia32/**/*",
+    "!node_modules/electron-mpv-video/native/mpv-addon/build/Release/*.{pdb,lib,exp,iobj,ipdb}"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/electron-mpv-video/native/mpv-addon/build/Release/mpv_addon.node",
+    "node_modules/electron-mpv-video/native/mpv-addon/build/Release/libmpv-2.dll",
+    "node_modules/ffmpeg-static/ffmpeg.exe",
+    "node_modules/ffprobe-static/bin/win32/x64/ffprobe.exe"
+  ],
+  "electronLanguages": ["zh-CN", "en-US"],
+  "win": {
+    "icon": "src/renderer/assets/icon/app_icon.ico",
+    "signAndEditExecutable": false,
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "fileAssociations": [
+      { "ext": ["mp4", "mkv", "webm", "mov", "avi", "mp3", "flac", "wav", "ogg", "m4a", "jpg", "png", "webp"], "name": "Aurora Media", "role": "Editor" }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  }
+}

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aurora Sonic Topography</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body, #root { width: 100%; height: 100%; overflow: hidden; background: #000; }
+      canvas { width: 100% !important; height: 100% !important; }
+    </style>
+    <script>
+      (() => {
+        let audioListener = null
+        let pendingAudio = null
+        let pendingConfig = null
+        let previousAudio = []
+
+        window.__auroraSpectrumDebug = {
+          updates: 0, activeUpdates: 0, energy: 0, minEnergy: 0, maxEnergy: 0,
+          bass: 0, peak: 0, flux: 0, maxFlux: 0, nonZeroBins: 0, sampleCount: 0, lastAt: 0
+        }
+
+        window.__mediaState = {
+          title: '', artist: '', thumbnail: '', primaryColor: '', textColor: '',
+          isPlaying: false, position: 0, duration: 0, _callbacks: []
+        }
+        window.__notifyMediaChange = () => {
+          const value = window.__mediaState
+          value._callbacks.forEach((callback) => callback({ ...value, _callbacks: undefined }))
+        }
+        window.wallpaperRegisterAudioListener = (callback) => {
+          audioListener = callback
+          if (pendingAudio) callback(pendingAudio)
+        }
+        window.wallpaperRegisterMediaPropertiesListener = () => {}
+        window.wallpaperRegisterMediaThumbnailListener = () => {}
+        window.wallpaperRegisterMediaPlaybackListener = () => {}
+        window.wallpaperRegisterMediaTimelineListener = () => {}
+        window.wallpaperReady = () => window.parent.postMessage({ type: 'aurora-visualizer-ready' }, '*')
+
+        const applyConfig = () => {
+          if (!pendingConfig || !window.wallpaperPropertyListener?.applyUserProperties) return false
+          window.wallpaperPropertyListener.applyUserProperties(pendingConfig)
+          return true
+        }
+
+        window.addEventListener('message', (event) => {
+          if (event.data?.type === 'aurora-audio-spectrum') {
+            pendingAudio = event.data.samples
+            const samples = Array.isArray(pendingAudio) ? pendingAudio : Array.from(pendingAudio || [])
+            let energy = 0
+            let bass = 0
+            let peak = 0
+            let flux = 0
+            let nonZeroBins = 0
+            const bassBins = Math.max(1, Math.round(samples.length * .12))
+            for (let index = 0; index < samples.length; index += 1) {
+              const value = Number(samples[index]) || 0
+              energy += value
+              if (index < bassBins) bass += value
+              peak = Math.max(peak, value)
+              flux += Math.abs(value - (previousAudio[index] || 0))
+              if (value > .025) nonZeroBins += 1
+            }
+            previousAudio = samples.slice()
+            const debug = window.__auroraSpectrumDebug
+            const normalizedEnergy = samples.length ? energy / samples.length : 0
+            const normalizedFlux = samples.length ? flux / samples.length : 0
+            window.__auroraSpectrumDebug = {
+              updates: debug.updates + 1,
+              activeUpdates: debug.activeUpdates + (peak > .025 ? 1 : 0),
+              energy: normalizedEnergy,
+              minEnergy: debug.updates ? Math.min(debug.minEnergy, normalizedEnergy) : normalizedEnergy,
+              maxEnergy: Math.max(debug.maxEnergy, normalizedEnergy),
+              bass: bass / bassBins,
+              peak,
+              flux: normalizedFlux,
+              maxFlux: Math.max(debug.maxFlux, normalizedFlux),
+              nonZeroBins,
+              sampleCount: samples.length,
+              lastAt: performance.now()
+            }
+            audioListener?.(pendingAudio)
+          }
+          if (event.data?.type === 'aurora-visualizer-config') {
+            pendingConfig = event.data.properties
+            window.__auroraConfigDebug = pendingConfig
+            applyConfig()
+          }
+        })
+
+        const timer = window.setInterval(() => {
+          if (applyConfig()) window.clearInterval(timer)
+        }, 120)
+      })()
+    </script>
+    <script type="module" src="./assets/visualizer.js"></script>
+    <link rel="stylesheet" href="./assets/visualizer.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

@@ -1,0 +1,194 @@
+/*
+ * Shared accent skin for pages outside Settings.
+ *
+ * The renderer injects the selected palette into --accent/--surface/--fg*
+ * and marks the root with data-accent-theme. These late rules bridge the
+ * older cinematic surfaces to those tokens without recoloring user media.
+ */
+:root[data-accent-theme] .home-page {
+  --cinema-gold: var(--accent);
+  --cinema-gold-light: var(--accent-end);
+  --cinema-text: var(--fg0);
+  color: var(--fg0);
+  background: var(--bg0);
+}
+
+:root[data-accent-theme] .cinema-hero-shade {
+  background:
+    linear-gradient(90deg, var(--bg0) 0%, color-mix(in srgb, var(--bg0) 96%, transparent) 18%, color-mix(in srgb, var(--bg0) 72%, transparent) 31%, color-mix(in srgb, var(--bg0) 25%, transparent) 48%, transparent 64%),
+    linear-gradient(0deg, var(--bg0) 0%, color-mix(in srgb, var(--bg0) 48%, transparent) 23%, color-mix(in srgb, var(--bg0) 8%, transparent) 52%, transparent 70%);
+}
+:root[data-accent-theme] .cinema-search {
+  color: var(--fg1);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+:root[data-accent-theme] .cinema-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+:root[data-accent-theme] .cinema-search input { color: var(--fg0); }
+:root[data-accent-theme] .cinema-search input::placeholder { color: var(--fg2); }
+:root[data-accent-theme] .cinema-avatar { border-color: color-mix(in srgb, var(--accent) 62%, var(--border)); background: var(--surface); }
+:root[data-accent-theme] .cinema-resume {
+  color: var(--bg0);
+  background: var(--accent-gradient);
+  box-shadow: 0 10px 28px var(--accent-soft);
+}
+:root[data-accent-theme] .cinema-card { color: var(--fg0); }
+:root[data-accent-theme] .cinema-card-image { border-color: color-mix(in srgb, var(--accent) 34%, var(--border)); background: var(--surface); }
+:root[data-accent-theme] .media-artwork-fallback { color: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); background: linear-gradient(145deg, color-mix(in srgb, var(--surface2) 80%, transparent), var(--bg1)); }
+:root[data-accent-theme] .cinema-card-play { color: var(--bg0); }
+:root[data-accent-theme] .cinema-card-play::before { background: color-mix(in srgb, var(--accent-end) 88%, var(--fg0)); box-shadow: 0 8px 28px var(--shadow); }
+:root[data-accent-theme] .cinema-card-track { background: color-mix(in srgb, var(--fg0) 28%, transparent); }
+:root[data-accent-theme] .cinema-card-track i { background: var(--accent-gradient); }
+:root[data-accent-theme] .cinema-card-title { color: var(--fg0); }
+:root[data-accent-theme] .cinema-empty { color: var(--fg2); border-color: color-mix(in srgb, var(--accent) 34%, var(--border)); background: color-mix(in srgb, var(--surface) 38%, transparent); }
+:root[data-accent-theme] .cinema-empty:hover { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 72%, transparent); }
+
+/* Library */
+:root[data-accent-theme] .library-page {
+  --library-bg: var(--bg0);
+  --library-glass: color-mix(in srgb, var(--surface) 78%, transparent);
+  --library-text: var(--fg0);
+  --library-muted: color-mix(in srgb, var(--fg0) 76%, transparent);
+  --library-dim: color-mix(in srgb, var(--fg0) 64%, transparent);
+  --library-gold: var(--accent);
+  --library-gold-light: var(--accent-end);
+  color: var(--fg0);
+  background: var(--bg0);
+}
+:root[data-accent-theme] .library-eyebrow { color: var(--accent); }
+:root[data-accent-theme] .library-type-tabs,
+:root[data-accent-theme] .library-search,
+:root[data-accent-theme] .library-overview,
+:root[data-accent-theme] .library-sort-select,
+:root[data-accent-theme] .library-view-toggle,
+:root[data-accent-theme] .library-collection.expanded {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg0) 5%, transparent), 0 18px 55px var(--shadow);
+}
+:root[data-accent-theme] .library-type-tabs button { color: var(--fg2); }
+:root[data-accent-theme] .library-type-tabs button:hover,
+:root[data-accent-theme] .library-view-toggle button:hover { color: var(--fg0); }
+:root[data-accent-theme] .library-type-tabs button.active {
+  color: var(--bg0);
+  border-color: color-mix(in srgb, var(--accent) 82%, transparent);
+  background: var(--accent-gradient);
+  box-shadow: 0 8px 22px var(--accent-soft);
+}
+:root[data-accent-theme] .library-view-toggle button.active {
+  color: var(--accent-end);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg0) 7%, transparent);
+}
+:root[data-accent-theme] .library-search input,
+:root[data-accent-theme] .library-sort-trigger,
+:root[data-accent-theme] .library-sort-direction { color: var(--fg0); }
+:root[data-accent-theme] .library-search input::placeholder { color: color-mix(in srgb, var(--fg0) 66%, transparent); }
+:root[data-accent-theme] .library-search:focus-within,
+:root[data-accent-theme] .library-sort-select:focus-within { border-color: color-mix(in srgb, var(--accent) 74%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent); }
+:root[data-accent-theme] .library-metric-icon { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+:root[data-accent-theme] .library-metric-value em { color: var(--accent-end); }
+:root[data-accent-theme] .library-file-art,
+:root[data-accent-theme] .library-collection-art { border-color: color-mix(in srgb, var(--accent) 20%, var(--border)); background: color-mix(in srgb, var(--surface2) 76%, transparent); }
+:root[data-accent-theme] .library-collection-badge,
+:root[data-accent-theme] .library-collection-count { color: var(--bg0); border-color: color-mix(in srgb, var(--accent-end) 68%, transparent); background: var(--accent-gradient); }
+:root[data-accent-theme] .library-collection-chevron { color: var(--accent); }
+:root[data-accent-theme] .library-empty { color: var(--fg2); border-color: color-mix(in srgb, var(--accent) 34%, var(--border)); background: color-mix(in srgb, var(--surface) 42%, transparent); }
+:root[data-accent-theme] .library-empty > svg { color: var(--accent); }
+:root[data-accent-theme] .library-empty button { color: var(--bg0); background: var(--accent-gradient); }
+
+/* Network and remote configuration */
+:root[data-accent-theme] .network-page {
+  --network-bg: var(--bg0);
+  --network-panel: color-mix(in srgb, var(--surface) 78%, transparent);
+  --network-card: color-mix(in srgb, var(--surface2) 82%, transparent);
+  --network-text: var(--fg0);
+  --network-muted: var(--fg1);
+  --network-dim: var(--fg2);
+  --network-gold: var(--accent);
+  --network-gold-light: var(--accent-end);
+  color: var(--fg0);
+  background: var(--bg0);
+}
+:root[data-accent-theme] .network-eyebrow { color: var(--accent); }
+:root[data-accent-theme] .network-protocol-tabs,
+:root[data-accent-theme] .network-links-panel,
+:root[data-accent-theme] .network-config-panel,
+:root[data-accent-theme] .network-link-card {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background-color: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+:root[data-accent-theme] .network-protocol-tabs button { color: var(--fg1); }
+:root[data-accent-theme] .network-protocol-tabs button.active {
+  color: var(--bg0);
+  border-color: color-mix(in srgb, var(--accent) 82%, transparent);
+  background: var(--accent-gradient);
+  box-shadow: 0 8px 22px var(--accent-soft);
+}
+:root[data-accent-theme] .network-link-card:hover { border-color: color-mix(in srgb, var(--accent) 54%, var(--border)); background-color: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+:root[data-accent-theme] .network-link-protocol { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+:root[data-accent-theme] .network-link-actions button:hover { color: var(--accent-end); }
+:root[data-accent-theme] .network-add-fab,
+:root[data-accent-theme] .network-save-button { color: var(--bg0); border-color: color-mix(in srgb, var(--accent) 84%, transparent); background: var(--accent-gradient); box-shadow: 0 12px 30px var(--accent-soft); }
+:root[data-accent-theme] .network-config-mode { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+:root[data-accent-theme] .network-field > input,
+:root[data-accent-theme] .network-password-field,
+:root[data-accent-theme] .network-select,
+:root[data-accent-theme] .network-test-button,
+:root[data-accent-theme] .network-cancel-button {
+  color: var(--fg0);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+}
+:root[data-accent-theme] .network-field > input::placeholder,
+:root[data-accent-theme] .network-password-field input::placeholder { color: var(--fg2); }
+:root[data-accent-theme] .network-field > input:focus,
+:root[data-accent-theme] .network-password-field:focus-within,
+:root[data-accent-theme] .network-select:focus { border-color: color-mix(in srgb, var(--accent) 74%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+:root[data-accent-theme] .network-checkbox { color: var(--bg0); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+
+/* Video player chrome. The stage itself intentionally remains neutral so media stays color-accurate. */
+:root[data-accent-theme] .cinematic-player {
+  --solar-amber: var(--accent);
+  --solar-amber-hi: var(--accent-end);
+  --solar-glass: color-mix(in srgb, var(--surface) 76%, transparent);
+  --solar-white: var(--fg0);
+}
+:root[data-accent-theme] .cinematic-back:hover { color: var(--accent-end); }
+:root[data-accent-theme] .cinematic-atmos { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: inset 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent); }
+:root[data-accent-theme] .cinematic-console {
+  color: var(--fg0);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-end) 5%, transparent), transparent 25%, color-mix(in srgb, var(--bg0) 24%, transparent)), color-mix(in srgb, var(--surface) 76%, transparent);
+  box-shadow: 0 18px 46px var(--shadow), inset 0 1px 0 color-mix(in srgb, var(--accent-end) 14%, transparent), inset 0 -14px 30px color-mix(in srgb, var(--bg0) 30%, transparent);
+}
+:root[data-accent-theme] .cinematic-console::before { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 42%, transparent), transparent) 17px bottom / 23% 1px no-repeat, linear-gradient(270deg, color-mix(in srgb, var(--accent) 38%, transparent), transparent) calc(100% - 17px) bottom / 23% 1px no-repeat, linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent-end) 28%, transparent), transparent) center top / 42% 1px no-repeat; }
+:root[data-accent-theme] input[type='range'].cinematic-seek { background: linear-gradient(90deg, var(--accent) 0%, var(--accent-end) var(--vp-progress), color-mix(in srgb, var(--fg0) 19%, transparent) var(--vp-progress), color-mix(in srgb, var(--fg0) 11%, transparent) 100%); }
+:root[data-accent-theme] input.cinematic-seek::-webkit-slider-thumb { background: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 64%, transparent); }
+:root[data-accent-theme] .cinematic-time { color: color-mix(in srgb, var(--fg0) 78%, transparent); }
+:root[data-accent-theme] .cinematic-buffered,
+:root[data-accent-theme] .cinematic-network-speed { color: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); }
+:root[data-accent-theme] .cinematic-transport::before { border: 0; background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) 10%, transparent), transparent 67%); box-shadow: none; }
+:root[data-accent-theme] .cinematic-control-btn.active { color: var(--accent-end); background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent) 48%, transparent); }
+:root[data-accent-theme] .cinematic-speed-control:hover { color: var(--accent-end); }
+:root[data-accent-theme] .cinematic-speed-control.active { color: var(--accent-end); background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent) 42%, transparent); }
+:root[data-accent-theme] .seek-ten:hover { color: var(--accent-end); }
+:root[data-accent-theme] .cinematic-play { color: var(--fg0); background: radial-gradient(circle, color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--surface) 70%, transparent) 69%); box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 32%, transparent), inset 0 0 13px color-mix(in srgb, var(--accent-end) 14%, transparent); }
+:root[data-accent-theme] input[type='range'].cinematic-volume { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 86%, transparent) 0%, color-mix(in srgb, var(--accent-end) 86%, transparent) var(--vp-volume), color-mix(in srgb, var(--fg0) 15%, transparent) var(--vp-volume), color-mix(in srgb, var(--fg0) 15%, transparent) 100%); }
+:root[data-accent-theme] input.cinematic-volume::-webkit-slider-thumb { background: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 44%, transparent); }
+:root[data-accent-theme] .cinematic-player .vp-big-buffer .ring { border-top-color: var(--accent-end); }
+:root[data-accent-theme] .cinematic-player .vp-center-hint { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 28%, transparent); background: color-mix(in srgb, var(--surface) 78%, transparent); }
+
+/* Image viewer controls inherit the active palette while the image remains untouched. */
+:root[data-accent-theme] .image-viewer .iv-top .btn-icon,
+:root[data-accent-theme] .image-viewer .iv-bottom .btn-icon { color: var(--fg0); }
+:root[data-accent-theme] .image-viewer .iv-top .btn-icon:hover,
+:root[data-accent-theme] .image-viewer .iv-bottom .btn-icon:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+:root[data-accent-theme] .image-viewer .iv-bottom { border-color: color-mix(in srgb, var(--accent) 26%, var(--border)); background: color-mix(in srgb, var(--surface) 78%, transparent); }
+:root[data-accent-theme] .image-viewer .iv-count,
+:root[data-accent-theme] .image-viewer .iv-title { color: var(--fg0); }
+:root[data-accent-theme] .image-viewer .iv-nav:hover { background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--accent); }
+
+/* Playlist detail keeps its media artwork intact but uses the selected surface and accent. */
+:root[data-accent-theme] .playlist-hero { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); background: color-mix(in srgb, var(--surface) 78%, transparent); }
+:root[data-accent-theme] .playlist-hero h1 { color: var(--fg0); }
