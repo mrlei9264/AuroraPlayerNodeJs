@@ -8,6 +8,7 @@ export interface AppSettingsData {
   fontSize: 12 | 13 | 14 | 15 | 16
   reducedMotion: boolean
   reduceTransparency: boolean
+  startupAnimationEnabled: boolean
   resumePlayback: boolean
   performanceHudEnabled: boolean
   autoplayNextMedia: boolean

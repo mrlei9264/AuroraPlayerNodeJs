@@ -13,6 +13,7 @@ import { MusicPlayerPage } from './pages/playerMusic'
 import { ImageViewerPage } from './pages/imageViewer'
 import { MediaDetailsPage } from './pages/mediaDetails'
 import { applyTypographySettings } from './core/appearance'
+import { StartupAnimation } from './shell/startupAnimation'
 
 function MainView() {
   const { nav, session, imageSession } = useRuntime()
@@ -91,6 +92,11 @@ function ShellInner() {
 
   return (
     <>
+      {settings == null
+        ? <div className="startup-animation" aria-hidden="true" />
+        : settings.startupAnimationEnabled
+          ? <StartupAnimation ready={booted} reducedMotion={settings.reducedMotion} />
+          : null}
       {!isPlayer && <WindowChrome />}
       <div className={`shell ${isCinema ? 'home-shell' : ''} ${isLibrary ? 'library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}>
         {!isPlayer && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((c) => !c)} />}

@@ -20,7 +20,7 @@ const visualizerUrl = new URL('./sonic-topography/index.html', window.location.h
 export function MusicPlayerPage() {
   const {
     t, session, library, spectrum, theme, settings, engine, appIconUrl,
-    playPrevious, playNext, togglePlayPause, setVolume, toggleMute, setRepeat,
+    togglePlayPause, setVolume, toggleMute,
     leavePlayer, windowMinimize, windowMaximizeToggle, windowClose, win
   } = useRuntime()
   const visualizerRef = useRef<HTMLIFrameElement>(null)
@@ -160,15 +160,15 @@ export function MusicPlayerPage() {
         </section>
       </main>
 
-      <div className="audio-progress-row">
-        <span>{formatTime(session.position)}</span>
-        <input className="audio-progress-input" type="range" min={0} max={Math.max(duration, 0.01)} step={0.05}
-          value={Math.min(session.position, Math.max(duration, 0.01))} aria-label="Playback progress"
-          onChange={(event) => engine.seekTo(Number(event.target.value))} />
-        <span>{formatTime(duration)}</span>
-      </div>
-
       <section className="audio-control-console" aria-label="Playback controls">
+        <div className="audio-progress-row">
+          <span>{formatTime(session.position)}</span>
+          <input className="audio-progress-input" type="range" min={0} max={Math.max(duration, 0.01)} step={0.05}
+            value={Math.min(session.position, Math.max(duration, 0.01))} aria-label="Playback progress"
+            onChange={(event) => engine.seekTo(Number(event.target.value))} />
+          <span>{formatTime(duration)}</span>
+        </div>
+        <button type="button" className="audio-play-control" onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}><Icon name={playing ? 'pause' : 'play'} size={27} strokeWidth={1.45} /></button>
         <div className="audio-volume-control">
           <button type="button" className="audio-control-icon" onClick={toggleMute} aria-label={t('mute')} title={t('mute')}>
             <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={22} strokeWidth={1.65} />
@@ -179,14 +179,6 @@ export function MusicPlayerPage() {
           }} />
           <span>{Math.round(volume)}%</span>
         </div>
-        <button type="button" className="audio-control-icon audio-prev" onClick={() => void playPrevious()} aria-label={t('previous')} title={t('previous')}><Icon name="prev" size={26} strokeWidth={1.45} /></button>
-        <button type="button" className="audio-play-control" onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}><Icon name={playing ? 'pause' : 'play'} size={27} strokeWidth={1.45} /></button>
-        <button type="button" className="audio-control-icon audio-next" onClick={() => void playNext()} aria-label={t('next')} title={t('next')}><Icon name="next" size={26} strokeWidth={1.45} /></button>
-        <button type="button" className={`audio-control-icon audio-repeat ${session.repeatMode !== 'none' ? 'active' : ''}`}
-          onClick={() => setRepeat(session.repeatMode === 'none' ? 'all' : session.repeatMode === 'all' ? 'one' : 'none')}
-          aria-label={t('repeat')} aria-pressed={session.repeatMode !== 'none'} title={t('repeat')}>
-          <Icon name={session.repeatMode === 'one' ? 'repeatOne' : 'repeat'} size={23} strokeWidth={1.55} />
-        </button>
       </section>
     </div>
   )

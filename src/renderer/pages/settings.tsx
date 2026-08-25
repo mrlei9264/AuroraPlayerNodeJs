@@ -40,6 +40,7 @@ interface AppearanceDraft {
   appIcon: string
   fontFamily: string
   fontSize: AppSettingsData['fontSize']
+  startupAnimationEnabled: boolean
   reducedMotion: boolean
   reduceTransparency: boolean
 }
@@ -131,6 +132,7 @@ const SETTINGS_COPY = {
     fontSize: 'Interface and text size',
     fontSizeDescription: 'Scales all interface text consistently and adjusts control sizes gently. Player subtitles remain independent.',
     recommended: 'Recommended',
+    startupAnimation: 'Startup animation',
     reduceTransparency: 'Reduce transparency',
     reduceMotion: 'Reduce motion',
     application: 'Application',
@@ -236,6 +238,7 @@ const SETTINGS_COPY = {
     fontSize: '界面与文字大小',
     fontSizeDescription: '统一调整所有界面文字，并适度联动控件尺寸；播放器字幕仍单独设置。',
     recommended: '推荐',
+    startupAnimation: '启动动画',
     reduceTransparency: '降低透明效果',
     reduceMotion: '减少动画',
     application: '应用程序',
@@ -301,6 +304,7 @@ const defaultAppearance: AppearanceDraft = {
   appIcon: 'app_icon.png',
   fontFamily: '',
   fontSize: 13,
+  startupAnimationEnabled: true,
   reducedMotion: false,
   reduceTransparency: false
 }
@@ -344,6 +348,7 @@ function appearanceFrom(settings: AppSettingsData): AppearanceDraft {
     appIcon: settings.appIcon,
     fontFamily: settings.fontFamily,
     fontSize: settings.fontSize,
+    startupAnimationEnabled: settings.startupAnimationEnabled,
     reducedMotion: settings.reducedMotion,
     reduceTransparency: settings.reduceTransparency
   }
@@ -415,6 +420,7 @@ export function SettingsPage() {
       appIcon: next.appIcon,
       fontFamily: next.fontFamily.trim(),
       fontSize: next.fontSize,
+      startupAnimationEnabled: next.startupAnimationEnabled,
       reducedMotion: next.reducedMotion,
       reduceTransparency: next.reduceTransparency
     }).catch(() => toast('error', copy.appearanceError))
@@ -844,6 +850,10 @@ function AppearancePanel({ value, onChange, copy }: { value: AppearanceDraft; on
       </SettingsGroup>
       <SettingsGroup title={copy.appearanceMotionGroup}>
         <div className="settings-toggle-grid">
+          <div className="settings-toggle-card">
+            <span>{copy.startupAnimation}</span>
+            <SettingsSwitch checked={value.startupAnimationEnabled} label={copy.startupAnimation} onChange={(checked) => onChange((draft) => ({ ...draft, startupAnimationEnabled: checked }))} />
+          </div>
           <div className="settings-toggle-card">
             <span>{copy.reduceTransparency}</span>
             <SettingsSwitch checked={value.reduceTransparency} label={copy.reduceTransparency} onChange={(checked) => onChange((draft) => ({ ...draft, reduceTransparency: checked }))} />

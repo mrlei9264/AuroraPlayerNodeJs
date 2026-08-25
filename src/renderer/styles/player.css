@@ -1074,17 +1074,17 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
 }
 
 .audio-progress-row {
-  position: absolute;
-  z-index: 9;
-  right: clamp(50px, 6.3vw, 106px);
-  bottom: clamp(112px, 12.5vh, 122px);
-  left: clamp(50px, 6.3vw, 106px);
+  position: static;
+  z-index: auto;
+  grid-area: progress;
+  width: 100%;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
   align-items: center;
-  gap: 18px;
+  align-self: center;
+  gap: 14px;
   color: var(--audio-copy);
-  font-size: clamp(13px, 1.02vw, 17px);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 .audio-progress-row span:last-child { text-align: right; }
@@ -1126,28 +1126,33 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
   position: absolute;
   z-index: 10;
   right: clamp(42px, 5.2vw, 88px);
-  bottom: clamp(18px, 2.6vh, 25px);
+  bottom: clamp(20px, 2.8vh, 28px);
   left: clamp(42px, 5.2vw, 88px);
-  height: clamp(72px, 8.2vh, 78px);
+  height: clamp(112px, 13vh, 126px);
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) 70px 78px 70px minmax(130px, 1fr);
+  grid-template-columns: minmax(200px, 1fr) 78px minmax(200px, 1fr);
+  grid-template-rows: 38px minmax(0, 1fr);
+  grid-template-areas:
+    "progress progress progress"
+    ". play volume";
   align-items: center;
-  padding: 0 clamp(22px, 2.6vw, 40px);
+  row-gap: 2px;
+  padding: 10px clamp(22px, 2.6vw, 40px) 12px;
   color: var(--audio-copy);
   border: 1px solid color-mix(in srgb, var(--audio-accent) 16%, transparent);
   border-radius: clamp(19px, 1.55vw, 24px);
-  background: color-mix(in srgb, var(--audio-surface) 16%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--audio-ink) 6%, transparent), 0 8px 28px color-mix(in srgb, var(--audio-bg) 22%, transparent);
-  backdrop-filter: blur(12px) saturate(106%);
+  background: color-mix(in srgb, var(--audio-surface) 34%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--audio-ink) 7%, transparent), 0 14px 42px color-mix(in srgb, var(--audio-bg) 30%, transparent);
+  backdrop-filter: blur(16px) saturate(106%);
 }
-.audio-dark .audio-control-console { background: linear-gradient(180deg, rgba(10,10,10,.18), rgba(5,5,5,.1)); }
+.audio-dark .audio-control-console { background: linear-gradient(180deg, rgba(12,12,12,.56), rgba(5,5,5,.38)); }
 .audio-black-gold .audio-control-console {
   color: rgba(255,205,111,.78);
   border-color: rgba(255,184,0,.2);
-  background: linear-gradient(180deg, rgba(16,10,2,.16), rgba(3,2,1,.08));
-  box-shadow: inset 0 1px 0 rgba(255,220,145,.055), 0 8px 28px rgba(0,0,0,.28);
+  background: linear-gradient(180deg, rgba(16,10,2,.46), rgba(3,2,1,.34));
+  box-shadow: inset 0 1px 0 rgba(255,220,145,.065), 0 14px 42px rgba(0,0,0,.34);
 }
-.audio-volume-control { display: grid; grid-template-columns: 34px minmax(84px, 160px) 40px; align-items: center; gap: 11px; justify-self: start; }
+.audio-volume-control { grid-area: volume; display: grid; grid-template-columns: 34px minmax(84px, 160px) 40px; align-items: center; gap: 11px; justify-self: end; }
 .audio-volume-control input::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--audio-accent-start), var(--audio-accent-end) var(--audio-volume), color-mix(in srgb, var(--audio-ink) 14%, transparent) var(--audio-volume)); }
 .audio-volume-control span { color: var(--audio-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .audio-control-icon,
@@ -1170,6 +1175,7 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
 .audio-black-gold .audio-control-icon.active { color: #ffca55; background: rgba(255,184,0,.08); }
 .audio-repeat { justify-self: end; }
 .audio-play-control {
+  grid-area: play;
   width: clamp(58px, 4.1vw, 64px);
   height: clamp(58px, 4.1vw, 64px);
   color: color-mix(in srgb, var(--audio-accent-end) 48%, #fff);
@@ -1199,7 +1205,7 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
   .audio-cover { width: 132px; }
   .audio-title-wrap { width: 46vw; height: 76px; margin-top: 22px; }
   .audio-visualizer-shell iframe { left: 0; width: 145vw; }
-  .audio-control-console { grid-template-columns: minmax(168px, 1fr) 58px 68px 58px minmax(70px, 1fr); padding: 0 22px; }
+  .audio-control-console { grid-template-columns: minmax(168px, 1fr) 68px minmax(168px, 1fr); padding: 9px 22px 11px; }
   .audio-play-control { width: 60px; height: 60px; }
   .audio-volume-control { grid-template-columns: 38px minmax(70px, 130px); }
   .audio-volume-control span { display: none; }
@@ -1215,12 +1221,16 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
   .audio-visualizer-shell { opacity: .9; }
   .audio-visualizer-shell iframe { left: 0; width: 165vw; }
   .audio-track-info::before { inset: -17px -20px -22px; border-radius: 24px; backdrop-filter: blur(22px) saturate(90%); }
-  .audio-progress-row { right: 28px; bottom: 102px; left: 28px; grid-template-columns: 44px 1fr 44px; gap: 11px; }
-  .audio-control-console { right: 22px; bottom: 16px; left: 22px; height: 70px; grid-template-columns: 42px 1fr 62px 1fr 42px; padding: 0 16px; }
-  .audio-volume-control { display: block; }
-  .audio-volume-control input,
+  .audio-progress-row { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 11px; }
+  .audio-control-console { right: 22px; bottom: 16px; left: 22px; height: 112px; grid-template-columns: minmax(110px, 1fr) 62px minmax(130px, 1fr); padding: 8px 16px 10px; }
+  .audio-volume-control { grid-template-columns: 34px minmax(80px, 130px); gap: 10px; }
   .audio-volume-control span { display: none; }
   .audio-play-control { width: 56px; height: 56px; }
+}
+
+@media (max-width: 480px) {
+  .audio-control-console { right: 12px; left: 12px; grid-template-columns: minmax(80px, 1fr) 56px minmax(116px, 1fr); padding-right: 12px; padding-left: 12px; }
+  .audio-volume-control { grid-template-columns: 32px minmax(70px, 92px); gap: 8px; }
 }
 
 @media (prefers-reduced-transparency: reduce) {
