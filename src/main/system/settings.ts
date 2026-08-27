@@ -42,6 +42,7 @@ const defaults: AppSettingsData = {
   reducedMotion: false,
   reduceTransparency: false,
   startupAnimationEnabled: true,
+  playbackVolume: 80,
   resumePlayback: true,
   performanceHudEnabled: true,
   autoplayNextMedia: true,
@@ -200,6 +201,7 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   if (typeof raw.appIcon === 'string') result.appIcon = raw.appIcon
   if (typeof raw.fontFamily === 'string') result.fontFamily = raw.fontFamily
   if ([12, 13, 14, 15, 16].includes(Number(raw.fontSize))) result.fontSize = Number(raw.fontSize) as AppSettingsData['fontSize']
+  if (Number.isFinite(raw.playbackVolume)) result.playbackVolume = Math.max(0, Math.min(100, Math.round(Number(raw.playbackVolume))))
   for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'startInFullscreen', 'proxyEnabled', 'proxyBypassLocal', 'metadataLookupEnabled', 'metadataOverwriteExisting'] as const) {
     if (typeof raw[key] === 'boolean') result[key] = raw[key]
   }

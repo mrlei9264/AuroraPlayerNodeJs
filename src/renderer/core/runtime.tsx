@@ -510,7 +510,9 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
 
   const setVolume = useCallback(
     (v: number) => {
-      engine.setVolume(v)
+      const volume = Math.max(0, Math.min(100, Math.round(v)))
+      engine.setVolume(volume)
+      void p<AppSettingsData>(I.settingsPatch, { playbackVolume: volume }).catch(() => void 0)
     },
     [engine]
   )
@@ -876,6 +878,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return
       await initMediaBase()
       if (!mounted) return
+      engine.setVolume(s.playbackVolume)
       setSettings(s)
       const [lib, q, pl, src, fld, dls, dlOptions, prb, idx, info, wst, notifications] = await Promise.all([
         p<MediaItem[]>(I.libraryGet),

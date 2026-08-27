@@ -9,6 +9,7 @@ export interface AppSettingsData {
   reducedMotion: boolean
   reduceTransparency: boolean
   startupAnimationEnabled: boolean
+  playbackVolume: number
   resumePlayback: boolean
   performanceHudEnabled: boolean
   autoplayNextMedia: boolean
