@@ -4,7 +4,7 @@ import { MediaTile, MediaRow, EmptyState, PageHeader, SearchBox, FilterChips } f
 import { Icon } from '../core/icons'
 import type { MediaItem } from '../../shared/types'
 
-export type BrowseKind = 'video' | 'audio' | 'image'
+export type BrowseKind = 'video' | 'audio'
 
 export function BrowsePage({ kind }: { kind: BrowseKind }) {
   const { t, library, play, session } = useRuntime()
@@ -14,7 +14,7 @@ export function BrowsePage({ kind }: { kind: BrowseKind }) {
   const [filter, setFilter] = useState<'all' | 'favorites' | 'available' | 'missing'>('all')
 
   const items = useMemo(() => {
-    let list = library.filter((i) => (kind === 'video' ? !i.isAudio && !i.isImage : kind === 'audio' ? i.isAudio : i.isImage))
+    let list = library.filter((i) => !i.isImage && (kind === 'video' ? !i.isAudio : i.isAudio))
     const q = query.trim().toLowerCase()
     if (q) {
       list = list.filter((i) => (i.title || '').toLowerCase().includes(q) || i.fileName.toLowerCase().includes(q) || i.artist.toLowerCase().includes(q))
@@ -30,8 +30,8 @@ export function BrowsePage({ kind }: { kind: BrowseKind }) {
     return sorted
   }, [library, kind, query, sort, filter])
 
-  const title = kind === 'video' ? t('videos') : kind === 'audio' ? t('music') : t('images')
-  const icon = kind === 'video' ? 'video' as const : kind === 'audio' ? 'music' as const : 'image' as const
+  const title = kind === 'video' ? t('videos') : t('music')
+  const icon = kind === 'video' ? 'video' as const : 'music' as const
   const allIds = items.map((i) => i.id)
 
   return (

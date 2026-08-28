@@ -59,6 +59,7 @@ type FfprobeTrackStream = {
   width?: number
   height?: number
   avg_frame_rate?: string
+  r_frame_rate?: string
   profile?: string
   pix_fmt?: string
   color_space?: string
@@ -217,15 +218,16 @@ export class MediaProbeService {
       const { stdout } = await execFileAsync(ffprobeCommand, [
         '-v', 'error',
         '-select_streams', 'a',
-        '-show_entries', 'stream=codec_name,codec_long_name,profile,channels,channel_layout,sample_rate,bits_per_sample,bits_per_raw_sample,bit_rate:stream_tags=title,handler_name,language:stream_side_data',
+        '-show_streams',
         '-of', 'json',
         input
-      ], { windowsHide: true, timeout: 20_000, maxBuffer: 2 * 1024 * 1024 })
+      ], { windowsHide: true, timeout: 30_000, maxBuffer: 8 * 1024 * 1024 })
       const parsed = JSON.parse(stdout) as { streams?: FfprobeAudioStream[] }
       const features = audioFeaturesFromStreams(parsed.streams ?? [])
       this.audioFeatureCache.set(mediaId, features)
       return features
-    } catch {
+    } catch (error) {
+      this.logger.warn('probe', `audio feature probe failed media=${mediaId}`, error)
       return empty
     }
   }
@@ -268,11 +270,11 @@ export class MediaProbeService {
     try {
       const { stdout } = await execFileAsync(ffprobeCommand, [
         '-v', 'error',
+        '-show_streams',
         '-show_chapters',
-        '-show_entries', 'stream=codec_type,codec_name,codec_long_name,profile,width,height,avg_frame_rate,pix_fmt,color_space,color_transfer,color_primaries,bits_per_raw_sample,bits_per_sample,channels,channel_layout,sample_rate,bit_rate:stream_tags=title,handler_name,language:stream_disposition=default:stream_side_data:chapter=start_time,end_time:chapter_tags=title',
         '-of', 'json',
         input
-      ], { windowsHide: true, timeout: 20_000, maxBuffer: 2 * 1024 * 1024 })
+      ], { windowsHide: true, timeout: 45_000, maxBuffer: 8 * 1024 * 1024 })
       const parsed = JSON.parse(stdout) as { streams?: FfprobeTrackStream[]; chapters?: FfprobeChapter[] }
       const video: TrackInfo[] = []
       const audio: TrackInfo[] = []
@@ -300,7 +302,7 @@ export class MediaProbeService {
           info.width = Number(stream.width) || undefined
           info.height = Number(stream.height) || undefined
           info.profile = cleanMediaText(stream.profile)
-          info.fps = parseFrameRate(stream.avg_frame_rate)
+          info.fps = parseFrameRate(stream.avg_frame_rate) || parseFrameRate(stream.r_frame_rate)
           info.pixelFormat = cleanMediaText(stream.pix_fmt)
           info.colorTransfer = cleanMediaText(stream.color_transfer)
           info.colorPrimaries = cleanMediaText(stream.color_primaries)
@@ -309,7 +311,7 @@ export class MediaProbeService {
           video.push(info)
           if (!width && Number.isFinite(stream.width)) width = Number(stream.width)
           if (!height && Number.isFinite(stream.height)) height = Number(stream.height)
-          if (!fps) fps = parseFrameRate(stream.avg_frame_rate)
+          if (!fps) fps = parseFrameRate(stream.avg_frame_rate) || parseFrameRate(stream.r_frame_rate)
         } else if (kind === 'audio') {
           info.profile = cleanMediaText(stream.profile)
           info.channels = finitePositive(stream.channels)
@@ -341,7 +343,8 @@ export class MediaProbeService {
       }
       this.trackCache.set(mediaId, result)
       return result
-    } catch {
+    } catch (error) {
+      this.logger.warn('probe', `track probe failed media=${mediaId}`, error)
       return empty
     }
   }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { useRuntime } from '../core/runtime'
 import { Icon, type IconName } from '../core/icons'
 import { I } from '../../shared/channels'
@@ -8,14 +9,29 @@ import { formatTime } from '../../shared/types'
 import { ProgressSlider } from '../controls/controls'
 import type { AppSettingsData } from '../../main/system/settings-types'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
+import {
+  MAGNETIC_BUTTON_TRANSITION,
+  MAGNETIC_ICON_TRANSITION,
+  MAGNETIC_INDICATOR_TRANSITION,
+  magneticButtonAnimate,
+  magneticButtonInitial,
+  magneticIconAnimate,
+  magneticIconInitial,
+} from '../core/navigationMotion'
 
 export function WindowChrome() {
   const { t, win, windowMinimize, windowMaximizeToggle, windowClose, navigate, settings, appIconUrl } = useRuntime()
   const [hover, setHover] = useState(false)
 
+  const reducedMotion = settings?.reducedMotion ?? false
+
   return (
-    <div
+    <motion.div
       className="titlebar"
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+      transition={reducedMotion ? { duration: 0.08 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -23,21 +39,31 @@ export function WindowChrome() {
         <img className="logo" src={appIconUrl ?? bundledAppIconUrl} alt="Aurora Player" />
         {settings && settings.language === 'zh' ? 'Aurora Player' : 'Aurora Player'}
       </div>
-      <div className="tb-title">
-        {hover ? t('appName') : ' '}
-      </div>
+      <AnimatePresence initial={false}>
+        {hover && (
+          <motion.div
+            className="tb-title"
+            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
+            transition={{ duration: reducedMotion ? 0.08 : 0.16 }}
+          >
+            {t('appName')}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="tb-controls">
-        <button className="tb-btn" title={t('minimize')} onClick={windowMinimize}>
+        <motion.button className="tb-btn" whileTap={{ scale: 0.92 }} title={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
-        </button>
-        <button className="tb-btn" title={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        </motion.button>
+        <motion.button className="tb-btn" whileTap={{ scale: 0.92 }} title={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
-        </button>
-        <button className="tb-btn close" title={t('close')} onClick={windowClose}>
+        </motion.button>
+        <motion.button className="tb-btn close" whileTap={{ scale: 0.92 }} title={t('close')} onClick={windowClose}>
           <Icon name="close" size={16} />
-        </button>
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -48,14 +74,27 @@ const NAV_SECTIONS: { section: Section; icon: IconName; key: string }[] = [
   { section: 'settings', icon: 'settings', key: 'settings' },
 ]
 
-export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+export function Sidebar() {
   const { t, nav, navigate, settings, appIconUrl } = useRuntime()
-  const settingsMode = nav.section === 'settings'
-  const cinemaMode = nav.section === 'home' || nav.section === 'library' || nav.section === 'remote' || settingsMode
   const navigationLabel = t('navigation')
-  const expandLabel = t('expandSidebar')
-  const collapseLabel = t('collapseSidebar')
   const sections = NAV_SECTIONS
+  const reducedMotion = settings?.reducedMotion ?? false
+  const transition = reducedMotion ? { duration: 0.08 } : { duration: 0.24, ease: [0.16, 1, 0.3, 1] as const }
+  const activeIndex = sections.findIndex((item) => item.section === nav.section)
+  const previousActiveIndex = useRef<number | null>(null)
+  const magneticDirection = previousActiveIndex.current == null || activeIndex < 0
+    ? 'idle'
+    : activeIndex > previousActiveIndex.current
+      ? 'down'
+      : activeIndex < previousActiveIndex.current
+        ? 'up'
+        : 'idle'
+  const magneticDirectionValue = magneticDirection === 'down' ? 1 : magneticDirection === 'up' ? -1 : 0
+  const magneticSwitching = !reducedMotion && magneticDirection !== 'idle'
+
+  useEffect(() => {
+    if (activeIndex >= 0) previousActiveIndex.current = activeIndex
+  }, [activeIndex])
 
   const activateFromKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>, action: () => void) => {
     if ((event.key === 'Enter' || event.key === ' ' || event.code === 'Space') && !event.repeat) {
@@ -64,87 +103,69 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
     }
   }
 
-  if (cinemaMode) {
-    return (
-      <aside className={`sidebar ${settings?.reducedMotion ? 'reduce-motion' : ''}`} aria-label={navigationLabel}>
-        <nav className="nav-list" aria-label={navigationLabel}>
-          <div className="nav-mark">
-            <img className="app-mark" src={appIconUrl ?? bundledAppIconUrl} alt="Aurora Player" />
-          </div>
-          <div className="nav-items">
-            {sections.map((item) => {
-              const active = nav.section === item.section
-              const label = item.section === 'library' ? t('libraryTitle') : item.section === 'remote' ? t('networkMedia') : t(item.key)
-              return (
-                <button
-                  type="button"
-                  key={item.section}
-                  data-section={item.section}
-                  className={`nav-item ${active ? 'active' : ''}`}
-                  onClick={() => navigate({ section: item.section })}
-                  onKeyDown={(event) => activateFromKeyboard(event, () => navigate({ section: item.section }))}
-                  title={label}
-                  aria-label={label}
-                  aria-current={active ? 'page' : undefined}
-                >
-                  <span className="nav-icon"><Icon name={item.icon} size={28} strokeWidth={1.8} /></span>
-                  {active && <span className="nav-label">{label}</span>}
-                </button>
-              )
-            })}
-          </div>
-        </nav>
-        <HomePlaybackStatus />
-      </aside>
-    )
-  }
-
   return (
-    <aside
-      className={`sidebar ${collapsed ? 'collapsed' : ''} ${settings?.reducedMotion ? 'reduce-motion' : ''}`}
+    <motion.aside
+      layout={!reducedMotion}
+      className={`sidebar ${settings?.reducedMotion ? 'reduce-motion' : ''}`}
       aria-label={navigationLabel}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -14 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -12 }}
+      transition={transition}
     >
       <nav className="nav-list" aria-label={navigationLabel}>
-        <div className="nav-section">{t('home')}</div>
+        <div className="nav-mark">
+          <img className="app-mark" src={appIconUrl ?? bundledAppIconUrl} alt="Aurora Player" />
+        </div>
         <div className="nav-items">
           {sections.map((item) => {
             const active = nav.section === item.section
-            const label = t(item.key)
+            const label = item.section === 'library' ? t('libraryTitle') : item.section === 'remote' ? t('networkMedia') : t(item.key)
             return (
-              <button
+              <motion.button
                 type="button"
                 key={item.section}
                 data-section={item.section}
-                className={`nav-item ${active ? 'active' : ''} ${collapsed ? 'collapsed' : ''}`}
+                className={`nav-item ${active ? 'active' : ''}`}
                 onClick={() => navigate({ section: item.section })}
                 onKeyDown={(event) => activateFromKeyboard(event, () => navigate({ section: item.section }))}
-                title={collapsed ? label : undefined}
+                title={label}
                 aria-label={label}
                 aria-current={active ? 'page' : undefined}
+                initial={active && magneticSwitching ? magneticButtonInitial(magneticDirectionValue) : false}
+                animate={active && magneticSwitching ? magneticButtonAnimate(magneticDirectionValue) : { y: 0, scale: 1 }}
+                transition={active && magneticSwitching ? MAGNETIC_BUTTON_TRANSITION : { duration: 0.08 }}
+                whileTap={{ scale: 0.94 }}
               >
-                <span className="nav-icon"><Icon name={item.icon} size={18} /></span>
-                <span className="nav-label">{label}</span>
-              </button>
+                {active && (
+                  <motion.span
+                    className="nav-active-motion"
+                    layoutId="sidebar-active"
+                    transition={reducedMotion ? { duration: 0.08 } : MAGNETIC_INDICATOR_TRANSITION}
+                  />
+                )}
+                <motion.span
+                  className="nav-icon"
+                  initial={active && magneticSwitching
+                    ? magneticIconInitial(magneticDirectionValue)
+                    : false}
+                  animate={active && magneticSwitching
+                    ? magneticIconAnimate(magneticDirectionValue)
+                    : { y: 0, scale: 1 }}
+                  transition={active && magneticSwitching
+                    ? MAGNETIC_ICON_TRANSITION
+                    : { duration: 0.08 }}
+                >
+                  <Icon name={item.icon} size={28} strokeWidth={1.8} />
+                </motion.span>
+                {active && <span className="nav-label">{label}</span>}
+              </motion.button>
             )
           })}
         </div>
       </nav>
-      <div className="sidebar-bottom">
-        <button
-          type="button"
-          className={`nav-item ${collapsed ? 'collapsed' : ''}`}
-          onClick={onToggle}
-          onKeyDown={(event) => activateFromKeyboard(event, onToggle)}
-          title={collapsed ? expandLabel : collapseLabel}
-          aria-label={collapsed ? expandLabel : collapseLabel}
-          aria-expanded={!collapsed}
-        >
-          <span className="nav-icon"><Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={16} /></span>
-          <span className="nav-label">{collapsed ? expandLabel : collapseLabel}</span>
-        </button>
-      </div>
       <HomePlaybackStatus />
-    </aside>
+    </motion.aside>
   )
 }
 
@@ -188,13 +209,16 @@ function HomePlaybackStatus() {
   const primaryTitle = primaryAction === 'open-player' ? t('openPlayer') : (idle || session.paused ? t('play') : t('pause'))
   const secondaryTitle = secondaryAction === 'open-player' ? t('openPlayer') : (idle || session.paused ? t('play') : t('pause'))
 
+  const reducedMotion = settings?.reducedMotion ?? false
+
   return (
-    <div
+    <motion.div
+      layout={!reducedMotion}
       className="home-playback-status"
       data-playback-state={idle ? 'idle' : session.paused ? 'paused' : 'playing'}
       data-primary-action={primaryAction}
     >
-      <button
+      <motion.button
         type="button"
         className="home-playback-toggle"
         onClick={() => runAction(primaryAction)}
@@ -205,13 +229,18 @@ function HomePlaybackStatus() {
         disabled={idle && !previewItem}
         title={`${primaryTitle}; ${t('rightClick')}: ${secondaryTitle}`}
         aria-label={`${stateLabel}. ${primaryTitle}. ${t('rightClick')}: ${secondaryTitle}`}
+        whileTap={{ scale: 0.96 }}
       >
         <span className="home-playback-icon">
-          <Icon name={primaryIcon} size={19} style={{ marginLeft: primaryIcon === 'play' ? 2 : 0 }} />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span key={primaryIcon} className="home-playback-icon-motion" initial={{ opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.82 }} transition={{ duration: reducedMotion ? 0.06 : 0.14 }}>
+              <Icon name={primaryIcon} size={19} style={{ marginLeft: primaryIcon === 'play' ? 2 : 0 }} />
+            </motion.span>
+          </AnimatePresence>
         </span>
         <span className="home-playback-label">{primaryLabel}</span>
-      </button>
-    </div>
+      </motion.button>
+    </motion.div>
   )
 }
 
@@ -463,7 +492,7 @@ export function HudHost() {
 }
 
 export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
-  const { session, library, nav, t, navigate, engine, playNext, playPrevious, togglePlayPause, setVolume, toggleMute, stopPlayback, setFullscreen, win } = useRuntime()
+  const { session, library, nav, t, navigate, engine, playNext, playPrevious, togglePlayPause, setVolume, toggleMute, stopPlayback, setFullscreen, win, settings } = useRuntime()
   if (session.idle || session.mediaId == null) return null
   const item = library.find((i) => i.id === session.mediaId)
   const title = item?.title || item?.fileName || t('appName')
@@ -471,10 +500,17 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
   const position = session.position
   const duration = session.duration
   const toggle = togglePlayPause
+  const reducedMotion = settings?.reducedMotion ?? false
+  const presence = {
+    initial: reducedMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 },
+    animate: { opacity: 1, y: 0, scale: 1 },
+    exit: reducedMotion ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.99 },
+    transition: reducedMotion ? { duration: 0.08 } : { duration: 0.24, ease: [0.16, 1, 0.3, 1] as const }
+  }
 
   if (surface || nav.section === 'home') {
     return (
-      <div className={`cinema-mini-player mini-player ${surface ? 'player-surface-controls' : ''}`}>
+      <motion.div className={`cinema-mini-player mini-player ${surface ? 'player-surface-controls' : ''}`} {...presence}>
         <div className="mp-cover" onClick={() => navigate({ section: 'player' })}>
           {item?.coverPath ? <img src={coverUrl(item.coverPath)} alt="" /> : <Icon name={item?.isAudio ? 'music' : 'video'} size={21} />}
         </div>
@@ -516,12 +552,12 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
             <Icon name="fullscreen" size={17} />
           </button>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
   return (
-    <div className="mini-player">
+    <motion.div className="mini-player" {...presence}>
       <div className="mp-cover" onClick={() => navigate({ section: 'player' })}>
         {item?.coverPath ? <img src={coverUrl(item.coverPath)} alt="" /> : <Icon name={item?.isAudio ? 'music' : 'video'} size={21} />}
       </div>
@@ -553,17 +589,17 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
           <Icon name="stop" size={16} />
         </button>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
 export function GlobalShortcuts() {
-  const { togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav, imageSession } = useRuntime()
+  const { togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav } = useRuntime()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Video and image players have richer, page-specific keyboard handling.
+      // The video player has richer, page-specific keyboard handling.
       // Avoid processing the same repeated keydown in both shortcut layers.
-      if (nav.section === 'player' && (session.kind === 'video' || imageSession != null)) return
+      if (nav.section === 'player' && session.kind === 'video') return
       if (e.defaultPrevented) return
       const target = e.target as HTMLElement
       const tag = target?.tagName
@@ -585,7 +621,7 @@ export function GlobalShortcuts() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav.section, imageSession])
+  }, [togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav.section])
   return null
 }
 

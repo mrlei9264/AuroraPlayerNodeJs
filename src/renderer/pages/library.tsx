@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { p, useRuntime } from '../core/runtime'
-import { Icon, type IconName } from '../core/icons'
+import { FilledIcon, Icon, type IconName } from '../core/icons'
 import { coverUrl } from '../core/player'
 import type { MediaItem } from '../../shared/types'
 import { I } from '../../shared/channels'
 import { collectSimilarVideos } from './libraryCollections'
 import { AudioArtwork } from './mediaArtwork'
+import { FloatingMenu } from '../shared/floatingMenu'
 
-type MediaKind = 'all' | 'video' | 'audio'
+type MediaKind = 'video' | 'audio'
+type LibraryTab = 'favorite' | MediaKind
 type ViewMode = 'grid' | 'list'
 type SortBy = 'added' | 'name' | 'size' | 'duration'
 type SortDirection = 'asc' | 'desc'
@@ -52,7 +55,7 @@ function readLibraryCollectionPreference(): LibraryCollectionPreference {
 }
 
 type LibraryCardData = {
-  kind: Exclude<MediaKind, 'all'>
+  kind: MediaKind
   title: string
   artwork: string | null
   overlayDuration: string
@@ -148,15 +151,6 @@ function LibrarySortSelect({
 
   useEffect(() => {
     if (!open) return
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', closeOnOutsidePointer)
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
     const frame = window.requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus())
     return () => window.cancelAnimationFrame(frame)
   }, [open, selectedIndex])
@@ -203,8 +197,17 @@ function LibrarySortSelect({
       >
         <Icon name="up" size={17} />
       </button>
-      {open && (
-        <div className="settings-font-menu settings-select-menu library-sort-menu" role="listbox" aria-label={label}>
+      <FloatingMenu
+        open={open}
+        anchorRef={rootRef}
+        onClose={() => setOpen(false)}
+        className="settings-font-menu settings-select-menu library-sort-menu"
+        role="listbox"
+        ariaLabel={label}
+        align="end"
+        width={196}
+        gap={5}
+      >
           {options.map((option, index) => (
             <button
               ref={(node) => { optionRefs.current[index] = node }}
@@ -226,8 +229,7 @@ function LibrarySortSelect({
               {value === option.value && <Icon name="check" size={15} />}
             </button>
           ))}
-        </div>
-      )}
+      </FloatingMenu>
     </div>
   )
 }
@@ -235,8 +237,9 @@ function LibrarySortSelect({
 export function LibraryPage() {
   const { t, settings, library, play, addMediaDialog, enqueue, toggleFavorite, removeMedia, confirm, prompt, openPath, openCtxMenu, navigate } = useRuntime()
   const locale = settings?.language === 'zh' ? 'zh-CN' : 'en-US'
+  const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState('')
-  const [kind, setKind] = useState<MediaKind>('all')
+  const [kind, setKind] = useState<LibraryTab>('favorite')
   const [view, setView] = useState<ViewMode>('grid')
   const [sortPreference, setSortPreference] = useState<LibrarySortPreference>(readLibrarySortPreference)
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(() => new Set())
@@ -265,7 +268,7 @@ export function LibraryPage() {
   const cards = useMemo<LibraryCardData[]>(() => {
     const videos = library.filter((item) => !item.isAudio && !item.isImage)
     const audios = library.filter((item) => item.isAudio && !item.isImage)
-    const toCard = (item: MediaItem, mediaKind: Exclude<MediaKind, 'all'>): LibraryCardData => ({
+    const toCard = (item: MediaItem, mediaKind: MediaKind): LibraryCardData => ({
       kind: mediaKind,
       item,
       title: titleFor(item),
@@ -292,6 +295,7 @@ export function LibraryPage() {
     const watchedPercent = totalDuration > 0 ? (watchedDuration / totalDuration) * 100 : 0
     return {
       total: media.length,
+      favorites: media.filter((item) => item.favorite).length,
       videos: videos.length,
       audios: audios.length,
       metrics: [
@@ -306,7 +310,7 @@ export function LibraryPage() {
   const visibleCards = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()
     const filtered = cards.filter((card) => {
-      if (kind !== 'all' && card.kind !== kind) return false
+      if (kind === 'favorite' ? !card.item.favorite : card.kind !== kind) return false
       if (!needle) return true
       const itemText = `${card.item.fileName} ${card.item.artist} ${card.item.album}`
       return `${card.title} ${card.metadata} ${itemText}`.toLocaleLowerCase().includes(needle)
@@ -364,7 +368,16 @@ export function LibraryPage() {
     return entries
   }, [collectionPreference, visibleCards])
 
-  const filesTitle = kind === 'video' ? t('videoFiles') : kind === 'audio' ? t('audioFiles') : t('allFiles')
+  const visibleMediaIds = useMemo(() => visibleCards.map((card) => card.item.id), [visibleCards])
+  const allVisibleSelected = visibleMediaIds.length > 0 && visibleMediaIds.every((id) => selectedMediaIds.has(id))
+  const hasAnimatedEntriesRef = useRef(false)
+  const shouldStaggerEntries = displayEntries.length > 0 && !hasAnimatedEntriesRef.current
+
+  useEffect(() => {
+    if (displayEntries.length > 0) hasAnimatedEntriesRef.current = true
+  }, [displayEntries.length])
+
+  const filesTitle = kind === 'video' ? t('videoFiles') : kind === 'audio' ? t('audioFiles') : t('favorites')
 
   const openCard = (card: LibraryCardData) => {
     if (selectionMode) {
@@ -390,6 +403,15 @@ export function LibraryPage() {
   const leaveSelectionMode = () => {
     setSelectionMode(false)
     setSelectedMediaIds(new Set())
+  }
+
+  const toggleSelectAll = () => {
+    setSelectedMediaIds((current) => {
+      const next = new Set(current)
+      if (allVisibleSelected) visibleMediaIds.forEach((id) => next.delete(id))
+      else visibleMediaIds.forEach((id) => next.add(id))
+      return next
+    })
   }
 
   const createCollection = async () => {
@@ -505,9 +527,9 @@ export function LibraryPage() {
         <div className="library-filter-row">
           <div className="library-type-tabs" role="tablist" aria-label={t('mediaType')}>
             {([
-              ['all', `${t('all')} (${libraryStats.total.toLocaleString(locale)})`],
-              ['video', `${t('videos')} (${libraryStats.videos.toLocaleString(locale)})`],
-              ['audio', `${t('audios')} (${libraryStats.audios.toLocaleString(locale)})`]
+              ['favorite', `${t('favorites')} (${libraryStats.favorites.toLocaleString(locale)})`],
+              ['video', `${t('allVideos')} (${libraryStats.videos.toLocaleString(locale)})`],
+              ['audio', `${t('allAudio')} (${libraryStats.audios.toLocaleString(locale)})`]
             ] as const).map(([value, label]) => (
               <button
                 key={value}
@@ -601,28 +623,54 @@ export function LibraryPage() {
         </div>
 
         {visibleCards.length > 0 ? (
-          <div className={`library-file-grid ${view === 'list' ? 'list-view' : ''}`}>
-            {displayEntries.map((entry) => entry.type === 'item' ? (
-              <LibraryFileCard key={entry.card.item.id} card={entry.card} selected={selectedMediaIds.has(entry.card.item.id)} selectionMode={selectionMode} onOpen={() => openCard(entry.card)} onContextMenu={(event) => openCardMenu(event, entry.card)} />
-            ) : (
-              <LibraryCollectionCard
-                key={entry.id}
-                collection={entry}
-                expanded={expandedCollections.has(entry.id)}
-                onToggle={() => toggleCollection(entry.id)}
-                selectionMode={selectionMode}
-                selected={entry.cards.every((card) => selectedMediaIds.has(card.item.id))}
-                selectedIds={selectedMediaIds}
-                onSelect={() => toggleSelected(entry.cards.map((card) => card.item.id))}
-                onOpen={openCard}
-                onContextMenu={openCardMenu}
-                onCollectionContextMenu={openCollectionMenu}
-                collectionLabel={t('mediaCollection')}
-                itemLabel={t('collectionItems')}
-                expandLabel={t('expandCollection')}
-                collapseLabel={t('collapseCollection')}
-              />
-            ))}
+          <div className={`library-file-grid ${view === 'list' ? 'list-view' : ''} ${selectionMode ? 'selection-mode' : ''}`}>
+            <AnimatePresence mode="popLayout">
+              {displayEntries.map((entry, index) => {
+                const expanded = entry.type === 'collection' && expandedCollections.has(entry.id)
+                const entryDelay = shouldStaggerEntries ? Math.min(index, 8) * 0.035 : 0
+                return (
+                  <motion.div
+                    layout={!reduceMotion}
+                    key={entry.type === 'item' ? `item-${entry.card.item.id}` : `collection-${entry.id}`}
+                    className={`library-entry-motion ${expanded ? 'collection-expanded' : ''}`}
+                    style={{ '--library-entry-index': Math.min(index, 8) } as React.CSSProperties}
+                    initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.985, filter: 'brightness(0.62) saturate(0.72)' }}
+                    animate={{ opacity: 1, y: 0, scale: 1, filter: 'brightness(1) saturate(1)' }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.985, filter: 'brightness(0.72) saturate(0.82)' }}
+                    transition={reduceMotion ? { duration: 0 } : {
+                      layout: { duration: 0.42, ease: [0.16, 1, 0.3, 1] },
+                      opacity: { duration: 0.24, delay: entryDelay },
+                      y: { duration: 0.44, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
+                      scale: { duration: 0.4, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
+                      filter: { duration: 0.5, delay: entryDelay, ease: [0.16, 1, 0.3, 1] }
+                    }}
+                  >
+                    {entry.type === 'item' ? (
+                      <LibraryFileCard card={entry.card} selected={selectedMediaIds.has(entry.card.item.id)} selectionMode={selectionMode} favoriteOnly={kind === 'favorite'} onToggleFavorite={() => void toggleFavorite(entry.card.item.id)} onOpen={() => openCard(entry.card)} onContextMenu={(event) => openCardMenu(event, entry.card)} />
+                    ) : (
+                      <LibraryCollectionCard
+                        collection={entry}
+                        expanded={expanded}
+                        onToggle={() => toggleCollection(entry.id)}
+                        selectionMode={selectionMode}
+                        selected={entry.cards.every((card) => selectedMediaIds.has(card.item.id))}
+                        selectedIds={selectedMediaIds}
+                        favoriteOnly={kind === 'favorite'}
+                        onSelect={() => toggleSelected(entry.cards.map((card) => card.item.id))}
+                        onToggleFavorite={(card) => void toggleFavorite(card.item.id)}
+                        onOpen={openCard}
+                        onContextMenu={openCardMenu}
+                        onCollectionContextMenu={openCollectionMenu}
+                        collectionLabel={t('mediaCollection')}
+                        itemLabel={t('collectionItems')}
+                        expandLabel={t('expandCollection')}
+                        collapseLabel={t('collapseCollection')}
+                      />
+                    )}
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
           </div>
         ) : (
           <div className="library-empty">
@@ -636,19 +684,24 @@ export function LibraryPage() {
               onClick={() => {
                 if (libraryStats.total > 0) {
                   setQuery('')
-                  setKind('all')
+                  if (kind === 'favorite' || (kind === 'video' && libraryStats.videos === 0) || (kind === 'audio' && libraryStats.audios === 0)) {
+                    setKind(libraryStats.videos > 0 ? 'video' : 'audio')
+                  }
                 } else {
                   void addMediaDialog()
                 }
               }}
             >
-              {libraryStats.total > 0 ? t('showAllFiles') : t('addMedia')}
+              {libraryStats.total > 0 ? t('browseLibrary') : t('addMedia')}
             </button>
           </div>
         )}
         {selectionMode && (
           <div className="library-selection-bar">
             <span>{t('selectedCount', { count: selectedMediaIds.size })}</span>
+            <button type="button" className="library-selection-all" disabled={visibleMediaIds.length === 0} onClick={toggleSelectAll}>
+              <Icon name={allVisibleSelected ? 'close' : 'check'} size={16} />{allVisibleSelected ? t('deselectAll') : t('selectAll')}
+            </button>
             <button type="button" disabled={selectedMediaIds.size < 2} onClick={() => void createCollection()}><Icon name="library" size={16} />{t('combineAsCollection')}</button>
             <button type="button" className="btn-icon" aria-label={t('cancelSelection')} onClick={leaveSelectionMode}><Icon name="close" size={16} /></button>
           </div>
@@ -665,7 +718,9 @@ function LibraryCollectionCard({
   selectionMode,
   selected,
   selectedIds,
+  favoriteOnly,
   onSelect,
+  onToggleFavorite,
   onOpen,
   onContextMenu,
   onCollectionContextMenu,
@@ -680,7 +735,9 @@ function LibraryCollectionCard({
   selectionMode: boolean
   selected: boolean
   selectedIds: Set<number>
+  favoriteOnly: boolean
   onSelect: () => void
+  onToggleFavorite: (card: LibraryCardData) => void
   onOpen: (card: LibraryCardData) => void
   onContextMenu: (event: React.MouseEvent, card: LibraryCardData) => void
   onCollectionContextMenu: (event: React.MouseEvent, collection: Extract<LibraryDisplayEntry, { type: 'collection' }>) => void
@@ -706,6 +763,7 @@ function LibraryCollectionCard({
               {card.artwork ? <img src={card.artwork} alt="" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={30} /></span>}
             </span>
           ))}
+          <span className="library-card-glint" aria-hidden="true" />
           <span className="library-collection-badge"><Icon name="library" size={14} />{collectionLabel}</span>
           <span className="library-collection-count">{collection.cards.length}</span>
         </span>
@@ -721,7 +779,7 @@ function LibraryCollectionCard({
       {expanded && (
         <div className="library-collection-items">
           {collection.cards.map((card) => (
-            <LibraryFileCard key={card.item.id} card={card} selected={selectedIds.has(card.item.id)} selectionMode={selectionMode} onOpen={() => onOpen(card)} onContextMenu={(event) => onContextMenu(event, card)} />
+            <LibraryFileCard key={card.item.id} card={card} selected={selectedIds.has(card.item.id)} selectionMode={selectionMode} favoriteOnly={favoriteOnly} onToggleFavorite={() => onToggleFavorite(card)} onOpen={() => onOpen(card)} onContextMenu={(event) => onContextMenu(event, card)} />
           ))}
         </div>
       )}
@@ -729,27 +787,57 @@ function LibraryCollectionCard({
   )
 }
 
-function LibraryFileCard({ card, selected, selectionMode, onOpen, onContextMenu }: { card: LibraryCardData; selected: boolean; selectionMode: boolean; onOpen: () => void; onContextMenu: (event: React.MouseEvent) => void }) {
+function LibraryFileCard({ card, selected, selectionMode, favoriteOnly, onToggleFavorite, onOpen, onContextMenu }: {
+  card: LibraryCardData
+  selected: boolean
+  selectionMode: boolean
+  favoriteOnly: boolean
+  onToggleFavorite: () => void
+  onOpen: () => void
+  onContextMenu: (event: React.MouseEvent) => void
+}) {
+  const { t } = useRuntime()
+  const favoriteLabel = card.item.favorite ? t('unfavorite') : t('favorite')
   return (
-    <button type="button" className={`library-file-card ${card.kind} ${selected ? 'selected' : ''}`} onClick={onOpen} onContextMenu={onContextMenu} title={card.title} aria-pressed={selectionMode ? selected : undefined}>
-      <span className={`library-file-art ${card.kind === 'audio' ? 'audio-art' : ''}`}>
-        {card.kind === 'audio' ? (
-          <AudioArtwork artwork={card.artwork} />
-        ) : card.artwork ? (
-          <img src={card.artwork} alt="" />
-        ) : (
-          <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>
-        )}
-        {card.overlayDuration && <span className="library-file-duration">{card.overlayDuration}</span>}
-        {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
-      </span>
-      <span className="library-file-copy">
-        <span className="library-file-title">{card.title}</span>
-        <span className="library-file-meta">
-          <Icon name={card.kind === 'video' ? 'file' : 'music'} size={14} />
-          <span>{card.metadata}</span>
+    <div className={`library-file-card ${card.kind} ${selected ? 'selected' : ''}`} onContextMenu={onContextMenu} title={card.title}>
+      <button type="button" className="library-file-open" onClick={onOpen} aria-pressed={selectionMode ? selected : undefined}>
+        <span className={`library-file-art ${card.kind === 'audio' ? 'audio-art' : ''}`}>
+          {card.kind === 'audio' ? (
+            <AudioArtwork artwork={card.artwork} />
+          ) : card.artwork ? (
+            <img src={card.artwork} alt="" />
+          ) : (
+            <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>
+          )}
+          <span className="library-card-glint" aria-hidden="true" />
+          {card.overlayDuration && <span className="library-file-duration">{card.overlayDuration}</span>}
+          {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
         </span>
-      </span>
-    </button>
+        <span className="library-file-copy">
+          <span className="library-file-title">{card.title}</span>
+          <span className="library-file-meta">
+            <Icon name={card.kind === 'video' ? 'file' : 'music'} size={14} />
+            <span>{card.metadata}</span>
+          </span>
+        </span>
+      </button>
+      {!selectionMode && (
+        <button
+          type="button"
+          className={`library-card-favorite ${card.item.favorite ? 'is-favorite' : ''} ${favoriteOnly ? 'remove-only' : ''}`}
+          aria-label={favoriteOnly ? t('unfavorite') : favoriteLabel}
+          title={favoriteOnly ? t('unfavorite') : favoriteLabel}
+          aria-pressed={card.item.favorite}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleFavorite()
+          }}
+        >
+          <span className="library-card-favorite-glyph" key={card.item.favorite ? 'filled' : 'outline'}>
+            {card.item.favorite ? <FilledIcon name="heartFilled" size={17} /> : <Icon name="heart" size={17} />}
+          </span>
+        </button>
+      )}
+    </div>
   )
 }

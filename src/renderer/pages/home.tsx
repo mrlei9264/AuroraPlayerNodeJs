@@ -49,15 +49,20 @@ export function HomePage() {
 
   return (
     <div className="home-page">
-      <section className={`cinema-hero ${featured.isAudio ? 'audio-artwork' : featured.coverPath ? '' : 'no-artwork'}`} aria-label={featuredTitle}>
+      <section key={featured.id} className={`cinema-hero ${featured.isAudio ? 'audio-artwork' : featured.coverPath ? '' : 'no-artwork'}`} aria-label={featuredTitle}>
         {featured.isAudio
           ? <AudioArtwork artwork={featured.coverPath ? coverUrl(featured.coverPath) : null} variant="hero" className="cinema-audio-artwork" />
           : featured.coverPath
             ? <img className="cinema-hero-image" src={coverUrl(featured.coverPath)} alt="" />
             : <MediaArtworkFallback kind="video" />}
+        <div className="cinema-ambient-light" aria-hidden="true" />
         <div className="cinema-hero-shade" />
+        <div className="cinema-film-reveal" aria-hidden="true" />
         <div className="cinema-copy">
-          <h1>{featuredTitle}</h1>
+          <div className="cinema-title-block">
+            <h1>{featuredTitle}</h1>
+            <span className="cinema-title-rule" aria-hidden="true" />
+          </div>
           {(featuredSubtitle || featuredDuration) && (
             <div className="cinema-meta">
               {featuredSubtitle && <span>{featuredSubtitle}</span>}

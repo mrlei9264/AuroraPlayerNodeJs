@@ -20,7 +20,7 @@ const visualizerUrl = new URL('./sonic-topography/index.html', window.location.h
 export function MusicPlayerPage() {
   const {
     t, session, library, spectrum, theme, settings, engine, appIconUrl,
-    togglePlayPause, setVolume, toggleMute,
+    togglePlayPause, playPrevious, playNext, setVolume, toggleMute,
     leavePlayer, windowMinimize, windowMaximizeToggle, windowClose, win
   } = useRuntime()
   const visualizerRef = useRef<HTMLIFrameElement>(null)
@@ -168,11 +168,23 @@ export function MusicPlayerPage() {
             onChange={(event) => engine.seekTo(Number(event.target.value))} />
           <span>{formatTime(duration)}</span>
         </div>
-        <button type="button" className="audio-play-control" onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}><Icon name={playing ? 'pause' : 'play'} size={27} strokeWidth={1.45} /></button>
-        <div className="audio-volume-control">
-          <button type="button" className="audio-control-icon" onClick={toggleMute} aria-label={t('mute')} title={t('mute')}>
-            <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={22} strokeWidth={1.65} />
+
+        <div className="audio-transport-controls">
+          <button type="button" className="audio-control-icon audio-skip-control" onClick={() => void playPrevious()} aria-label={t('previous')} title={t('previous')}>
+            <Icon name="prev" size={23} strokeWidth={1.55} />
           </button>
+          <button type="button" className="audio-play-control" onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}>
+            <Icon name={playing ? 'pause' : 'play'} size={27} strokeWidth={1.45} />
+          </button>
+          <button type="button" className="audio-control-icon audio-skip-control" onClick={() => void playNext()} aria-label={t('next')} title={t('next')}>
+            <Icon name="next" size={23} strokeWidth={1.55} />
+          </button>
+        </div>
+
+        <div className="audio-volume-control">
+          <span className="audio-volume-icon" aria-hidden="true">
+            <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={22} strokeWidth={1.65} />
+          </span>
           <input type="range" min={0} max={100} value={volume} aria-label="Volume" onChange={(event) => {
             if (session.muted) toggleMute()
             setVolume(Number(event.target.value))

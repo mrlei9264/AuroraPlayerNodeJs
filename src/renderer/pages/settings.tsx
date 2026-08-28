@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import type { AppSettingsData, MetadataProvider } from '../../main/system/settings-types'
 import { Icon, type IconName } from '../core/icons'
 import { p, useRuntime } from '../core/runtime'
@@ -6,7 +7,8 @@ import { I } from '../../shared/channels'
 import { applyTypographySettings } from '../core/appearance'
 import { COLOR_THEMES, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
-import { MEDIA_AUDIO_EXTS, MEDIA_IMAGE_EXTS, MEDIA_VIDEO_EXTS } from '../../shared/types'
+import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS } from '../../shared/types'
+import { FloatingMenu } from '../shared/floatingMenu'
 
 type SettingsCategory = 'general' | 'proxy' | 'metadata' | 'appearance' | 'about'
 type DraftUpdater<T> = (update: (draft: T) => T) => void
@@ -144,7 +146,6 @@ const SETTINGS_COPY = {
     supportedFormatsDescription: 'Extensions recognized by the library and available for local or network playback. Codec availability is provided by the bundled media engine.',
     videoFormats: 'Video',
     audioFormats: 'Audio',
-    imageFormats: 'Images',
     lyricsFormats: 'Lyrics',
     embeddedSubtitleSupport: 'Subtitle tracks embedded in supported video containers are detected automatically. Standalone subtitle files are not imported as media items.',
     dataStorage: 'Application data',
@@ -250,7 +251,6 @@ const SETTINGS_COPY = {
     supportedFormatsDescription: '以下扩展名可被媒体库识别，并支持本地或网络播放。具体编解码能力由程序内置媒体引擎提供。',
     videoFormats: '视频',
     audioFormats: '音频',
-    imageFormats: '图片',
     lyricsFormats: '歌词',
     embeddedSubtitleSupport: '支持自动识别视频容器中的内嵌字幕轨道；独立字幕文件不会作为媒体项目导入。',
     dataStorage: '应用数据',
@@ -375,6 +375,13 @@ export function SettingsPage() {
   const [appearance, setAppearance] = useState<AppearanceDraft>(() => appearanceFrom(settings))
   const [showProxyPassword, setShowProxyPassword] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
+  const [categoryDirection, setCategoryDirection] = useState(1)
+  const [themePulse, setThemePulse] = useState(0)
+  const [restoreCycle, setRestoreCycle] = useState(0)
+  const [restoreCategory, setRestoreCategory] = useState<SettingsCategory | null>(null)
+  const feedbackTimersRef = useRef(new Map<HTMLElement, number>())
+  const systemReducedMotion = useReducedMotion()
+  const reduceMotion = settings.reducedMotion || systemReducedMotion
 
   useEffect(() => {
     setGeneral(generalFrom(settings))
@@ -382,6 +389,11 @@ export function SettingsPage() {
     setMetadata(metadataFrom(settings))
     setAppearance(appearanceFrom(settings))
   }, [settings])
+
+  useEffect(() => () => {
+    for (const timer of feedbackTimersRef.current.values()) window.clearTimeout(timer)
+    feedbackTimersRef.current.clear()
+  }, [])
 
   const updateGeneral: DraftUpdater<GeneralDraft> = (update) => {
     const next = update(general)
@@ -451,31 +463,75 @@ export function SettingsPage() {
   }
 
   const selectCategory = (nextCategory: SettingsCategory) => {
+    const currentIndex = CATEGORIES.findIndex((item) => item.key === category)
+    const nextIndex = CATEGORIES.findIndex((item) => item.key === nextCategory)
+    if (currentIndex !== nextIndex) setCategoryDirection(nextIndex > currentIndex ? 1 : -1)
+    if (nextCategory !== category) setRestoreCategory(null)
     lastSettingsCategory = nextCategory
     setCategory(nextCategory)
+  }
+
+  const signalSettingFeedback = (target: EventTarget | null) => {
+    if (reduceMotion || !(target instanceof HTMLElement)) return
+    const surface = target.closest<HTMLElement>('.settings-row, .settings-toggle-card, .settings-provider-card, .settings-source-field')
+    if (!surface) return
+    const previousTimer = feedbackTimersRef.current.get(surface)
+    if (previousTimer) window.clearTimeout(previousTimer)
+    surface.removeAttribute('data-feedback')
+    void surface.offsetWidth
+    surface.dataset.feedback = 'true'
+    const timer = window.setTimeout(() => {
+      surface.removeAttribute('data-feedback')
+      feedbackTimersRef.current.delete(surface)
+    }, 620)
+    feedbackTimersRef.current.set(surface, timer)
+  }
+
+  const restoreWithAnimation = () => {
+    setRestoreCategory(category)
+    setRestoreCycle((cycle) => cycle + 1)
+    restoreCurrentCategory()
   }
 
   const panel = CATEGORIES.find((item) => item.key === category)!
   const panelTitle = copy.categories[category]
 
   return (
-    <main className="settings-page">
+    <main
+      className="settings-page"
+      data-reduced-motion={reduceMotion ? 'true' : 'false'}
+      onChangeCapture={(event) => signalSettingFeedback(event.target)}
+      onClickCapture={(event) => {
+        if ((event.target as HTMLElement).closest('.settings-switch, .settings-segmented button, .settings-select-menu [role="option"]')) signalSettingFeedback(event.target)
+      }}
+    >
+      {themePulse > 0 && <span key={themePulse} className="settings-theme-diffusion" aria-hidden="true" />}
       <div className="settings-workspace">
-        <nav className="settings-category-panel" aria-label={copy.categoriesLabel}>
-          {CATEGORIES.map((item) => (
-            <button
-              type="button"
-              key={item.key}
-              className={`settings-category ${category === item.key ? 'active' : ''}`}
-              title={copy.categories[item.key]}
-              onClick={() => selectCategory(item.key)}
-              aria-current={category === item.key ? 'page' : undefined}
-            >
-              <Icon name={item.icon} size={32} strokeWidth={1.65} />
-              <span>{copy.categories[item.key]}</span>
-            </button>
-          ))}
-        </nav>
+        <LayoutGroup id="settings-category-selection">
+          <nav className="settings-category-panel" aria-label={copy.categoriesLabel}>
+            {CATEGORIES.map((item) => (
+              <button
+                type="button"
+                key={item.key}
+                className={`settings-category ${category === item.key ? 'active' : ''}`}
+                title={copy.categories[item.key]}
+                onClick={() => selectCategory(item.key)}
+                aria-current={category === item.key ? 'page' : undefined}
+              >
+                {category === item.key && (
+                  <motion.span
+                    className="settings-category-active-motion"
+                    layoutId="settings-category-active"
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 390, damping: 34, mass: 0.74 }}
+                    aria-hidden="true"
+                  />
+                )}
+                <Icon name={item.icon} size={32} strokeWidth={1.65} />
+                <span>{copy.categories[item.key]}</span>
+              </button>
+            ))}
+          </nav>
+        </LayoutGroup>
 
         <section className="settings-detail-panel" aria-labelledby="settings-panel-title">
           <div className="settings-panel-title">
@@ -483,52 +539,62 @@ export function SettingsPage() {
             <h2 id="settings-panel-title">{panelTitle}</h2>
           </div>
 
-          <div className="settings-detail-content" key={category}>
-            {category === 'general' && <GeneralPanel value={general} onChange={updateGeneral} copy={copy} />}
-            {category === 'proxy' && (
-              <ProxyPanel
-                value={proxy}
-                onChange={updateProxy}
-                copy={copy}
-                showPassword={showProxyPassword}
-                onTogglePassword={() => setShowProxyPassword((visible) => !visible)}
-              />
-            )}
-            {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} />}
-            {category === 'metadata' && (
-              <MetadataPanel
-                value={metadata}
-                onChange={updateMetadata}
-                copy={copy}
-                onRefresh={async () => {
-                  await p(I.probeRefreshAll)
-                  toast('success', copy.refreshStarted)
-                }}
-              />
-            )}
-            {category === 'about' && (
-              <AboutPanel
-                version={appInfo?.version ?? '1.0.0'}
-                build={`${appInfo?.platform ?? 'desktop'} ${appInfo?.arch ?? ''}`.trim()}
-                engine={`Chromium ${appInfo?.chrome ?? '-'}`}
-                updateState={updateStatus.status}
-                checking={checkingUpdates}
-                copy={copy}
-                dataRoot={appInfo?.dataRoot ?? ''}
-                dataDirectories={appInfo?.dataDirectories ?? null}
-                onOpenData={() => appInfo?.dataRoot && void openPath(appInfo.dataRoot)}
-                onCheck={async () => {
-                  setCheckingUpdates(true)
-                  await checkUpdate()
-                  setCheckingUpdates(false)
-                }}
-              />
-            )}
-          </div>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              className={`settings-detail-content ${restoreCycle > 0 && restoreCategory === category ? `settings-restore-${restoreCycle % 2 ? 'a' : 'b'}` : ''}`}
+              key={category}
+              data-direction={categoryDirection > 0 ? 'forward' : 'back'}
+              initial={reduceMotion ? false : { opacity: 0, x: categoryDirection * 14, scale: 0.994 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={reduceMotion ? { opacity: 1 } : { opacity: 0, x: categoryDirection * -8, scale: 0.997 }}
+              transition={reduceMotion ? { duration: 0 } : { duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {category === 'general' && <GeneralPanel value={general} onChange={updateGeneral} copy={copy} />}
+              {category === 'proxy' && (
+                <ProxyPanel
+                  value={proxy}
+                  onChange={updateProxy}
+                  copy={copy}
+                  showPassword={showProxyPassword}
+                  onTogglePassword={() => setShowProxyPassword((visible) => !visible)}
+                />
+              )}
+              {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} onThemeChange={() => setThemePulse((pulse) => pulse + 1)} />}
+              {category === 'metadata' && (
+                <MetadataPanel
+                  value={metadata}
+                  onChange={updateMetadata}
+                  copy={copy}
+                  onRefresh={async () => {
+                    await p(I.probeRefreshAll)
+                    toast('success', copy.refreshStarted)
+                  }}
+                />
+              )}
+              {category === 'about' && (
+                <AboutPanel
+                  version={appInfo?.version ?? '1.0.0'}
+                  build={`${appInfo?.platform ?? 'desktop'} ${appInfo?.arch ?? ''}`.trim()}
+                  engine={`Chromium ${appInfo?.chrome ?? '-'}`}
+                  updateState={updateStatus.status}
+                  checking={checkingUpdates}
+                  copy={copy}
+                  dataRoot={appInfo?.dataRoot ?? ''}
+                  dataDirectories={appInfo?.dataDirectories ?? null}
+                  onOpenData={() => appInfo?.dataRoot && void openPath(appInfo.dataRoot)}
+                  onCheck={async () => {
+                    setCheckingUpdates(true)
+                    await checkUpdate()
+                    setCheckingUpdates(false)
+                  }}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
 
           {category !== 'about' && (
             <footer className="settings-panel-footer">
-              <button type="button" className="settings-button settings-button-ghost" onClick={restoreCurrentCategory}>{copy.restoreDefaults}</button>
+              <button type="button" className="settings-button settings-button-ghost" onClick={restoreWithAnimation}>{copy.restoreDefaults}</button>
             </footer>
           )}
         </section>
@@ -758,7 +824,7 @@ function MetadataPanel({
   )
 }
 
-function AppearancePanel({ value, onChange, copy }: { value: AppearanceDraft; onChange: DraftUpdater<AppearanceDraft>; copy: SettingsCopy }) {
+function AppearancePanel({ value, onChange, copy, onThemeChange }: { value: AppearanceDraft; onChange: DraftUpdater<AppearanceDraft>; copy: SettingsCopy; onThemeChange: () => void }) {
   const fontSizes: AppSettingsData['fontSize'][] = [12, 13, 14, 15, 16]
   const [fontFamilies, setFontFamilies] = useState<string[]>([])
   const [appIcons, setAppIcons] = useState<AppIconOption[]>([])
@@ -811,7 +877,10 @@ function AppearancePanel({ value, onChange, copy }: { value: AppearanceDraft; on
               label: colorTheme.name,
               swatch: [colorTheme.start, colorTheme.end] as [string, string]
             }))}
-            onChange={(accentIndex) => onChange((draft) => ({ ...draft, accentIndex: normalizeColorThemeIndex(accentIndex) }))}
+            onChange={(accentIndex) => {
+              onThemeChange()
+              onChange((draft) => ({ ...draft, accentIndex: normalizeColorThemeIndex(accentIndex) }))
+            }}
           />
         </SettingRow>
         <SettingRow label={copy.appIcon} description={copy.appIconDescription}>
@@ -905,15 +974,6 @@ function SettingsSelect({
 
   useEffect(() => {
     if (!open) return
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', closeOnOutsidePointer)
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer)
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
     const frame = window.requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus())
     return () => window.cancelAnimationFrame(frame)
   }, [open, selectedIndex])
@@ -955,8 +1015,15 @@ function SettingsSelect({
         </span>
         <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} />
       </button>
-      {open && (
-        <div className="settings-font-menu settings-select-menu" role="listbox" aria-label={label}>
+      <FloatingMenu
+        open={open}
+        anchorRef={rootRef}
+        onClose={() => setOpen(false)}
+        className={`settings-font-menu settings-select-menu ${className}`.trim()}
+        role="listbox"
+        ariaLabel={label}
+        maxHeight={className.includes('settings-color-theme-control') ? 304 : 224}
+      >
           {options.map((option, index) => (
             <button
               ref={(node) => { optionRefs.current[index] = node }}
@@ -984,8 +1051,7 @@ function SettingsSelect({
               {value === option.value && <Icon name="check" size={17} />}
             </button>
           ))}
-        </div>
-      )}
+      </FloatingMenu>
     </div>
   )
 }
@@ -1064,7 +1130,6 @@ function AboutPanel({
         <div className="settings-format-groups">
           <FormatGroup label={copy.videoFormats} extensions={MEDIA_VIDEO_EXTS} />
           <FormatGroup label={copy.audioFormats} extensions={MEDIA_AUDIO_EXTS} />
-          <FormatGroup label={copy.imageFormats} extensions={MEDIA_IMAGE_EXTS} />
           <FormatGroup label={copy.lyricsFormats} extensions={['lrc']} />
         </div>
         <p className="settings-format-note">{copy.embeddedSubtitleSupport}</p>

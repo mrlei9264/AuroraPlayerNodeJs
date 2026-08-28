@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef } from 'react'
+import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { RuntimeProvider, useRuntime } from './core/runtime'
 import { WindowChrome, Sidebar, ToastHost, DialogHost, CtxMenuHost, HudHost, MiniPlayer, GlobalShortcuts, DragDropImporter } from './shell/shell'
 import { HomePage } from './pages/home'
@@ -10,13 +11,13 @@ import { DownloadsPage } from './pages/downloads'
 import { SettingsPage } from './pages/settings'
 import { VideoPlayerPage } from './pages/playerVideo'
 import { MusicPlayerPage } from './pages/playerMusic'
-import { ImageViewerPage } from './pages/imageViewer'
 import { MediaDetailsPage } from './pages/mediaDetails'
 import { applyTypographySettings } from './core/appearance'
 import { StartupAnimation } from './shell/startupAnimation'
+import { MotionLabPage } from './pages/motionLab'
 
 function MainView() {
-  const { nav, session, imageSession } = useRuntime()
+  const { nav, session } = useRuntime()
   switch (nav.section) {
     case 'home':
       return <HomePage />
@@ -24,8 +25,6 @@ function MainView() {
       return <BrowsePage kind="video" />
     case 'music':
       return <BrowsePage kind="audio" />
-    case 'images':
-      return <BrowsePage kind="image" />
     case 'playlists':
       return <PlaylistsPage />
     case 'remote':
@@ -38,7 +37,6 @@ function MainView() {
       if (nav.mediaId != null) return <MediaDetailsPage mediaId={nav.mediaId} />
       return <LibraryPage />
     case 'player':
-      if (imageSession) return <ImageViewerPage />
       if (session.kind === 'audio' && !session.idle) return <MusicPlayerPage />
       return <VideoPlayerPage />
     default:
@@ -48,7 +46,6 @@ function MainView() {
 
 function ShellInner() {
   const { nav, settings, booted, session } = useRuntime()
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const hiddenHostRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -70,12 +67,25 @@ function ShellInner() {
     }
   }, [settings?.reducedMotion, settings?.reduceTransparency])
 
-  const isPlayer = nav.section === 'player' && !session.idle
+  const isPlayer = nav.section === 'player'
   const isHome = nav.section === 'home'
   const isLibrary = nav.section === 'library'
   const isNetwork = nav.section === 'remote'
   const isSettings = nav.section === 'settings'
-  const isCinema = isHome || isLibrary || isNetwork || isSettings
+  const isCinema = !isPlayer
+  const reducedMotion = settings?.reducedMotion ?? true
+  const routeKey = nav.section === 'library' && nav.mediaId != null
+    ? `library:${nav.mediaId}`
+    : nav.section === 'playlists' && nav.playlistId != null
+      ? `playlists:${nav.playlistId}`
+      : nav.section === 'remote'
+        ? `remote:${nav.remoteTab ?? 'sources'}:${nav.sourceId ?? ''}`
+        : nav.section === 'player'
+          ? `player:${session.kind}`
+          : nav.section
+  const routeTransition = reducedMotion
+    ? { duration: 0.1, ease: 'linear' as const }
+    : { duration: 0.24, ease: [0.16, 1, 0.3, 1] as const }
 
   useEffect(() => {
     document.body.classList.toggle('home-mode', isCinema)
@@ -91,38 +101,63 @@ function ShellInner() {
   }, [isCinema, isLibrary, isNetwork, isSettings])
 
   return (
-    <>
+    <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
       {settings == null
         ? <div className="startup-animation" aria-hidden="true" />
         : settings.startupAnimationEnabled
           ? <StartupAnimation ready={booted} reducedMotion={settings.reducedMotion} />
           : null}
-      {!isPlayer && <WindowChrome />}
-      <div className={`shell ${isCinema ? 'home-shell' : ''} ${isLibrary ? 'library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}>
-        {!isPlayer && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((c) => !c)} />}
-        <div className="main">
+      <AnimatePresence initial={false}>
+        {!isPlayer && <WindowChrome key="window-chrome" />}
+      </AnimatePresence>
+      <motion.div
+        layout={!reducedMotion}
+        className={`shell ${isCinema ? 'home-shell' : ''} ${isLibrary ? 'library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}
+        transition={routeTransition}
+      >
+        <AnimatePresence initial={false}>
+          {!isPlayer && <Sidebar key="sidebar" />}
+        </AnimatePresence>
+        <motion.div className="main" layout={!reducedMotion} transition={routeTransition}>
           {!isPlayer && !booted ? (
             <div className="center" style={{ flex: 1 }}>
               <div className="skeleton" style={{ width: 420, height: 120, borderRadius: 20 }} />
             </div>
           ) : (
-            <MainView />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={routeKey}
+                className="route-stage"
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.995 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.998 }}
+                transition={routeTransition}
+              >
+                <MainView />
+              </motion.div>
+            </AnimatePresence>
           )}
-          {!isPlayer && !isHome && !isLibrary && !isNetwork && !isSettings && <MiniPlayer />}
-        </div>
+          <AnimatePresence initial={false}>
+            {!isPlayer && !session.idle && !isHome && !isLibrary && !isNetwork && !isSettings && <MiniPlayer key="mini-player" />}
+          </AnimatePresence>
+        </motion.div>
         <div ref={hiddenHostRef} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }} />
-      </div>
+      </motion.div>
       <ToastHost showNotificationCenter={!isPlayer} />
       <DialogHost />
       <CtxMenuHost />
       <HudHost />
       <GlobalShortcuts />
       <DragDropImporter />
-    </>
+    </MotionConfig>
   )
 }
 
 export default function App() {
+  if (new URLSearchParams(window.location.search).get('page') === 'motion-lab') {
+    return <MotionLabPage />
+  }
+
   return (
     <RuntimeProvider>
       <ShellInner />

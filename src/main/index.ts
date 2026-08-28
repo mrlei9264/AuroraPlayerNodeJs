@@ -23,7 +23,7 @@ import { RemoteStreamProxy } from './remote/proxy'
 import { DownloadManager } from './remote/downloads'
 import { MediaProbeService, MediaIndexerService } from './media/probe'
 import { LyricsService } from './media/lyrics'
-import { PlaybackIpc, makePlannerDeps, kindOfItem } from './ipc'
+import { PlaybackIpc, makePlannerDeps } from './ipc'
 import { makeAppIcon } from './util'
 import { LocalMediaServer } from './media/localMediaServer'
 import type { AppSettingsData } from './system/settings-types'
@@ -123,7 +123,7 @@ function sourceUrlForItem(item: MediaItem): string {
     // libmpv can open local video paths directly. Audio and renderer-owned
     // assets still use the loopback range server because Chromium cannot load
     // arbitrary filesystem paths under context isolation.
-    sourceUrl = !item.isAudio && !item.isImage
+    sourceUrl = !item.isAudio
       ? item.url
       : `http://127.0.0.1:${mediaServer.port}/media?t=${mediaServer.token}&p=${encodeURIComponent(item.url)}`
   } else if (item.sourceId !== null && item.remotePath) {

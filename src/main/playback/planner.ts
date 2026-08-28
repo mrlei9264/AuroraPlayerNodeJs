@@ -23,11 +23,11 @@ export class PlaybackLaunchPlanner {
     }
     const id = ids[request.index]
     const item = this.deps.itemById(id)
-    if (!item) {
+    if (!item || item.isImage) {
       return { ok: false, result: 'invalidRequest', item: null, url: '', kind: 'video', resumePosition: 0 }
     }
 
-    const kind: MediaKind = item.isImage ? 'image' : item.isAudio ? 'audio' : 'video'
+    const kind: MediaKind = item.isAudio ? 'audio' : 'video'
 
     if (item.protocol === 'local') {
       if (!this.deps.fileExists(item.url)) {
@@ -48,7 +48,6 @@ export class PlaybackLaunchPlanner {
   }
 
   decideResume(item: MediaItem, kind: MediaKind): number {
-    if (kind === 'image') return 0
     if (!this.deps.resumePlayback() || !this.deps.rememberPlaybackPosition()) return 0
     const pos = item.lastPosition
     if (pos <= 0 || pos > Math.max(30, item.duration || 0) - 5) return 0

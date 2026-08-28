@@ -5,7 +5,7 @@ import { LibraryRepository } from '../library/repository'
 import { Logger } from '../system/diagnostics'
 
 function toEntry(item: MediaItem | null | undefined): QueueEntry | null {
-  if (!item) return null
+  if (!item || item.isImage) return null
   return {
     position: 0,
     mediaId: item.id,
@@ -27,7 +27,7 @@ export class QueueController {
   ) {}
 
   init(): void {
-    this.ids = this.repo.loadQueueIds()
+    this.ids = this.repo.loadQueueIds().filter((id) => !this.repo.findById(id)?.isImage)
     ipcMain.handle(I.queueGet, () => this.snapshot())
     ipcMain.handle(I.queueEnqueue, (_e, mediaIds: number[]) => {
       this.enqueue(mediaIds)

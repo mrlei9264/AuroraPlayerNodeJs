@@ -65,12 +65,12 @@ export class ManagedFolderController {
         const added = this.walk(folderPath, (fileName, full) => {
           found++
           if (this.repo.findByUrl(full)) return
-          const kind = this.isAudioOrImage(fileName)
+          const kind = this.mediaKind(fileName)
           this.repo.insert({
             url: full,
             fileName,
             isAudio: kind === 'audio',
-            isImage: kind === 'image',
+            isImage: false,
             sourceId: null,
             remotePath: null,
             protocol: 'local',
@@ -115,16 +115,14 @@ export class ManagedFolderController {
     return added
   }
 
-  private isAudioOrImage(fileName: string): 'audio' | 'image' | 'video' {
+  private mediaKind(fileName: string): 'audio' | 'video' {
     const ext = path.extname(fileName).slice(1).toLowerCase()
     const audio = ['mp3', 'flac', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'opus', 'wma', 'ape', 'mka']
-    const image = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif', 'ico']
     if (audio.includes(ext)) return 'audio'
-    if (image.includes(ext)) return 'image'
     return 'video'
   }
 
   private snapshot(): MediaItem[] {
-    return this.repo.loadAll()
+    return this.repo.loadAll().filter((item) => !item.isImage)
   }
 }

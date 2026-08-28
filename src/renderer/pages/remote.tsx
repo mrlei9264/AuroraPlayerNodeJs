@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { useRuntime, p } from '../core/runtime'
 import { I } from '../../shared/channels'
 import { Icon, type IconName } from '../core/icons'
@@ -61,7 +62,6 @@ function sourceAddress(source: Pick<RemoteSource, 'protocol' | 'host' | 'port' |
 
 function fileIcon(name: string, media: boolean): IconName {
   if (!media) return 'file'
-  if (/\.(jpg|jpeg|png|gif|webp|bmp|avif)$/i.test(name)) return 'image'
   if (/\.(mp3|flac|wav|ogg|m4a|aac|opus|wma)$/i.test(name)) return 'music'
   return 'video'
 }
@@ -83,8 +83,6 @@ function NetworkSourcesPage() {
   const { t, sources, deleteSource, toast, confirm, navigate } = useRuntime()
   const [filter, setFilter] = useState<ProtocolFilter>('all')
   const visibleSources = useMemo(() => filter === 'all' ? sources : sources.filter((source) => protocolForSource(source) === filter), [filter, sources])
-  const usedProtocols = useMemo(() => new Set(sources.map(protocolForSource)).size, [sources])
-  const credentialCount = useMemo(() => sources.filter((source) => source.hasPassword).length, [sources])
 
   const addConnection = (protocol: NetworkProtocol = filter === 'all' ? 'http' : filter) => {
     navigate({ section: 'remote', remoteTab: 'config', remoteProtocol: protocol })
@@ -108,12 +106,6 @@ function NetworkSourcesPage() {
           <button type="button" className="network-primary-action" onClick={() => addConnection()}><Icon name="plus" size={18} />{t('addConnection')}</button>
         </div>
       </header>
-
-      <section className="network-overview" aria-label={t('networkOverview')}>
-        <NetworkMetric icon="server" value={sources.length} label={t('allConnections')} />
-        <NetworkMetric icon="network" value={usedProtocols} label={t('activeProtocols')} />
-        <NetworkMetric icon="archive" value={credentialCount} label={t('savedCredentials')} />
-      </section>
 
       <nav className="network-filter-strip" aria-label={t('networkProtocol')}>
         <button type="button" className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
@@ -141,10 +133,11 @@ function NetworkSourcesPage() {
         </div>
         {visibleSources.length > 0 ? (
           <div className="network-source-grid">
-            {visibleSources.map((source) => (
+            {visibleSources.map((source, index) => (
               <NetworkSourceCard
                 key={source.id}
                 source={source}
+                index={index}
                 onOpen={() => navigate({ section: 'remote', remoteTab: 'browser', sourceId: source.id })}
                 onEdit={() => navigate({ section: 'remote', remoteTab: 'config', sourceId: source.id })}
                 onDelete={() => void onDelete(source)}
@@ -163,15 +156,11 @@ function NetworkSourcesPage() {
   )
 }
 
-function NetworkMetric({ icon, value, label }: { icon: IconName; value: number; label: string }) {
-  return <div className="network-metric"><span><Icon name={icon} size={18} /></span><strong>{value}</strong><small>{label}</small></div>
-}
-
-function NetworkSourceCard({ source, onOpen, onEdit, onDelete }: { source: RemoteSource; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
+function NetworkSourceCard({ source, index, onOpen, onEdit, onDelete }: { source: RemoteSource; index: number; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
   const { t } = useRuntime()
   const info = protocolInfo(protocolForSource(source))
   return (
-    <article className="network-source-card" onDoubleClick={onOpen}>
+    <article className="network-source-card" style={{ '--network-card-index': Math.min(index, 8) } as React.CSSProperties} onDoubleClick={onOpen}>
       <div className="network-source-card-top">
         <span className="network-source-symbol"><Icon name={info.icon} size={22} /></span>
         <div className="network-source-title"><span>{info.label}</span><h3>{source.name}</h3></div>
@@ -193,6 +182,7 @@ function NetworkSourceCard({ source, onOpen, onEdit, onDelete }: { source: Remot
 
 function NetworkConfigurationPage({ source, initialProtocol, onClose }: { source?: RemoteSource; initialProtocol: NetworkProtocol; onClose: () => void }) {
   const { t, saveSource, testSource, toast } = useRuntime()
+  const reduceMotion = useReducedMotion()
   const [form, setForm] = useState<RemoteSourceInput>(() => source ? sourceToInput(source) : emptySourceInput(initialProtocol))
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -278,17 +268,34 @@ function NetworkConfigurationPage({ source, initialProtocol, onClose }: { source
       <div className="network-config-workspace">
         <aside className="network-protocol-rail" aria-label={t('networkProtocol')}>
           <div className="network-rail-heading">{t('networkProtocol')}</div>
-          {NETWORK_PROTOCOLS.map((entry) => (
-            <button key={entry.key} type="button" className={protocol === entry.key ? 'active' : ''} aria-pressed={protocol === entry.key} onClick={() => selectProtocol(entry.key)}>
-              <span><Icon name={entry.icon} size={19} /></span>
-              <span><strong>{entry.label}</strong><small>{t('defaultPort', { port: entry.port })}</small></span>
-              <Icon name="chevronRight" size={14} />
-            </button>
-          ))}
+          <LayoutGroup id="network-protocol-selection">
+            {NETWORK_PROTOCOLS.map((entry) => (
+              <button key={entry.key} type="button" className={protocol === entry.key ? 'active' : ''} aria-pressed={protocol === entry.key} onClick={() => selectProtocol(entry.key)}>
+                {protocol === entry.key && (
+                  <motion.span
+                    className="network-protocol-active-motion"
+                    layoutId="network-protocol-active"
+                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 34, mass: 0.72 }}
+                  />
+                )}
+                <span className="network-protocol-icon"><Icon name={entry.icon} size={19} /></span>
+                <span className="network-protocol-copy"><strong>{entry.label}</strong><small>{t('defaultPort', { port: entry.port })}</small></span>
+                <Icon name="chevronRight" size={14} />
+              </button>
+            ))}
+          </LayoutGroup>
           <div className="network-protocol-note"><span><Icon name={info.icon} size={18} /></span><p>{t(info.descriptionKey)}</p></div>
         </aside>
 
-        <form className="network-config-form-v2" onSubmit={(event) => { event.preventDefault(); void onSave() }}>
+        <motion.form
+          key={protocol}
+          className="network-config-form-v2"
+          data-testing={testing ? 'true' : 'false'}
+          initial={reduceMotion ? false : { opacity: 0.72, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+          onSubmit={(event) => { event.preventDefault(); void onSave() }}
+        >
           <NetworkFormSection icon="edit" title={t('connectionIdentity')}>
             <NetworkField label={t('connectionName')} required error={errors.name}>
               <input aria-invalid={!!errors.name} value={form.name} onChange={(event) => change('name', event.target.value)} placeholder={t('connectionNamePlaceholder')} />
@@ -351,10 +358,13 @@ function NetworkConfigurationPage({ source, initialProtocol, onClose }: { source
           {testState && <div className={`network-test-result ${testState.kind}`} role={testState.kind === 'error' ? 'alert' : 'status'}><Icon name={testState.kind === 'success' ? 'check' : 'alert'} size={17} /><span>{testState.message}</span></div>}
           <footer className="network-form-footer-v2">
             <button type="button" className="network-cancel-button-v2" onClick={onClose}>{t('cancel')}</button>
-            <button type="button" className="network-test-button-v2" disabled={testing || saving} onClick={() => void onTest()}>{testing && <span className="spin"><Icon name="refresh" size={15} /></span>}{testing ? t('testingConnection') : t('testConnection')}</button>
+            <button type="button" className={`network-test-button-v2 ${testing ? 'testing' : ''}`} disabled={testing || saving} onClick={() => void onTest()}>
+              {testing && <span className="network-handshake-signal" aria-hidden="true"><i /><i /><i /></span>}
+              <span>{testing ? t('testingConnection') : t('testConnection')}</span>
+            </button>
             <button type="submit" className="network-save-button-v2" disabled={testing || saving}>{t('saveConnection')}</button>
           </footer>
-        </form>
+        </motion.form>
       </div>
     </main>
   )
@@ -401,6 +411,7 @@ function BrowserPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [navigationDirection, setNavigationDirection] = useState<'forward' | 'back'>('forward')
   const [expandedProtocols, setExpandedProtocols] = useState<Set<NetworkProtocol>>(() => source ? new Set([protocolForSource(source)]) : new Set())
   const [expandedSources, setExpandedSources] = useState<Set<number>>(() => source ? new Set([source.id]) : new Set())
   const [expandedTreePaths, setExpandedTreePaths] = useState<Set<string>>(new Set())
@@ -519,12 +530,18 @@ function BrowserPage() {
   const selectedFiles = useMemo(() => allFiles.filter((entry) => selected.has(entry.name)), [allFiles, selected])
   const selectedMedia = useMemo(() => selectedFiles.filter((entry) => MEDIA_RE.test(entry.name)), [selectedFiles])
   const entryPath = (name: string) => path.endsWith('/') ? path + name : `${path}/${name}`
-  const enterDir = (directory: RemoteEntry) => void load(entryPath(directory.name))
+  const navigatePath = (targetPath: string) => {
+    const currentDepth = path.split('/').filter(Boolean).length
+    const targetDepth = targetPath.split('/').filter(Boolean).length
+    setNavigationDirection(targetDepth >= currentDepth ? 'forward' : 'back')
+    void load(targetPath)
+  }
+  const enterDir = (directory: RemoteEntry) => navigatePath(entryPath(directory.name))
   const goUp = () => {
     if (path === '/') return
     const parts = path.split('/').filter(Boolean)
     parts.pop()
-    void load(parts.length ? `/${parts.join('/')}` : '/')
+    navigatePath(parts.length ? `/${parts.join('/')}` : '/')
   }
   const toggleSelect = (name: string) => setSelected((current) => {
     const next = new Set(current)
@@ -608,7 +625,7 @@ function BrowserPage() {
       return <React.Fragment key={directoryKey}>
         <div className={`network-tree-directory ${active ? 'active' : ''}`} style={{ '--tree-indent': `${Math.min(depth * 10, 40)}px` } as React.CSSProperties}>
           <button type="button" className="network-tree-expand" aria-label={t('expand')} aria-expanded={expanded} onClick={() => toggleDirectoryTree(candidate.id, directoryPath)}><Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={11} /></button>
-          <button type="button" className="network-tree-open" onClick={() => { browserPathMemory.set(candidate.id, directoryPath); if (candidate.id === source?.id) void load(directoryPath); else navigate({ section: 'remote', remoteTab: 'browser', sourceId: candidate.id }) }}><Icon name="folder" size={13} /><span>{directory.name}</span></button>
+          <button type="button" className="network-tree-open" onClick={() => { browserPathMemory.set(candidate.id, directoryPath); if (candidate.id === source?.id) navigatePath(directoryPath); else navigate({ section: 'remote', remoteTab: 'browser', sourceId: candidate.id }) }}><Icon name="folder" size={13} /><span>{directory.name}</span></button>
         </div>
         {expanded && renderTreeDirectories(candidate, directoryPath, depth + 1)}
       </React.Fragment>
@@ -661,8 +678,8 @@ function BrowserPage() {
 
       <section className="network-browser-shell">
         <div className="network-browser-toolbar">
-          <div className="network-breadcrumbs" aria-label={t('remotePath')}>
-            {crumbs.map((crumb, index) => <React.Fragment key={crumb.path}>{index > 0 && <Icon name="chevronRight" size={12} />}<button type="button" onClick={() => void load(crumb.path)}>{crumb.label}</button></React.Fragment>)}
+          <div key={`${source.id}:${path}`} className="network-breadcrumbs" data-direction={navigationDirection} aria-label={t('remotePath')}>
+            {crumbs.map((crumb, index) => <React.Fragment key={crumb.path}>{index > 0 && <Icon name="chevronRight" size={12} />}<button type="button" onClick={() => navigatePath(crumb.path)}>{crumb.label}</button></React.Fragment>)}
           </div>
           <label className="network-browser-search"><Icon name="search" size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('browserSearchPlaceholder')} /></label>
           <button type="button" className="network-toolbar-button" disabled={path === '/'} title={t('up')} onClick={goUp}><Icon name="up" size={16} /></button>
@@ -675,7 +692,7 @@ function BrowserPage() {
           <button type="button" disabled={allFiles.length === 0} onClick={toggleAll}><Icon name={allFiles.length > 0 && selected.size === allFiles.length ? 'check' : 'plus'} size={13} />{t('selectAllFiles')}</button>
         </div>
 
-        <div className="network-file-table">
+        <div key={`${source.id}:${path}`} className="network-file-table" data-direction={navigationDirection}>
           <div className="network-file-head"><span>{t('nameColumn')}</span><span>{t('sizeColumn')}</span><span>{t('modifiedColumn')}</span><span /></div>
           {loading && <NetworkBrowserSkeleton />}
           {!loading && error && (

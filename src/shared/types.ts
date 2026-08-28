@@ -195,7 +195,7 @@ export interface MediaInfoData {
 }
 
 export type SessionPhase = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'error'
-export type MediaKind = 'video' | 'audio' | 'image'
+export type MediaKind = 'video' | 'audio'
 
 export interface SessionState {
   phase: SessionPhase
@@ -322,7 +322,6 @@ export type Section =
   | 'home'
   | 'videos'
   | 'music'
-  | 'images'
   | 'playlists'
   | 'remote'
   | 'downloads'
@@ -359,9 +358,7 @@ export const MEDIA_AUDIO_EXTS = [
   'mka', 'amr', 'wv', 'tta', 'dts', 'ac3', 'eac3', 'dsf', 'dff', 'mpc',
   'mid', 'midi', 'ra', 'ram', 'spx', 'xm', 'mod', 's3m', 'it'
 ]
-export const MEDIA_IMAGE_EXTS = ['jpg', 'jpeg', 'jpe', 'jfif', 'png', 'gif', 'webp', 'avif', 'svg', 'svgz', 'bmp', 'dib', 'ico', 'cur']
-
-export const MEDIA_EXTS = [...MEDIA_VIDEO_EXTS, ...MEDIA_AUDIO_EXTS, ...MEDIA_IMAGE_EXTS]
+export const MEDIA_EXTS = [...MEDIA_VIDEO_EXTS, ...MEDIA_AUDIO_EXTS]
 
 const extOf = (e: string): string => {
   const lower = e.toLowerCase().replace(/\\/g, '/')
@@ -371,8 +368,7 @@ const extOf = (e: string): string => {
 
 export const isVideoExt = (e: string) => MEDIA_VIDEO_EXTS.includes(extOf(e))
 export const isAudioExt = (e: string) => MEDIA_AUDIO_EXTS.includes(extOf(e))
-export const isImageExt = (e: string) => MEDIA_IMAGE_EXTS.includes(extOf(e))
-export const isMediaExt = (e: string) => isVideoExt(e) || isAudioExt(e) || isImageExt(e)
+export const isMediaExt = (e: string) => isVideoExt(e) || isAudioExt(e)
 
 export function classifyFile(name: string): MediaKind | null {
   const idx = name.lastIndexOf('.')
@@ -380,7 +376,6 @@ export function classifyFile(name: string): MediaKind | null {
   const ext = name.slice(idx + 1).toLowerCase()
   if (isVideoExt(ext)) return 'video'
   if (isAudioExt(ext)) return 'audio'
-  if (isImageExt(ext)) return 'image'
   return null
 }
 

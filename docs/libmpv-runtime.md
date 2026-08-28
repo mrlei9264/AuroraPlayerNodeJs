@@ -20,12 +20,7 @@ libmpv-2.dll         Windows libmpv 运行库
 node_modules/electron-mpv-video/native/mpv-addon/build/Release/
 ```
 
-当前原生模块正式支持：
-
-- Windows x64
-- macOS arm64
-
-虽然打包配置包含 Linux 目标，但当前 `electron-mpv-video` 原生构建脚本尚未实现 Linux，因此 Linux 安装包不能视为可用的播放版本。
+当前项目仅支持 Windows x64。其他桌面平台没有维护可用的原生构建和发布流程。
 
 ## Windows x64 部署
 
@@ -75,7 +70,7 @@ where.exe dumpbin
    └─ 其他随构建提供的 DLL
 ```
 
-不要混用 x86、arm64 或不同版本 SDK 的头文件、导入库和 DLL。
+不要混用不同架构或不同版本 SDK 的头文件、导入库和 DLL。
 
 ### 3. 没有 mpv.lib 时生成导入库
 
@@ -159,34 +154,6 @@ libmpv-2.dll
 ```powershell
 npm run dev
 ```
-
-## macOS arm64 部署
-
-使用 Homebrew 安装 mpv：
-
-```bash
-brew install mpv
-npm install
-```
-
-默认路径：
-
-| 内容 | 默认位置 |
-| --- | --- |
-| 头文件 | `/opt/homebrew/include` |
-| 链接库 | `/opt/homebrew/lib/libmpv.dylib` |
-| 运行库 | `/opt/homebrew/opt/mpv/lib` |
-
-自定义路径：
-
-```bash
-export MPV_INCLUDE_DIR=/custom/include
-export MPV_LIB=/custom/lib/libmpv.dylib
-export MPV_RUNTIME_DIR=/custom/lib
-npm install
-```
-
-构建脚本会把 dylib 复制到原生插件旁，将插件引用改为 `@loader_path/libmpv.dylib`，并执行 ad-hoc 签名。Homebrew 的 libmpv 可能继续依赖其他 Homebrew 动态库；制作可移植 DMG 时，必须同时收集、重定位并签名所有非系统 dylib。
 
 ## 打包部署
 

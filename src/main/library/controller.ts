@@ -65,11 +65,12 @@ export class LibraryController {
     if (!['http', 'https'].includes(protocol)) return null
     const fileName = path.basename(parsed.pathname) || 'network-media'
     const kind = classifyFile(fileName)
+    if (!kind) return null
     const item = this.repo.upsertByUrl({
       url,
       fileName,
       isAudio: kind === 'audio',
-      isImage: kind === 'image',
+      isImage: false,
       sourceId: null,
       remotePath: null,
       protocol,
@@ -92,7 +93,7 @@ export class LibraryController {
         url: key,
         fileName: entry.name,
         isAudio: kind === 'audio',
-        isImage: kind === 'image',
+        isImage: false,
         sourceId: entry.sourceId,
         remotePath: entry.path,
         protocol: entry.protocol,
@@ -119,7 +120,7 @@ export class LibraryController {
       url: p,
       fileName: path.basename(p),
       isAudio: kind === 'audio',
-      isImage: kind === 'image',
+      isImage: false,
       sourceId: null,
       remotePath: null,
       protocol: 'local',
@@ -157,7 +158,7 @@ export class LibraryController {
               url: full,
               fileName: ent.name,
               isAudio: kind === 'audio',
-              isImage: kind === 'image',
+              isImage: false,
               sourceId: null,
               remotePath: null,
               protocol: 'local',
@@ -271,7 +272,7 @@ export class LibraryController {
         if (fileSize !== item.fileSize) this.repo.updateFields(item.id, { fileSize })
       }
     }
-    return this.repo.loadAll()
+    return this.repo.loadAll().filter((item) => !item.isImage)
   }
 
   private localFileSize(filePath: string): number {
@@ -283,6 +284,6 @@ export class LibraryController {
   }
 
   itemsByIds(ids: number[]): MediaItem[] {
-    return ids.map((id) => this.repo.findById(id)).filter((x): x is MediaItem => !!x)
+    return ids.map((id) => this.repo.findById(id)).filter((x): x is MediaItem => !!x && !x.isImage)
   }
 }

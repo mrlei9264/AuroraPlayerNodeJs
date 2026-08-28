@@ -4,6 +4,7 @@ import { EmptyState } from '../shared/shared'
 import { Icon } from '../core/icons'
 import type { DownloadTask } from '../../shared/types'
 import { formatBytes, formatBps } from '../../shared/types'
+import { FloatingMenu } from '../shared/floatingMenu'
 
 const STATUS_LABEL: Record<DownloadTask['status'], { labelKey: string; kind: 'info' | 'success' | 'danger' | 'warning' }> = {
   queued: { labelKey: 'queued', kind: 'info' },
@@ -24,15 +25,6 @@ export function DownloadsPage({ networkContext = false, onBack }: { networkConte
   const threadMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => setSpeedDraft(String(downloadOptions.speedLimitMbps)), [downloadOptions.speedLimitMbps])
-  useEffect(() => {
-    if (!threadMenuOpen) return
-    const close = (event: PointerEvent) => {
-      if (!threadMenuRef.current?.contains(event.target as Node)) setThreadMenuOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [threadMenuOpen])
-
   const commitSpeedLimit = () => {
     const next = Math.max(0, Number(speedDraft) || 0)
     setSpeedDraft(String(next))
@@ -82,8 +74,16 @@ export function DownloadsPage({ networkContext = false, onBack }: { networkConte
             <button type="button" className="download-thread-trigger" aria-haspopup="listbox" aria-expanded={threadMenuOpen} onClick={() => setThreadMenuOpen((open) => !open)}>
               <strong>{downloadOptions.threadCount}</strong><Icon name={threadMenuOpen ? 'chevronUp' : 'chevronDown'} size={13} />
             </button>
-            {threadMenuOpen && (
-              <div className="download-thread-menu" role="listbox" aria-label={t('downloadThreads')}>
+            <FloatingMenu
+              open={threadMenuOpen}
+              anchorRef={threadMenuRef}
+              onClose={() => setThreadMenuOpen(false)}
+              className="download-thread-menu"
+              role="listbox"
+              ariaLabel={t('downloadThreads')}
+              align="end"
+              width={90}
+            >
                 {[1, 2, 4, 8].map((count) => (
                   <button
                     type="button"
@@ -96,8 +96,7 @@ export function DownloadsPage({ networkContext = false, onBack }: { networkConte
                     <span>{count}</span>{downloadOptions.threadCount === count && <Icon name="check" size={14} />}
                   </button>
                 ))}
-              </div>
-            )}
+            </FloatingMenu>
           </div>
           <label className="download-speed-control"><span>{t('downloadSpeedLimit')}</span><input type="number" min="0" step="0.5" value={speedDraft} onChange={(event) => setSpeedDraft(event.target.value)} onBlur={commitSpeedLimit} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /><small>MB/s</small></label>
         </div>
@@ -112,7 +111,7 @@ export function DownloadsPage({ networkContext = false, onBack }: { networkConte
           return (
             <div
               key={task.id}
-              className={`dl-row ${task.bytesTotal > 0 ? 'has-progress' : ''} ${task.status === 'completed' ? 'download-completed' : ''} ${networkContext ? 'network-download-row' : ''}`}
+              className={`dl-row ${task.bytesTotal > 0 ? 'has-progress' : ''} download-${task.status} ${networkContext ? 'network-download-row' : ''}`}
               style={{ '--download-progress': `${pct}%` } as React.CSSProperties}
               role={task.status === 'completed' ? 'button' : undefined}
               tabIndex={task.status === 'completed' ? 0 : undefined}

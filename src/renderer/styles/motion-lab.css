@@ -1,0 +1,570 @@
+.motion-lab {
+  --lab-accent: #35d6ba;
+  --lab-accent-soft: rgba(53, 214, 186, 0.14);
+  --lab-bg: #07100f;
+  --lab-panel: rgba(13, 26, 24, 0.82);
+  --lab-line: rgba(133, 193, 183, 0.18);
+  --lab-text: #edf7f4;
+  --lab-muted: #91aaa5;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  min-height: 100dvh;
+  overflow: auto;
+  padding: 56px clamp(20px, 5vw, 76px) 88px;
+  color: var(--lab-text);
+  background:
+    radial-gradient(circle at 78% 4%, rgba(53, 214, 186, 0.09), transparent 31%),
+    linear-gradient(145deg, #07100f, #091513 54%, #07100f);
+  font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+}
+
+.motion-lab::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.23;
+  background-image: linear-gradient(rgba(173, 226, 217, 0.035) 1px, transparent 1px);
+  background-size: 100% 48px;
+}
+
+.lab-header {
+  position: relative;
+  max-width: 1360px;
+  margin: 0 auto 42px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.lab-header > div {
+  max-width: 720px;
+}
+
+.lab-eyebrow {
+  display: block;
+  margin-bottom: 15px;
+  color: var(--lab-accent);
+  font-family: "Cascadia Code", "Segoe UI", monospace;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lab-header h1 {
+  margin: 0;
+  font-size: clamp(38px, 5vw, 70px);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+  font-weight: 690;
+}
+
+.lab-header p {
+  margin: 20px 0 0;
+  color: var(--lab-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.lab-replay {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 20px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(53, 214, 186, 0.46);
+  border-radius: 14px;
+  color: #eafffb;
+  background: rgba(30, 105, 92, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.lab-replay:hover {
+  border-color: rgba(53, 214, 186, 0.78);
+  background: rgba(37, 130, 113, 0.34);
+}
+
+.lab-replay:active {
+  transform: scale(0.97);
+}
+
+.lab-replay:focus-visible,
+.lab-nav-button:focus-visible {
+  outline: 2px solid #8ff5e4;
+  outline-offset: 3px;
+}
+
+.lab-grid {
+  position: relative;
+  max-width: 1360px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.lab-card {
+  min-height: 334px;
+  display: grid;
+  grid-template-columns: minmax(230px, 0.92fr) minmax(220px, 1.08fr);
+  overflow: hidden;
+  border: 1px solid var(--lab-line);
+  border-radius: 16px;
+  background: var(--lab-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 20px 54px rgba(0, 12, 10, 0.22);
+}
+
+.lab-card:nth-child(4n + 2),
+.lab-card:nth-child(4n + 3) {
+  grid-template-columns: minmax(220px, 1.08fr) minmax(220px, 0.92fr);
+}
+
+.lab-preview {
+  position: relative;
+  min-height: 332px;
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  align-items: center;
+  gap: 22px;
+  padding: 32px 25px;
+  overflow: hidden;
+  border-right: 1px solid var(--lab-line);
+  background:
+    radial-gradient(circle at 28% 48%, rgba(53, 214, 186, 0.09), transparent 40%),
+    rgba(4, 15, 13, 0.64);
+  isolation: isolate;
+}
+
+.lab-preview::after {
+  content: '';
+  position: absolute;
+  right: -58px;
+  bottom: -82px;
+  width: 190px;
+  height: 190px;
+  border: 1px solid rgba(53, 214, 186, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.lab-rail {
+  position: relative;
+  width: 68px;
+  height: 242px;
+  padding: 5px 10px;
+  border: 1px solid rgba(137, 205, 194, 0.25);
+  border-radius: 34px;
+  background: rgba(4, 13, 12, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.lab-track {
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: rgba(128, 183, 174, 0.13);
+}
+
+.lab-buttons {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lab-nav-button {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(205, 227, 222, 0.52);
+  background: transparent;
+  cursor: pointer;
+  transition: color 190ms ease, transform 190ms ease;
+}
+
+.lab-nav-button:hover {
+  color: rgba(237, 250, 247, 0.9);
+}
+
+.lab-nav-button:active {
+  transform: scale(0.94);
+}
+
+.lab-nav-button.is-active {
+  color: #f3fffc;
+}
+
+.lab-icon {
+  display: grid;
+  place-items: center;
+  transform-origin: center;
+}
+
+.lab-indicator,
+.lab-echo {
+  position: absolute;
+  top: 5px;
+  left: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.lab-indicator {
+  z-index: 2;
+  border: 1px solid rgba(53, 214, 186, 0.58);
+  background: rgba(34, 124, 108, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 24px rgba(9, 52, 45, 0.22);
+}
+
+.lab-active-copy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+}
+
+.lab-active-copy span,
+.lab-active-copy small {
+  display: block;
+}
+
+.lab-active-copy span {
+  color: #effbf8;
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 620;
+  letter-spacing: -0.035em;
+}
+
+.lab-active-copy small {
+  margin-top: 8px;
+  color: var(--lab-accent);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.lab-card-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 34px;
+}
+
+.lab-card-copy h2 {
+  margin: 0;
+  color: var(--lab-text);
+  font-size: clamp(20px, 2vw, 27px);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+  font-weight: 650;
+}
+
+.lab-card-copy p {
+  margin: 15px 0 24px;
+  color: var(--lab-muted);
+  font-size: 14px;
+  line-height: 1.72;
+}
+
+.lab-card-copy > span {
+  width: fit-content;
+  padding-top: 10px;
+  border-top: 1px solid rgba(53, 214, 186, 0.28);
+  color: rgba(211, 235, 230, 0.76);
+  font-size: 12px;
+}
+
+/* Path morph: the shape itself is erased and redrawn. */
+.effect-path .lab-indicator {
+  background: transparent;
+  box-shadow: inset 0 0 0 5px rgba(53, 214, 186, 0.05);
+}
+
+.effect-path .lab-nav-button.is-active path {
+  stroke-dasharray: 80;
+  animation: lab-path-draw 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.effect-path .lab-nav-button.is-previous path {
+  stroke-dasharray: 80;
+  animation: lab-path-erase 280ms ease-in both;
+}
+
+/* Relay: a single bright stroke hands state to the target. */
+.effect-relay .lab-indicator {
+  border-color: rgba(53, 214, 186, 0.36);
+  background: rgba(25, 73, 65, 0.22);
+}
+
+.lab-relay-runner {
+  position: absolute;
+  top: 5px;
+  left: 31px;
+  z-index: 3;
+  width: 6px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 6px;
+  background: var(--lab-accent);
+  box-shadow: 0 0 12px rgba(53, 214, 186, 0.52);
+  pointer-events: none;
+}
+
+/* Nucleus: the shared core travels before the icon unfolds. */
+.effect-nucleus .lab-indicator {
+  display: grid;
+  place-items: center;
+  background: rgba(16, 46, 41, 0.76);
+}
+
+.lab-nucleus {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lab-accent);
+  box-shadow: 0 0 0 7px rgba(53, 214, 186, 0.1);
+  animation: lab-nucleus-breathe 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Liquid: one continuous body stretches in the travel direction. */
+.effect-liquid .lab-indicator {
+  border: 0;
+  background: rgba(45, 180, 156, 0.34);
+  animation: lab-liquid-body 700ms cubic-bezier(0.2, 0.84, 0.18, 1) both;
+}
+
+/* Geometry: four primitives converge before the icon appears. */
+.effect-geometry .lab-indicator {
+  border-color: rgba(53, 214, 186, 0.22);
+  background: transparent;
+}
+
+.lab-shards {
+  position: absolute;
+  inset: 0;
+}
+
+.lab-shards i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(119, 240, 220, 0.8);
+  border-radius: 2px;
+  animation: lab-shard-converge 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.lab-shards i:nth-child(1) { top: 4px; left: 5px; --shard-x: 13px; --shard-y: 13px; }
+.lab-shards i:nth-child(2) { top: 4px; right: 5px; --shard-x: -13px; --shard-y: 13px; animation-delay: 30ms; }
+.lab-shards i:nth-child(3) { bottom: 4px; left: 5px; --shard-x: 13px; --shard-y: -13px; animation-delay: 60ms; }
+.lab-shards i:nth-child(4) { right: 5px; bottom: 4px; --shard-x: -13px; --shard-y: -13px; animation-delay: 90ms; }
+
+/* Semantic: each icon keeps its own physical vocabulary. */
+.effect-semantic .lab-indicator {
+  border-color: rgba(53, 214, 186, 0.28);
+  background: linear-gradient(145deg, rgba(53, 214, 186, 0.2), rgba(53, 214, 186, 0.06));
+}
+
+.effect-semantic .lab-nav-button.is-active path {
+  stroke-dasharray: 90;
+  animation: lab-path-draw 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Mask: the disc closes, moves and opens again. */
+.effect-mask .lab-indicator {
+  z-index: 5;
+  border: 0;
+  background: var(--lab-accent);
+  mix-blend-mode: normal;
+  animation: lab-mask-open 560ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.effect-mask .lab-nav-button.is-active {
+  z-index: 6;
+}
+
+/* Magnetic: destination icon bends toward the incoming state. */
+.effect-magnetic .lab-indicator {
+  background: rgba(30, 112, 98, 0.28);
+}
+
+/* Echo: three quiet copies show velocity and direction. */
+.effect-echo .lab-indicator {
+  background: rgba(53, 214, 186, 0.16);
+}
+
+.lab-echo {
+  z-index: 1;
+  border: 1px solid rgba(94, 229, 207, 0.45);
+  background: rgba(53, 214, 186, 0.08);
+}
+
+/* Topology: orbiting nodes resolve into the final silhouette. */
+.effect-topology .lab-indicator {
+  background: transparent;
+  border-color: rgba(53, 214, 186, 0.22);
+}
+
+.lab-nodes {
+  position: absolute;
+  inset: 0;
+  animation: lab-node-spin 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.lab-nodes i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px;
+  border-radius: 50%;
+  background: var(--lab-accent);
+}
+
+.lab-nodes i:nth-child(1) { transform: rotate(0deg) translateY(-20px); }
+.lab-nodes i:nth-child(2) { transform: rotate(60deg) translateY(-20px); }
+.lab-nodes i:nth-child(3) { transform: rotate(120deg) translateY(-20px); }
+.lab-nodes i:nth-child(4) { transform: rotate(180deg) translateY(-20px); }
+.lab-nodes i:nth-child(5) { transform: rotate(240deg) translateY(-20px); }
+.lab-nodes i:nth-child(6) { transform: rotate(300deg) translateY(-20px); }
+
+@keyframes lab-path-draw {
+  0% { stroke-dashoffset: 80; opacity: 0; }
+  28% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+@keyframes lab-path-erase {
+  from { stroke-dashoffset: 0; opacity: 0.58; }
+  to { stroke-dashoffset: -80; opacity: 0; }
+}
+
+@keyframes lab-nucleus-breathe {
+  0% { transform: scale(2.1); opacity: 0; }
+  32% { transform: scale(0.7); opacity: 1; }
+  72% { transform: scale(1.35); opacity: 0.76; }
+  100% { transform: scale(1); opacity: 0.42; }
+}
+
+@keyframes lab-liquid-body {
+  0%, 8% { transform: scale(1); border-radius: 50%; }
+  32% { transform: scale(0.78, 1.38); border-radius: 45% 45% 30% 30%; }
+  67% { transform: scale(0.9, 1.18); border-radius: 34% 34% 48% 48%; }
+  84% { transform: scale(1.12, 0.86); border-radius: 50%; }
+  100% { transform: scale(1); border-radius: 50%; }
+}
+
+@keyframes lab-shard-converge {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  24% { opacity: 1; }
+  68% { transform: translate(var(--shard-x), var(--shard-y)) rotate(135deg); opacity: 0.9; }
+  100% { transform: translate(var(--shard-x), var(--shard-y)) rotate(180deg) scale(0); opacity: 0; }
+}
+
+@keyframes lab-mask-open {
+  0% { clip-path: circle(48% at 50% 50%); opacity: 1; }
+  48% { clip-path: circle(12% at 50% 50%); opacity: 0.96; }
+  76% { clip-path: circle(56% at 50% 50%); opacity: 0.72; }
+  100% { clip-path: circle(50% at 50% 50%); opacity: 0.18; }
+}
+
+@keyframes lab-node-spin {
+  0% { transform: rotate(-90deg) scale(1.3); opacity: 0; }
+  34% { opacity: 1; }
+  76% { transform: rotate(180deg) scale(0.72); opacity: 0.88; }
+  100% { transform: rotate(220deg) scale(0); opacity: 0; }
+}
+
+@media (max-width: 1100px) {
+  .lab-card,
+  .lab-card:nth-child(4n + 2),
+  .lab-card:nth-child(4n + 3) {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  .lab-preview {
+    grid-template-columns: 68px 1fr;
+    gap: 14px;
+    padding-inline: 18px;
+  }
+}
+
+@media (max-width: 860px) {
+  .motion-lab {
+    padding: 34px 16px 64px;
+  }
+
+  .lab-header {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 30px;
+  }
+
+  .lab-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-card,
+  .lab-card:nth-child(4n + 2),
+  .lab-card:nth-child(4n + 3) {
+    grid-template-columns: minmax(210px, 0.9fr) minmax(220px, 1.1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .lab-header h1 {
+    font-size: 39px;
+  }
+
+  .lab-card,
+  .lab-card:nth-child(4n + 2),
+  .lab-card:nth-child(4n + 3) {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-preview {
+    min-height: 288px;
+    border-right: 0;
+    border-bottom: 1px solid var(--lab-line);
+  }
+
+  .lab-card-copy {
+    padding: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-lab *,
+  .motion-lab *::before,
+  .motion-lab *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .lab-card,
+  .lab-preview,
+  .lab-rail {
+    background-color: #0d1b19;
+  }
+}

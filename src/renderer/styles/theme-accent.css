@@ -179,16 +179,6 @@
 :root[data-accent-theme] .cinematic-player .vp-big-buffer .ring { border-top-color: var(--accent-end); }
 :root[data-accent-theme] .cinematic-player .vp-center-hint { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 28%, transparent); background: color-mix(in srgb, var(--surface) 78%, transparent); }
 
-/* Image viewer controls inherit the active palette while the image remains untouched. */
-:root[data-accent-theme] .image-viewer .iv-top .btn-icon,
-:root[data-accent-theme] .image-viewer .iv-bottom .btn-icon { color: var(--fg0); }
-:root[data-accent-theme] .image-viewer .iv-top .btn-icon:hover,
-:root[data-accent-theme] .image-viewer .iv-bottom .btn-icon:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
-:root[data-accent-theme] .image-viewer .iv-bottom { border-color: color-mix(in srgb, var(--accent) 26%, var(--border)); background: color-mix(in srgb, var(--surface) 78%, transparent); }
-:root[data-accent-theme] .image-viewer .iv-count,
-:root[data-accent-theme] .image-viewer .iv-title { color: var(--fg0); }
-:root[data-accent-theme] .image-viewer .iv-nav:hover { background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--accent); }
-
 /* Playlist detail keeps its media artwork intact but uses the selected surface and accent. */
 :root[data-accent-theme] .playlist-hero { border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); background: color-mix(in srgb, var(--surface) 78%, transparent); }
 :root[data-accent-theme] .playlist-hero h1 { color: var(--fg0); }

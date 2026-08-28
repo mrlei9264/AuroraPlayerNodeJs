@@ -82,11 +82,6 @@ export interface AppInfo {
   refreshRate: number
 }
 
-export interface ImageSession {
-  items: MediaItem[]
-  index: number
-}
-
 interface RuntimeState {
   booted: boolean
   settings: AppSettingsData
@@ -105,7 +100,6 @@ interface RuntimeState {
   session: SessionState
   tracks: MediaTrackCatalog
   lyrics: LyricsData | null
-  imageSession: ImageSession | null
   spectrum: Float32Array
   win: WindowState
   hud: HudStats | null
@@ -252,7 +246,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   })
   const [tracks, setTracks] = useState<RuntimeState['tracks']>({ video: [], audio: [], subtitles: [], chapters: [], width: 0, height: 0, fps: 0 })
   const [lyrics, setLyrics] = useState<LyricsData | null>(null)
-  const [imageSession, setImageSession] = useState<ImageSession | null>(null)
   const [spectrum, setSpectrum] = useState<Float32Array>(new Float32Array(64))
   const [win, setWin] = useState<WindowState>({ maximized: false, fullscreen: false })
   const [hud, setHud] = useState<HudStats | null>(null)
@@ -407,22 +400,12 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         }
         return plan
       }
-      if (plan.kind === 'image') {
-        const items = request.mediaIds
-        const itemById = new Map(library.map((i) => [i.id, i]))
-        const resolved = items.map((id) => itemById.get(id)).filter((x): x is MediaItem => !!x)
-        const idx = Math.max(0, resolved.findIndex((i) => i.id === plan.item?.id))
-        setImageSession({ items: resolved, index: idx })
-        navigate({ section: 'player' })
-        if (settings?.startInFullscreen) await p(I.winSetFullscreen, true)
-        return plan
-      }
       engine.load(plan, session.volume, session.muted, 1)
       navigate({ section: 'player' })
       if (settings?.startInFullscreen) await p(I.winSetFullscreen, true)
       return plan
     },
-    [engine, library, navigate, settings, t, toast, session.volume, session.muted]
+    [engine, navigate, settings, t, toast, session.volume, session.muted]
   )
 
   const play = useCallback(
@@ -455,10 +438,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       }
       const plan = await p<PlayPlan | null>(I.queueNav, action, current, session.repeatMode)
       if (plan && plan.ok) {
-        if (plan.kind === 'image') {
-          await playRequest({ mediaIds: queue.map((q) => q.mediaId), index: Math.max(0, queue.findIndex((q) => q.mediaId === plan.item?.id)), action: 'play' })
-          return
-        }
         engine.load(plan, session.volume, session.muted, 1)
         setNav((prev) => ({ ...prev, section: 'player' }))
         if (settings?.startInFullscreen) await p(I.winSetFullscreen, true)
@@ -494,7 +473,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     // Returning from a player should also restore the normal window frame.
     // Fullscreen is a window state, so unmounting the player alone cannot clear it.
     void p(I.winSetFullscreen, false)
-    setImageSession(null)
     setLyrics(null)
     setNav((prev) => (prev.section === 'player' ? playerReturnNavRef.current : prev))
   }, [engine])
@@ -1133,7 +1111,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       session,
       tracks,
       lyrics,
-      imageSession,
       spectrum,
       win,
       hud,
@@ -1147,7 +1124,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       ...api
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, indexRunning, nav, session, tracks, lyrics, imageSession, spectrum, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
+    [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, indexRunning, nav, session, tracks, lyrics, spectrum, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
   )
 
   return <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>

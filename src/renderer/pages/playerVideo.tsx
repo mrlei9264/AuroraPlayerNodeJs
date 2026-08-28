@@ -89,9 +89,19 @@ export function VideoPlayerPage() {
     : chapters.slice(chapterRailStart, chapterRailStart + CHAPTER_RAIL_SIZE)
   const progress = duration > 0 ? Math.min(100, Math.max(0, (session.position / duration) * 100)) : 0
   const qualityFeatures = useMemo(
-    () => buildQualityFeatures(tracks, selectedVideo, selectedAudio, t),
-    [tracks, selectedVideo, selectedAudio, t]
+    () => buildQualityFeatures(tracks, selectedVideo, selectedAudio),
+    [tracks, selectedVideo, selectedAudio]
   )
+  const activateQualityFeature = useCallback((feature: QualityFeature) => {
+    if (!feature.target) return
+    if (feature.target.kind === 'video') {
+      setSelectedVideo(feature.target.index)
+      selectVideoTrack(feature.target.index)
+    } else {
+      setSelectedAudio(feature.target.index)
+      selectAudioTrack(feature.target.index)
+    }
+  }, [selectAudioTrack, selectVideoTrack])
   const uiLocked = tracksOpen || focusWithin || dragging
   const showChrome = controlsHover || uiLocked
   // Keep the entry point visible for every video. Some Chromium builds do not
@@ -316,16 +326,30 @@ export function VideoPlayerPage() {
         </div>
         {qualityFeatures.length > 0 && (
           <div className="cinematic-quality-row" aria-label={t('videoQuality')}>
-            {qualityFeatures.map((feature) => (
-              <span
-                className={`cinematic-quality-badge ${feature.active ? 'active' : 'inactive'}`}
-                key={feature.id}
-                aria-label={`${feature.label}: ${feature.active ? t('active') : t('inactive')}`}
-              >
-                {feature.icon && <Icon name={feature.icon} size={12} strokeWidth={1.7} />}
-                <span>{feature.label}</span>
-              </span>
-            ))}
+            {qualityFeatures.map((feature) => {
+              const content = <>{feature.icon && <Icon name={feature.icon} size={12} strokeWidth={1.7} />}<span>{feature.label}</span></>
+              const label = `${feature.label}: ${feature.active ? t('active') : t('inactive')}`
+              return feature.target ? (
+                <button
+                  className={`cinematic-quality-badge ${feature.active ? 'active' : 'inactive'} switchable`}
+                  key={feature.id}
+                  type="button"
+                  aria-label={label}
+                  title={feature.label}
+                  onClick={() => activateQualityFeature(feature)}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span
+                  className={`cinematic-quality-badge ${feature.active ? 'active' : 'inactive'}`}
+                  key={feature.id}
+                  aria-label={label}
+                >
+                  {content}
+                </span>
+              )
+            })}
           </div>
         )}
       </header>
@@ -558,22 +582,40 @@ function formatMetaDuration(seconds: number): string {
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`
 }
 
-type QualityFeature = { id: string; label: string; active: boolean; icon?: IconName }
+type QualityFeatureTarget = { kind: 'video' | 'audio'; index: number }
+type QualityFeature = { id: string; label: string; active: boolean; icon?: IconName; target?: QualityFeatureTarget }
 
 function buildQualityFeatures(
   tracks: ReturnType<typeof useRuntime>['tracks'],
   selectedVideo: number,
-  selectedAudio: number,
-  t: (key: string) => string
+  selectedAudio: number
 ): QualityFeature[] {
   const features: QualityFeature[] = []
   const currentVideo = tracks.video[selectedVideo]
   const currentAudio = tracks.audio[selectedAudio]
   const addVideo = (id: string, label: string, matches: (track: TrackInfo) => boolean, icon?: IconName) => {
-    if (tracks.video.some(matches)) features.push({ id, label, icon, active: Boolean(currentVideo && matches(currentVideo)) })
+    const matchingIndex = tracks.video.findIndex(matches)
+    if (matchingIndex < 0) return
+    const active = Boolean(currentVideo && matches(currentVideo))
+    features.push({
+      id,
+      label,
+      icon,
+      active,
+      target: active || matchingIndex === selectedVideo ? undefined : { kind: 'video', index: matchingIndex }
+    })
   }
   const addAudio = (id: string, label: string, matches: (track: TrackInfo) => boolean, icon?: IconName) => {
-    if (tracks.audio.some(matches)) features.push({ id, label, icon, active: Boolean(currentAudio && matches(currentAudio)) })
+    const matchingIndex = tracks.audio.findIndex(matches)
+    if (matchingIndex < 0) return
+    const active = Boolean(currentAudio && matches(currentAudio))
+    features.push({
+      id,
+      label,
+      icon,
+      active,
+      target: active || matchingIndex === selectedAudio ? undefined : { kind: 'audio', index: matchingIndex }
+    })
   }
 
   for (const hdrType of ['Dolby Vision', 'HDR10+', 'HDR10', 'HLG']) {
@@ -582,7 +624,18 @@ function buildQualityFeatures(
   for (const resolution of ['8K', '4K', 'QHD', 'Full HD']) {
     addVideo(`resolution-${resolution}`, resolution, (track) => videoResolutionLabel(track) === resolution)
   }
-  addVideo('high-frame-rate', t('highFrameRate'), (track) => (track.fps ?? 0) >= 59.5, 'speed')
+  const highFrameRateIndex = tracks.video.findIndex((track) => (track.fps ?? 0) >= 59.5)
+  if (highFrameRateIndex >= 0) {
+    const active = Boolean(currentVideo && (currentVideo.fps ?? 0) >= 59.5)
+    const displayTrack = active ? currentVideo : tracks.video[highFrameRateIndex]
+    features.push({
+      id: 'high-frame-rate',
+      label: formatFrameRate(displayTrack.fps ?? 0),
+      icon: 'speed',
+      active,
+      target: active || highFrameRateIndex === selectedVideo ? undefined : { kind: 'video', index: highFrameRateIndex }
+    })
+  }
 
   const bitDepths = [...new Set(tracks.video.map((track) => track.bitDepth ?? 0).filter((depth) => depth >= 10))].sort((a, b) => b - a)
   for (const depth of bitDepths) addVideo(`bit-depth-${depth}`, `${depth}-bit`, (track) => track.bitDepth === depth)
@@ -608,6 +661,11 @@ function videoResolutionLabel(track: TrackInfo): string {
   if (height >= 1400) return 'QHD'
   if (height >= 1000) return 'Full HD'
   return ''
+}
+
+function formatFrameRate(fps: number): string {
+  const normalized = Math.round(fps * 100) / 100
+  return `${Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}fps`
 }
 
 function audioTrackEvidence(track: TrackInfo): string {

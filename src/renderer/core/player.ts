@@ -26,7 +26,7 @@ export interface EngineEvents {
 }
 
 type MpvProperty = 'speed' | 'mute' | 'vid' | 'aid' | 'sid'
-type AuroraMpvElement = MpvVideoElement & { setProperty(name: MpvProperty, value: string): Promise<void> }
+type AuroraMpvElement = MpvVideoElement & { setProperty?: (name: MpvProperty, value: string) => Promise<void> }
 type MpvEvent = { playerId: string; type: string; name?: string; data?: unknown; error?: string }
 
 const EMPTY_TRACKS: MediaTrackCatalog = { video: [], audio: [], subtitles: [], chapters: [], width: 0, height: 0, fps: 0 }
@@ -375,19 +375,24 @@ export class PlayerEngine {
     if (!player) return
     await Promise.all([
       player.setVolume(this.volume),
-      player.setProperty('mute', this.muted ? 'yes' : 'no'),
-      player.setProperty('speed', String(this.speed))
+      this.setMpvProperty('mute', this.muted ? 'yes' : 'no'),
+      this.setMpvProperty('speed', String(this.speed))
     ])
   }
 
   private async applySelectedTracks(): Promise<void> {
-    const player = this.mpvElement
-    if (!player) return
     await Promise.all([
-      player.setProperty('vid', this.detectedTracks.video.length ? String(this.selectedVideoTrack + 1) : 'auto'),
-      player.setProperty('aid', this.detectedTracks.audio.length ? String(this.selectedAudioTrack + 1) : 'auto'),
-      player.setProperty('sid', this.selectedSubtitleTrack < 0 ? 'no' : String(this.selectedSubtitleTrack + 1))
+      this.setMpvProperty('vid', this.detectedTracks.video.length ? String(this.selectedVideoTrack + 1) : 'auto'),
+      this.setMpvProperty('aid', this.detectedTracks.audio.length ? String(this.selectedAudioTrack + 1) : 'auto'),
+      this.setMpvProperty('sid', this.selectedSubtitleTrack < 0 ? 'no' : String(this.selectedSubtitleTrack + 1))
     ])
+  }
+
+  private async setMpvProperty(name: MpvProperty, value: string): Promise<void> {
+    const player = this.mpvElement
+    const setter = player?.setProperty
+    if (!player || typeof setter !== 'function') return
+    await setter.call(player, name, value)
   }
 
   private async loadTrackCatalog(mediaId: number): Promise<void> {
@@ -551,7 +556,7 @@ export class PlayerEngine {
     if (this.volume > 0 && this.muted) this.muted = false
     if (this.session.kind === 'video') {
       void this.mpvElement?.setVolume(this.volume)
-      void this.mpvElement?.setProperty('mute', this.muted ? 'yes' : 'no')
+      void this.setMpvProperty('mute', this.muted ? 'yes' : 'no')
     } else if (this.video) {
       this.video.volume = this.volume / 100
       this.video.muted = this.muted
@@ -561,14 +566,14 @@ export class PlayerEngine {
 
   setMuted(muted: boolean): void {
     this.muted = muted
-    if (this.session.kind === 'video') void this.mpvElement?.setProperty('mute', muted ? 'yes' : 'no')
+    if (this.session.kind === 'video') void this.setMpvProperty('mute', muted ? 'yes' : 'no')
     else if (this.video) this.video.muted = muted
     this.emitSession()
   }
 
   setSpeed(speed: number): void {
     this.speed = Math.max(0.25, Math.min(4, speed))
-    if (this.session.kind === 'video') void this.mpvElement?.setProperty('speed', String(this.speed))
+    if (this.session.kind === 'video') void this.setMpvProperty('speed', String(this.speed))
     else if (this.video) this.video.playbackRate = this.speed
     this.emitSession()
   }
@@ -584,17 +589,17 @@ export class PlayerEngine {
 
   selectVideoTrack(index: number): void {
     this.selectedVideoTrack = clampTrackIndex(index, this.detectedTracks.video.length)
-    void this.mpvElement?.setProperty('vid', String(this.selectedVideoTrack + 1))
+    void this.setMpvProperty('vid', String(this.selectedVideoTrack + 1))
   }
 
   selectAudioTrack(index: number): void {
     this.selectedAudioTrack = clampTrackIndex(index, this.detectedTracks.audio.length)
-    void this.mpvElement?.setProperty('aid', String(this.selectedAudioTrack + 1))
+    void this.setMpvProperty('aid', String(this.selectedAudioTrack + 1))
   }
 
   selectSubtitleTrack(index: number): void {
     this.selectedSubtitleTrack = index < 0 ? -1 : clampTrackIndex(index, this.detectedTracks.subtitles.length)
-    void this.mpvElement?.setProperty('sid', this.selectedSubtitleTrack < 0 ? 'no' : String(this.selectedSubtitleTrack + 1))
+    void this.setMpvProperty('sid', this.selectedSubtitleTrack < 0 ? 'no' : String(this.selectedSubtitleTrack + 1))
   }
 
   position(): number {

@@ -10,7 +10,6 @@ import { RemoteSourceManager } from './remote/manager'
 import { MediaProbeService } from './media/probe'
 import { SettingsStore } from './system/settings'
 import { Logger } from './system/diagnostics'
-import { classifyFile } from '../shared/types'
 import { listAppIcons } from './util'
 
 export interface PlaybackBus {
@@ -174,13 +173,6 @@ export function makePlannerDeps(deps: {
     rememberPlaybackPosition: () => deps.settings.get('rememberPlaybackPosition'),
     urlFor: deps.urlFor
   }
-}
-
-export function kindOfItem(item: MediaItem): 'video' | 'audio' | 'image' {
-  const kind = classifyFile(item.fileName)
-  if (kind === 'image') return 'image'
-  if (item.isAudio || kind === 'audio') return 'audio'
-  return 'video'
 }
 
 export function validateUrlInput(url: string): boolean {
