@@ -36,6 +36,9 @@ let mainWindow: BrowserWindow | null = null
 let mpvMain: MpvMain | null = null
 let mediaServer: LocalMediaServer
 let isQuitting = false
+let quitCleanupComplete = false
+let quitCleanupPromise: Promise<void> | null = null
+let windowCleanupPromise: Promise<void> | null = null
 let bridge: ApplicationBridge
 let settingsStore: SettingsStore
 let logger: Logger
@@ -104,6 +107,29 @@ function createWindow(): void {
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send(E.winState, { maximized: false, fullscreen: false }))
   mainWindow.on('enter-full-screen', () => mainWindow?.webContents.send(E.winState, { maximized: mainWindow?.isMaximized() ?? false, fullscreen: true }))
   mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send(E.winState, { maximized: mainWindow?.isMaximized() ?? false, fullscreen: false }))
+
+  // Keep the renderer frame alive until mpv has drained any shared-texture
+  // transfers. Electron drops a destroyed frame's texture references eagerly;
+  // a later GPU release callback would otherwise try to release a missing id.
+  const windowToClose = mainWindow
+  let closeCleanupComplete = false
+  windowCleanupPromise = null
+  mainWindow.on('close', (event) => {
+    if (quitCleanupComplete || closeCleanupComplete) return
+    event.preventDefault()
+    if (isQuitting || windowCleanupPromise) return
+
+    windowCleanupPromise = (async () => {
+      try {
+        await mpvMain?.detachWindow(windowToClose)
+      } catch (error) {
+        logger.error('playback', `libmpv window shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        closeCleanupComplete = true
+        windowToClose.close()
+      }
+    })()
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -319,10 +345,25 @@ async function bootstrap(): Promise<void> {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     isQuitting = true
+    if (quitCleanupComplete) return
+
+    event.preventDefault()
+    if (quitCleanupPromise) return
+
     mediaServer.dispose()
-    void mpvMain?.dispose()
+    quitCleanupPromise = (async () => {
+      try {
+        await windowCleanupPromise
+        await mpvMain?.dispose()
+      } catch (error) {
+        logger.error('playback', `libmpv shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        quitCleanupComplete = true
+        app.quit()
+      }
+    })()
   })
 
   app.on('will-quit', () => {

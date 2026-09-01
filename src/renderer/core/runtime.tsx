@@ -428,6 +428,40 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     async (action: 'previous' | 'next' | 'naturalEnd') => {
       const current = session.mediaId
       if (current == null) return
+      if (session.kind === 'audio') {
+        const ids = library
+          .filter((item) => item.isAudio && !item.isImage && item.sourceAvailable)
+          .map((item) => item.id)
+        const currentIndex = ids.indexOf(current)
+        if (currentIndex < 0 || ids.length === 0) return
+
+        let targetIndex: number | null = null
+        if (action === 'naturalEnd' && session.repeatMode === 'one') {
+          targetIndex = currentIndex
+        } else if (session.shuffle) {
+          const candidates = ids.map((_, index) => index).filter((index) => index !== currentIndex)
+          targetIndex = candidates.length
+            ? candidates[Math.floor(Math.random() * candidates.length)]
+            : currentIndex
+        } else if (action === 'previous') {
+          targetIndex = (currentIndex - 1 + ids.length) % ids.length
+        } else if (action === 'next') {
+          targetIndex = (currentIndex + 1) % ids.length
+        } else {
+          const nextIndex = currentIndex + 1
+          targetIndex = nextIndex < ids.length ? nextIndex : 0
+        }
+
+        if (targetIndex == null) return
+        await playRequest({
+          mediaIds: ids,
+          index: targetIndex,
+          action: targetIndex === currentIndex
+            ? 'restart'
+            : action === 'previous' ? 'playPrevious' : 'playNext'
+        })
+        return
+      }
       if (action === 'next' && session.shuffle) {
         const ids = queue.map((q) => q.mediaId)
         const candidates = ids.filter((id) => id !== current)
@@ -443,7 +477,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         if (settings?.startInFullscreen) await p(I.winSetFullscreen, true)
       }
     },
-    [engine, session, queue, settings?.startInFullscreen, playRequest]
+    [engine, session, library, queue, settings?.startInFullscreen, playRequest]
   )
 
   const playNext = useCallback(() => navQueue('next'), [navQueue])

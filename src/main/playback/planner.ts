@@ -40,7 +40,7 @@ export class PlaybackLaunchPlanner {
     }
 
     const url = this.deps.urlFor(item)
-    if (request.action === 'restart') {
+    if (request.action === 'restart' || request.action === 'playNext' || request.action === 'playPrevious') {
       return { ok: true, result: 'ready', item, url, kind, resumePosition: 0 }
     }
     const resumePosition = this.decideResume(item, kind)

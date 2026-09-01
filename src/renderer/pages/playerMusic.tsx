@@ -1,7 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRuntime } from '../core/runtime'
 import { Icon } from '../core/icons'
-import { coverUrl } from '../core/player'
 import { I } from '../../shared/channels'
 import { formatTime, isAudioExt, type MediaAudioFeatures } from '../../shared/types'
 import { shapeAudioVisualizerSpectrum } from './audioVisualizerSpectrum'
@@ -19,9 +18,9 @@ const visualizerUrl = new URL('./sonic-topography/index.html', window.location.h
 
 export function MusicPlayerPage() {
   const {
-    t, session, library, spectrum, theme, settings, engine, appIconUrl,
+    t, session, library, lyrics, spectrum, theme, settings, engine, appIconUrl,
     togglePlayPause, playPrevious, playNext, setVolume, toggleMute,
-    leavePlayer, windowMinimize, windowMaximizeToggle, windowClose, win
+    setRepeat, setShuffle, loadLyrics, leavePlayer, windowMinimize, windowMaximizeToggle, windowClose, win
   } = useRuntime()
   const visualizerRef = useRef<HTMLIFrameElement>(null)
   const previousVisualizerSpectrumRef = useRef<number[]>([])
@@ -31,15 +30,23 @@ export function MusicPlayerPage() {
   const item = library.find((candidate) => candidate.id === session.mediaId)
   const fallbackTitle = displayFileName(item?.fileName)
   const title = displayMediaText(item?.title) || fallbackTitle || t('unknown')
+  const fileTitle = fallbackTitle || title
   const artist = item?.artist || t('unknown')
-  const album = displayMediaText(item?.album) || fallbackTitle || t('unknown')
   const duration = session.duration || item?.duration || 0
   const progress = duration > 0 ? Math.min(100, Math.max(0, (session.position / duration) * 100)) : 0
   const volume = session.muted ? 0 : session.volume
   const playing = session.loaded && !session.paused
+  const playbackMode = session.repeatMode === 'one' ? 'one' : session.shuffle ? 'shuffle' : 'sequential'
+  const playbackModeLabel = t(playbackMode === 'one' ? 'singleRepeat' : playbackMode === 'shuffle' ? 'shufflePlayback' : 'sequentialPlayback')
   const networkMedia = Boolean(item && (item.sourceId !== null || item.protocol !== 'local'))
   const buffering = session.phase !== 'error' && (session.buffering || session.phase === 'loading' || session.phase === 'buffering')
   const blackGold = theme.isDark && theme.variant === 'classic' && settings.accentIndex % 6 === 2
+  const titleFontFamily = useMemo(() => audioTitleFontFamily(settings.fontFamily), [settings.fontFamily])
+
+  useEffect(() => {
+    if (!item) return
+    void loadLyrics(item.id, item.url, networkMedia, item.sourceId, item.remotePath)
+  }, [item?.id, item?.remotePath, item?.sourceId, item?.url, loadLyrics, networkMedia])
 
   useEffect(() => {
     let current = true
@@ -93,6 +100,25 @@ export function MusicPlayerPage() {
     () => technicalLabels(item?.fileName ?? '', item?.fileSize ?? 0, duration, audioFeatures),
     [audioFeatures, duration, item?.fileName, item?.fileSize]
   )
+  const visibleLyrics = useMemo(() => {
+    const lines = lyrics?.lines.filter((line) => line.text.trim()) ?? []
+    if (!lines.length) return { activeIndex: -1, lines: [] }
+    const lyricPosition = session.position - (lyrics?.offsetMs ?? 0) / 1000
+    let activeIndex = -1
+    for (let index = 0; index < lines.length; index += 1) {
+      if (lines[index].time >= 0 && lines[index].time <= lyricPosition) activeIndex = index
+      if (lines[index].time > lyricPosition) break
+    }
+    if (activeIndex < 0) {
+      const untimedIndex = lines.findIndex((line) => line.time < 0)
+      activeIndex = untimedIndex >= 0 ? untimedIndex : 0
+    }
+    const start = Math.max(0, Math.min(activeIndex - 2, Math.max(0, lines.length - 5)))
+    return {
+      activeIndex,
+      lines: lines.slice(start, start + 5).map((line, index) => ({ line, index: start + index }))
+    }
+  }, [lyrics, session.position])
   const titleColors = useMemo(() => blackGold
     ? { outline: '#ffbd28', head: '#ffe0a3', base: '#ffe3a3' }
     : { outline: theme.colors.accent, head: theme.colors.accentEnd, base: theme.colors.fg0 },
@@ -108,6 +134,18 @@ export function MusicPlayerPage() {
     '--audio-surface': blackGold ? '#120c04' : theme.colors.surface,
     '--audio-border': blackGold ? 'rgba(255,184,0,.28)' : theme.colors.borderStrong
   } as React.CSSProperties
+  const cyclePlaybackMode = () => {
+    if (playbackMode === 'sequential') {
+      setRepeat('all')
+      setShuffle(true)
+    } else if (playbackMode === 'shuffle') {
+      setShuffle(false)
+      setRepeat('one')
+    } else {
+      setShuffle(false)
+      setRepeat('all')
+    }
+  }
 
   return (
     <div className={`music-player immersive-audio-player ${theme.isDark ? 'audio-dark' : 'audio-light'} ${blackGold ? 'audio-black-gold' : ''}`} style={rootStyle}>
@@ -132,23 +170,16 @@ export function MusicPlayerPage() {
       )}
 
       <main className="audio-content">
-        <section className="audio-track-info" aria-label={title}>
-          <div className="audio-cover">
-            {item?.coverPath
-              ? <img src={coverUrl(item.coverPath)} alt={`${title} cover`} />
-              : <div className="audio-cover-fallback"><Icon name="music" size={48} /></div>}
-            <div className="audio-cover-sheen" aria-hidden="true" />
-          </div>
-
+        <section className="audio-track-info" aria-label={fileTitle}>
           <ProgressiveTitleOutline
-            title={title}
+            title={fileTitle}
             progress={progress}
             colors={titleColors}
+            fontFamily={titleFontFamily}
             reducedMotion={settings.reducedMotion}
             snapToProgress={session.paused || session.seeking}
           />
           <div className="audio-artist">{artist}</div>
-          <div className="audio-album">{album}</div>
           <div className="audio-technical" aria-label="Audio technical information">
             {technical.map((label, index) => (
               <React.Fragment key={label}>
@@ -157,6 +188,19 @@ export function MusicPlayerPage() {
               </React.Fragment>
             ))}
           </div>
+        </section>
+
+        <section className="audio-lyrics-panel" aria-label={t('lyrics')}>
+          {visibleLyrics.lines.length > 0 ? visibleLyrics.lines.map(({ line, index }) => (
+            <div
+              className={`audio-lyric-line ${index === visibleLyrics.activeIndex ? 'active' : index < visibleLyrics.activeIndex ? 'played' : 'upcoming'}`}
+              key={`${line.time}-${index}`}
+            >
+              {line.text}
+            </div>
+          )) : (
+            <div className="audio-lyrics-empty">{t('lyricsNotFound')}</div>
+          )}
         </section>
       </main>
 
@@ -179,55 +223,73 @@ export function MusicPlayerPage() {
           <button type="button" className="audio-control-icon audio-skip-control" onClick={() => void playNext()} aria-label={t('next')} title={t('next')}>
             <Icon name="next" size={23} strokeWidth={1.55} />
           </button>
+          <button
+            type="button"
+            className={`audio-control-icon audio-playback-mode ${playbackMode !== 'sequential' ? 'active' : ''}`}
+            data-mode={playbackMode}
+            onClick={cyclePlaybackMode}
+            aria-label={playbackModeLabel}
+            title={playbackModeLabel}
+          >
+            <Icon name={playbackMode === 'one' ? 'repeatOne' : playbackMode === 'shuffle' ? 'shuffle' : 'list'} size={21} strokeWidth={1.55} />
+          </button>
         </div>
 
         <div className="audio-volume-control">
-          <span className="audio-volume-icon" aria-hidden="true">
-            <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={22} strokeWidth={1.65} />
-          </span>
+          <span className="audio-volume-value">{Math.round(volume)}%</span>
           <input type="range" min={0} max={100} value={volume} aria-label="Volume" onChange={(event) => {
             if (session.muted) toggleMute()
             setVolume(Number(event.target.value))
           }} />
-          <span>{Math.round(volume)}%</span>
+          <button
+            type="button"
+            className="audio-volume-icon"
+            onClick={toggleMute}
+            aria-label={session.muted ? t('unmute') : t('mute')}
+            title={session.muted ? t('unmute') : t('mute')}
+          >
+            <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={22} strokeWidth={1.65} />
+          </button>
         </div>
       </section>
     </div>
   )
 }
 
-function ProgressiveTitleOutline({ title, progress, colors, reducedMotion, snapToProgress }: {
+function ProgressiveTitleOutline({ title, progress, colors, fontFamily, reducedMotion, snapToProgress }: {
   title: string
   progress: number
   colors: TitleCanvasColors
+  fontFamily: string
   reducedMotion: boolean
   snapToProgress: boolean
 }) {
   const normalizedProgress = Math.min(1, Math.max(0, progress / 100))
+  const outlineFont = useMemo(() => titleOutlineFont(fontFamily), [fontFamily])
   const glyphs = useMemo(() => {
     const canvas = document.createElement('canvas')
     const context = canvas.getContext('2d')
-    if (context) context.font = TITLE_OUTLINE_FONT
+    if (context) context.font = outlineFont
     let progressIndex = 0
     return Array.from(title).map((char) => {
       const measured = context?.measureText(char).width ?? 42
       return { char, width: Math.max(12, measured), progressIndex: char.trim() ? progressIndex++ : null }
     })
-  }, [title])
+  }, [outlineFont, title])
   const [outlines, setOutlines] = useState<Record<number, GlyphContour[]> | null>(null)
 
   useEffect(() => {
     let active = true
     setOutlines(null)
-    void document.fonts.load(TITLE_OUTLINE_FONT, title).catch(() => []).then(() => {
+    void document.fonts.load(outlineFont, title).catch(() => []).then(() => {
       if (!active) return
       const entries = glyphs.flatMap((glyph, index) => glyph.progressIndex === null
         ? []
-        : [[index, traceGlyphContours(glyph.char, 0, glyph.width)] as const])
+        : [[index, traceGlyphContours(glyph.char, 0, glyph.width, fontFamily)] as const])
       setOutlines(Object.fromEntries(entries) as Record<number, GlyphContour[]>)
     })
     return () => { active = false }
-  }, [glyphs, title])
+  }, [fontFamily, glyphs, outlineFont, title])
 
   return (
     <div
@@ -244,6 +306,7 @@ function ProgressiveTitleOutline({ title, progress, colors, reducedMotion, snapT
           outlines={outlines}
           progress={normalizedProgress}
           colors={colors}
+          outlineFont={outlineFont}
           reducedMotion={reducedMotion}
           snapToProgress={snapToProgress}
         />
@@ -303,12 +366,13 @@ interface TitleGlyphMotionSnapshot {
   animating: boolean
 }
 
-function AnimatedTitleCanvas({ title, glyphs, outlines, progress, colors, reducedMotion, snapToProgress }: {
+function AnimatedTitleCanvas({ title, glyphs, outlines, progress, colors, outlineFont, reducedMotion, snapToProgress }: {
   title: string
   glyphs: TitleGlyph[]
   outlines: Record<number, GlyphContour[]>
   progress: number
   colors: TitleCanvasColors
+  outlineFont: string
   reducedMotion: boolean
   snapToProgress: boolean
 }) {
@@ -346,7 +410,7 @@ function AnimatedTitleCanvas({ title, glyphs, outlines, progress, colors, reduce
         now,
         snapLayout || shouldReduceMotion
       )
-      drawTitleCanvas(canvas, title, glyphs, preparedContours, bounded, totalOutlineLength, colors, metrics, motion)
+      drawTitleCanvas(canvas, title, glyphs, preparedContours, bounded, totalOutlineLength, colors, outlineFont, metrics, motion)
       return motion.animating
     }
 
@@ -381,7 +445,7 @@ function AnimatedTitleCanvas({ title, glyphs, outlines, progress, colors, reduce
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
     }
-  }, [colors, glyphSpans, glyphs, preparedContours, progress, reducedMotion, snapToProgress, title])
+  }, [colors, glyphSpans, glyphs, outlineFont, preparedContours, progress, reducedMotion, snapToProgress, title])
 
   return <canvas ref={canvasRef} className="audio-title-canvas" aria-hidden="true" />
 }
@@ -436,10 +500,13 @@ function resolveTitleGlyphMotion(
   const activeGlyphIndex = resolvedActiveGlyphIndex >= 0 ? resolvedActiveGlyphIndex : Math.max(0, fallbackIndex)
   const targetScales = audioTitleScaleTargets(glyphs.length, activeGlyphIndex)
   const targetLayout = layoutAudioTitleGlyphs(glyphs.map((glyph) => glyph.width), targetScales, virtualWidth, activeGlyphIndex)
+  const targetOffset = targetLayout.contentWidth <= virtualWidth
+    ? 0
+    : targetLayout.targetOffset
   let state = motionRef.current
 
   if (!state || state.scales.length !== glyphs.length) {
-    state = { activeGlyphIndex, scales: targetScales, offset: targetLayout.targetOffset, transition: null }
+    state = { activeGlyphIndex, scales: targetScales, offset: targetOffset, transition: null }
     motionRef.current = state
     return { activeGlyphIndex, scales: [...state.scales], offset: state.offset, animating: false }
   }
@@ -448,7 +515,7 @@ function resolveTitleGlyphMotion(
   if (snap) {
     state.activeGlyphIndex = activeGlyphIndex
     state.scales = targetScales
-    state.offset = targetLayout.targetOffset
+    state.offset = targetOffset
     state.transition = null
   } else if (state.activeGlyphIndex !== activeGlyphIndex) {
     state.activeGlyphIndex = activeGlyphIndex
@@ -457,7 +524,7 @@ function resolveTitleGlyphMotion(
       fromScales: [...state.scales],
       toScales: targetScales,
       fromOffset: state.offset,
-      toOffset: targetLayout.targetOffset
+      toOffset: targetOffset
     }
   }
 
@@ -495,6 +562,7 @@ function drawTitleCanvas(
   progress: number,
   totalOutlineLength: number,
   colors: TitleCanvasColors,
+  outlineFont: string,
   metrics: TitleCanvasMetrics,
   motion: TitleGlyphMotionSnapshot
 ) {
@@ -531,7 +599,7 @@ function drawTitleCanvas(
   // A nearly invisible fill preserves the original title mass while the full
   // low-energy contour shows the remaining route, as in the visual reference.
   context.save()
-  context.font = TITLE_OUTLINE_FONT
+  context.font = outlineFont
   context.textBaseline = 'alphabetic'
   context.fillStyle = baseColor
   context.globalAlpha = .045
@@ -684,7 +752,10 @@ const TITLE_CANVAS_PADDING_Y = 5
 const TITLE_PROGRESS_TRANSITION_MS = 235
 const TITLE_GLYPH_TRANSITION_MS = 220
 const TITLE_SEEK_SNAP_THRESHOLD = .015
-const TITLE_OUTLINE_FONT = `540 ${TITLE_FONT_SIZE}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+
+function titleOutlineFont(fontFamily: string): string {
+  return `540 ${TITLE_FONT_SIZE}px ${fontFamily}`
+}
 
 interface OutlinePoint {
   x: number
@@ -705,7 +776,7 @@ interface PixelEdge {
   toY: number
 }
 
-function traceGlyphContours(char: string, originX: number, glyphWidth: number): GlyphContour[] {
+function traceGlyphContours(char: string, originX: number, glyphWidth: number, fontFamily: string): GlyphContour[] {
   const scale = 4
   const padding = 7
   const width = Math.max(1, Math.ceil((glyphWidth + padding * 2 + 6) * scale))
@@ -718,7 +789,7 @@ function traceGlyphContours(char: string, originX: number, glyphWidth: number): 
 
   context.clearRect(0, 0, width, height)
   context.fillStyle = '#fff'
-  context.font = `540 ${TITLE_FONT_SIZE * scale}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
+  context.font = `540 ${TITLE_FONT_SIZE * scale}px ${fontFamily}`
   context.textBaseline = 'alphabetic'
   context.fillText(char, padding * scale, TITLE_BASELINE * scale)
 
@@ -884,6 +955,14 @@ function displayMediaText(value: string | null | undefined): string {
 function displayFileName(fileName: string | null | undefined): string {
   const name = fileName?.split(/[\\/]/).pop() ?? ''
   return displayMediaText(name)
+}
+
+function audioTitleFontFamily(selectedFont: string): string {
+  const normalized = selectedFont.trim().replace(/^['"]|['"]$/g, '')
+  const escaped = normalized.replace(/["\\]/g, '\\$&')
+  return escaped
+    ? `"${escaped}", 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
+    : `'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
 }
 
 function formatKHz(sampleRate: number): string {

@@ -104,7 +104,7 @@ export function Icon({ name, size = 18, className, style, strokeWidth = 1.8 }: {
           stroke="none"
           textAnchor="middle"
           dominantBaseline="central"
-          fontFamily="Inter, Segoe UI, sans-serif"
+          fontFamily="Space Grotesk Variable, Noto Sans SC Variable, Segoe UI, sans-serif"
           fontSize="7.2"
           fontWeight="650"
         >

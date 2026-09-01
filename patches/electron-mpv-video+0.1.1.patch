@@ -40,7 +40,36 @@ index 7b27f7f..f1d3b11 100644
      setRenderSize(size) {
          this.assertAlive();
          this.renderSize = size;
-@@ -463,6 +480,10 @@ class MpvMainService {
+@@ -259,6 +276,13 @@ class PlayerSession {
+                 return;
+             this.sharedTextureFrameInFlight = true;
+             let imported;
++            let importedReleased = false;
++            const releaseImported = () => {
++                if (!imported || importedReleased)
++                    return;
++                importedReleased = true;
++                imported.release();
++            };
+             try {
+                 const textureInfo = this.player.renderSharedTexture(this.renderSize.width, this.renderSize.height);
+                 const referencesReleased = new Promise((resolve) => {
+@@ -274,12 +298,12 @@ class PlayerSession {
+                     frame: this.window.webContents.mainFrame,
+                     importedSharedTexture: imported,
+                 }, this.id);
+-                imported.release();
++                releaseImported();
+                 await referencesReleased;
+             }
+             catch (error) {
+                 this.sharedTextureFrameInFlight = false;
+-                imported?.release();
++                releaseImported();
+                 throw error;
+             }
+         }
+@@ -463,6 +487,10 @@ class MpvMainService {
          electron.ipcMain.handle(channel('player:stop'), async (event, id) => this.getOwnedSession(event, id).stop());
          electron.ipcMain.handle(channel('player:seek'), async (event, id, seconds) => this.getOwnedSession(event, id).seek(finiteNumber(seconds, 'seconds')));
          electron.ipcMain.handle(channel('player:set-volume'), async (event, id, value) => this.getOwnedSession(event, id).setVolume(finiteNumber(value, 'volume')));

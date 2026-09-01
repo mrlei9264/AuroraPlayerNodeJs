@@ -10,8 +10,8 @@ export function applyTypographySettings(settings: TypographySettings): void {
   root.style.setProperty(
     '--font-family',
     escapedFont
-      ? `"${escapedFont}", 'Microsoft YaHei UI', system-ui, sans-serif`
-      : "'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif"
+      ? `"${escapedFont}", 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
+      : "'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif"
   )
   const fontSize = settings.fontSize || 14
   const visualFontSize = Math.max(10, fontSize - 2)
