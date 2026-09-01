@@ -5,6 +5,7 @@ import { I } from '../../shared/channels'
 import type { LyricsData, LyricsLine } from '../../shared/types'
 import { probeEmbeddedLyrics } from './tags'
 import { requestBuffer } from '../system/networkProxy'
+import { decodeTextBuffer } from '../util'
 
 const TS_RE = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g
 
@@ -86,7 +87,7 @@ export class LyricsService {
     for (const c of candidates) {
       if (fs.existsSync(c)) {
         try {
-          const text = fs.readFileSync(c, 'utf8')
+          const text = decodeTextBuffer(fs.readFileSync(c))
           return { ...parseLrc(text), source: 'external' }
         } catch {
           void 0
@@ -105,7 +106,7 @@ export class LyricsService {
     try {
       const buf = await this.readRemote(sourceId, remotePath)
       if (buf && buf.length > 0) {
-        const text = buf.toString('utf8')
+        const text = decodeTextBuffer(buf)
         if (text.includes('[')) {
           return { ...parseLrc(text), source: 'external' }
         }
@@ -120,7 +121,7 @@ export class LyricsService {
     try {
       const res = await requestBuffer(url, { timeoutMs: 5000, maxBytes: 2 * 1024 * 1024 })
       if (res.ok) {
-        const text = res.data.toString('utf8')
+        const text = decodeTextBuffer(res.data)
         if (text.includes('[')) {
           return { ...parseLrc(text), source: 'external' }
         }

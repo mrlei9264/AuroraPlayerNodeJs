@@ -63,7 +63,8 @@ export class LibraryController {
     }
     const protocol = parsed.protocol.replace(':', '')
     if (!['http', 'https'].includes(protocol)) return null
-    const fileName = path.basename(parsed.pathname) || 'network-media'
+    let fileName = path.basename(parsed.pathname) || 'network-media'
+    try { fileName = decodeURIComponent(fileName) } catch { void 0 }
     const kind = classifyFile(fileName)
     if (!kind) return null
     const item = this.repo.upsertByUrl({

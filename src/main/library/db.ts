@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import fs from 'fs'
 import path from 'path'
 import { cleanMediaText } from '../../shared/types'
+import { repairLegacyTextEncoding } from '../util'
 
 export function openDatabase(dbPath: string): DatabaseSync {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -107,20 +108,26 @@ export type Db = DatabaseSync
 
 export function rowToMedia(row: Record<string, unknown> | undefined): import('../../shared/types').MediaItem | null {
   if (!row) return null
+  const protocol = String(row.protocol ?? 'local')
+  let fileName = String(row.file_name ?? '')
+  if ((protocol === 'http' || protocol === 'https') && /%[\da-f]{2}/i.test(fileName)) {
+    try { fileName = decodeURIComponent(fileName) } catch { void 0 }
+  }
+  fileName = repairLegacyTextEncoding(fileName)
   return {
     id: row.id as number,
     url: String(row.url),
-    fileName: String(row.file_name ?? ''),
+    fileName,
     isAudio: !!row.is_audio,
     isImage: !!row.is_image,
     sourceId: row.source_id as number | null,
     remotePath: row.remote_path ? String(row.remote_path) : null,
-    protocol: String(row.protocol ?? 'local'),
+    protocol,
     sourceName: String(row.source_name ?? ''),
     sourceAvailable: !!row.source_available,
-    title: cleanMediaText(row.title),
-    artist: cleanMediaText(row.artist),
-    album: cleanMediaText(row.album),
+    title: cleanMediaText(repairLegacyTextEncoding(String(row.title ?? ''))),
+    artist: cleanMediaText(repairLegacyTextEncoding(String(row.artist ?? ''))),
+    album: cleanMediaText(repairLegacyTextEncoding(String(row.album ?? ''))),
     favorite: !!row.favorite,
     addedAt: (row.added_at as number) ?? 0,
     fileSize: Number(row.file_size ?? 0),

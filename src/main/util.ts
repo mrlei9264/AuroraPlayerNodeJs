@@ -125,15 +125,81 @@ export function mimeOf(fileName: string): string {
   return MIME[extOf(fileName)] || 'application/octet-stream'
 }
 
-export function decodeUtf8(buf: Buffer, enc?: number): string {
+function decodeStrict(buf: Buffer, encoding: string): string | null {
   try {
-    if (enc === 1 || (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe)) {
-      return buf.toString('utf16le').replace(/^\uFEFF/, '')
-    }
-    return buf.toString('utf8').replace(/^\uFEFF/, '').replace(/\u0000/g, '').trim()
+    return new TextDecoder(encoding, { fatal: true }).decode(buf)
   } catch {
-    return ''
+    return null
   }
+}
+
+function decodeUtf16beText(buf: Buffer): string {
+  const evenLength = buf.length - (buf.length % 2)
+  const swapped = Buffer.allocUnsafe(evenLength)
+  for (let index = 0; index < evenLength; index += 2) {
+    swapped[index] = buf[index + 1]
+    swapped[index + 1] = buf[index]
+  }
+  return swapped.toString('utf16le')
+}
+
+function finishDecodedText(value: string): string {
+  return value.replace(/^\uFEFF/, '').replace(/\u0000/g, '').trim()
+}
+
+function looksLikeUtf16(buf: Buffer, zeroOffset: 0 | 1): boolean {
+  if (buf.length < 4) return false
+  let pairs = 0
+  let zeroes = 0
+  for (let index = 0; index + 1 < Math.min(buf.length, 256); index += 2) {
+    pairs++
+    if (buf[index + zeroOffset] === 0) zeroes++
+  }
+  return pairs > 0 && zeroes / pairs >= 0.6
+}
+
+function cjkCount(value: string): number {
+  return (value.match(/[\u2e80-\u9fff\uf900-\ufaff]/g) ?? []).length
+}
+
+/** Decode user-authored text files and legacy media tags without assuming UTF-8. */
+export function decodeTextBuffer(buf: Buffer): string {
+  if (!buf.length) return ''
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    return finishDecodedText(buf.subarray(2).toString('utf16le'))
+  }
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    return finishDecodedText(decodeUtf16beText(buf.subarray(2)))
+  }
+  if (looksLikeUtf16(buf, 1)) return finishDecodedText(buf.toString('utf16le'))
+  if (looksLikeUtf16(buf, 0)) return finishDecodedText(decodeUtf16beText(buf))
+
+  const utf8 = decodeStrict(buf, 'utf-8')
+  if (utf8 !== null) return finishDecodedText(utf8)
+
+  const gb18030 = decodeStrict(buf, 'gb18030')
+  const highByteCount = buf.reduce((count, byte) => count + (byte >= 0x80 ? 1 : 0), 0)
+  if (gb18030 !== null && highByteCount >= 2 && cjkCount(gb18030) > 0) {
+    return finishDecodedText(gb18030)
+  }
+
+  return finishDecodedText(new TextDecoder('windows-1252').decode(buf))
+}
+
+/** Repair UTF-8 or GB18030 bytes that were previously persisted as Latin-1 text. */
+export function repairLegacyTextEncoding(value: string): string {
+  if (!value || cjkCount(value) > 0 || Array.from(value).some((char) => char.codePointAt(0)! > 0xff)) return value
+  const bytes = Buffer.from(value, 'latin1')
+  for (const encoding of ['utf-8', 'gb18030']) {
+    const decoded = decodeStrict(bytes, encoding)
+    if (decoded !== null && cjkCount(decoded) > 0) return finishDecodedText(decoded)
+  }
+  return value
+}
+
+export function decodeUtf8(buf: Buffer, enc?: number): string {
+  if (enc === 1) return finishDecodedText(buf.toString('utf16le'))
+  return decodeTextBuffer(buf)
 }
 
 const CRC_TABLE = (() => {

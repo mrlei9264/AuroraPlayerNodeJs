@@ -6,6 +6,7 @@ import { formatTime, isAudioExt, type MediaAudioFeatures } from '../../shared/ty
 import { shapeAudioVisualizerSpectrum } from './audioVisualizerSpectrum'
 import { audioVisualizerThemeForColorTheme } from './audioVisualizerThemes'
 import { NetworkMediaLoader } from './networkMediaLoader'
+import { fontFamilyStack } from '../core/appearance'
 import {
   activeAudioTitleGlyphIndex,
   audioTitleScaleTargets,
@@ -41,7 +42,7 @@ export function MusicPlayerPage() {
   const networkMedia = Boolean(item && (item.sourceId !== null || item.protocol !== 'local'))
   const buffering = session.phase !== 'error' && (session.buffering || session.phase === 'loading' || session.phase === 'buffering')
   const blackGold = theme.isDark && theme.variant === 'classic' && settings.accentIndex % 6 === 2
-  const titleFontFamily = useMemo(() => audioTitleFontFamily(settings.fontFamily), [settings.fontFamily])
+  const titleFontFamily = useMemo(() => fontFamilyStack(settings.fontFamily), [settings.fontFamily])
 
   useEffect(() => {
     if (!item) return
@@ -146,6 +147,9 @@ export function MusicPlayerPage() {
       setRepeat('all')
     }
   }
+  const releasePointerFocus = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.currentTarget.blur()
+  }
 
   return (
     <div className={`music-player immersive-audio-player ${theme.isDark ? 'audio-dark' : 'audio-light'} ${blackGold ? 'audio-black-gold' : ''}`} style={rootStyle}>
@@ -214,19 +218,20 @@ export function MusicPlayerPage() {
         </div>
 
         <div className="audio-transport-controls">
-          <button type="button" className="audio-control-icon audio-skip-control" onClick={() => void playPrevious()} aria-label={t('previous')} title={t('previous')}>
+          <button type="button" className="audio-control-icon audio-skip-control" onPointerUp={releasePointerFocus} onClick={() => void playPrevious()} aria-label={t('previous')} title={t('previous')}>
             <Icon name="prev" size={23} strokeWidth={1.55} />
           </button>
-          <button type="button" className="audio-play-control" onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}>
+          <button type="button" className="audio-play-control" onPointerUp={releasePointerFocus} onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}>
             <Icon name={playing ? 'pause' : 'play'} size={27} strokeWidth={1.45} />
           </button>
-          <button type="button" className="audio-control-icon audio-skip-control" onClick={() => void playNext()} aria-label={t('next')} title={t('next')}>
+          <button type="button" className="audio-control-icon audio-skip-control" onPointerUp={releasePointerFocus} onClick={() => void playNext()} aria-label={t('next')} title={t('next')}>
             <Icon name="next" size={23} strokeWidth={1.55} />
           </button>
           <button
             type="button"
             className={`audio-control-icon audio-playback-mode ${playbackMode !== 'sequential' ? 'active' : ''}`}
             data-mode={playbackMode}
+            onPointerUp={releasePointerFocus}
             onClick={cyclePlaybackMode}
             aria-label={playbackModeLabel}
             title={playbackModeLabel}
@@ -244,6 +249,7 @@ export function MusicPlayerPage() {
           <button
             type="button"
             className="audio-volume-icon"
+            onPointerUp={releasePointerFocus}
             onClick={toggleMute}
             aria-label={session.muted ? t('unmute') : t('mute')}
             title={session.muted ? t('unmute') : t('mute')}
@@ -955,14 +961,6 @@ function displayMediaText(value: string | null | undefined): string {
 function displayFileName(fileName: string | null | undefined): string {
   const name = fileName?.split(/[\\/]/).pop() ?? ''
   return displayMediaText(name)
-}
-
-function audioTitleFontFamily(selectedFont: string): string {
-  const normalized = selectedFont.trim().replace(/^['"]|['"]$/g, '')
-  const escaped = normalized.replace(/["\\]/g, '\\$&')
-  return escaped
-    ? `"${escaped}", 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
-    : `'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
 }
 
 function formatKHz(sampleRate: number): string {

@@ -2,17 +2,18 @@ import type { AppSettingsData } from '../../main/system/settings-types'
 
 type TypographySettings = Pick<AppSettingsData, 'fontFamily' | 'fontSize'>
 
-export function applyTypographySettings(settings: TypographySettings): void {
-  const selectedFont = settings.fontFamily.trim().replace(/^['"]|['"]$/g, '')
+export function fontFamilyStack(fontFamily: string): string {
+  const selectedFont = fontFamily.trim().replace(/^['"]|['"]$/g, '')
   const escapedFont = selectedFont.replace(/["\\]/g, '\\$&')
+  return escapedFont
+    ? `"${escapedFont}", 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
+    : "'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif"
+}
+
+export function applyTypographySettings(settings: TypographySettings): void {
   const root = document.documentElement
 
-  root.style.setProperty(
-    '--font-family',
-    escapedFont
-      ? `"${escapedFont}", 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif`
-      : "'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif"
-  )
+  root.style.setProperty('--font-family', fontFamilyStack(settings.fontFamily))
   const fontSize = settings.fontSize || 14
   const visualFontSize = Math.max(10, fontSize - 2)
   // Keep the existing visual scale for the rest of the interface.

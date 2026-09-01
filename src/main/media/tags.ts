@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { decodeUtf8 } from '../util'
+import { decodeTextBuffer, decodeUtf8 } from '../util'
 import { cleanMediaText } from '../../shared/types'
 
 export interface ParsedTags {
@@ -40,7 +40,7 @@ function readTail(p: string, n: number): Buffer {
 
 function parseId3v1(tail: Buffer): ParsedTags {
   if (tail.length !== 128 || tail.toString('ascii', 0, 3) !== 'TAG') return {}
-  const field = (start: number, end: number) => cleanMediaText(tail.toString('latin1', start, end).replace(/\u0000/g, ''))
+  const field = (start: number, end: number) => cleanMediaText(decodeTextBuffer(tail.subarray(start, end)).replace(/\u0000/g, ''))
   const title = field(3, 33)
   const artist = field(33, 63)
   const album = field(63, 93)
@@ -88,10 +88,37 @@ export function decodeUtf16be(buf: Buffer): string {
 function id3Text(payload: Buffer): string | undefined {
   if (payload.length < 1) return undefined
   const enc = payload[0]
-  const body = payload.subarray(1)
-  if (enc === 1) return body.toString('utf16le').replace(/^\uFEFF/, '').replace(/\u0000/g, '').trim()
+  return decodeId3Text(payload.subarray(1), enc)
+}
+
+function decodeId3Text(body: Buffer, enc: number): string {
+  if (enc === 1) {
+    if (body.length >= 2 && body[0] === 0xfe && body[1] === 0xff) return decodeUtf16be(body.subarray(2))
+    const text = body.length >= 2 && body[0] === 0xff && body[1] === 0xfe ? body.subarray(2) : body
+    return text.toString('utf16le').replace(/^\uFEFF/, '').replace(/\u0000/g, '').trim()
+  }
   if (enc === 2) return decodeUtf16be(body)
-  return body.toString(enc === 3 ? 'utf8' : 'latin1').replace(/\u0000/g, '').trim()
+  return (enc === 3 ? decodeUtf8(body) : decodeTextBuffer(body)).replace(/\u0000/g, '').trim()
+}
+
+function id3Lyrics(payload: Buffer): string | undefined {
+  if (payload.length < 5) return undefined
+  const enc = payload[0]
+  let body = payload.subarray(4)
+  if (enc === 1 || enc === 2) {
+    let terminator = -1
+    for (let index = 0; index + 1 < body.length; index += 2) {
+      if (body[index] === 0 && body[index + 1] === 0) {
+        terminator = index
+        break
+      }
+    }
+    if (terminator >= 0) body = body.subarray(terminator + 2)
+  } else {
+    const terminator = body.indexOf(0)
+    if (terminator >= 0) body = body.subarray(terminator + 1)
+  }
+  return decodeId3Text(body, enc) || undefined
 }
 
 function id3Picture(payload: Buffer): { cover?: Buffer; mime?: string } {
@@ -410,7 +437,7 @@ export function probeTagsFromBuffer(head: Buffer): ParsedTags {
         }
       }
       const uslt = frames.get('USLT')
-      if (uslt && uslt.length > 4) tags.lyrics = decodeUtf8(uslt.subarray(4))
+      if (uslt) tags.lyrics = id3Lyrics(uslt)
       if (frames.get('TDRC') || frames.get('TYER')) void 0
       const tl = frames.get('TLEN')
       if (tl) {
@@ -493,8 +520,9 @@ export function probeEmbeddedLyrics(p: string): string | undefined {
     if (head.toString('ascii', 0, 3) === 'ID3') {
       const { frames } = parseId3(head)
       const uslt = frames.get('USLT')
-      if (uslt && uslt.length > 4) {
-        const text = decodeUtf8(uslt.subarray(4))
+      if (uslt) {
+        const text = id3Lyrics(uslt)
+        if (!text) return undefined
         if (text.includes('[') && text.includes(']')) return text
         return text
       }

@@ -1192,7 +1192,7 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
   transition: opacity 180ms ease, filter 180ms ease;
 }
 .audio-transport-controls:hover,
-.audio-transport-controls:focus-within {
+.audio-transport-controls:has(:focus-visible) {
   opacity: .98;
   filter: drop-shadow(0 0 8px color-mix(in srgb, var(--audio-accent) 22%, transparent));
 }
@@ -1215,7 +1215,7 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
   transition: opacity 180ms ease;
 }
 .audio-volume-control:hover,
-.audio-volume-control:focus-within { opacity: .96; }
+.audio-volume-control:has(:focus-visible) { opacity: .96; }
 .audio-volume-icon {
   width: 34px;
   height: 34px;
@@ -1250,7 +1250,7 @@ input.cinematic-volume::-webkit-slider-thumb { -webkit-appearance: none; width: 
 }
 .audio-volume-value { color: var(--audio-muted); font-size: 11px; font-variant-numeric: tabular-nums; opacity: .48; transition: opacity 180ms ease; }
 .audio-volume-control:hover .audio-volume-value,
-.audio-volume-control:focus-within .audio-volume-value { opacity: .86; }
+.audio-volume-control:has(:focus-visible) .audio-volume-value { opacity: .86; }
 .audio-control-icon,
 .audio-play-control {
   display: grid;
