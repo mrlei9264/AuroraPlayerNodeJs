@@ -314,7 +314,6 @@ export class RemoteSourceManager {
     return !!this.getSource(sourceId)
   }
 }
-
 export function defaultPort(protocol: string, secure?: boolean): number {
   switch (protocol) {
     case 'http':
@@ -388,64 +387,4 @@ export async function readRemoteTags(
   } catch {
     return {}
   }
-}
-
-export async function readRemoteNfo(
-  manager: RemoteSourceManager,
-  item: { sourceId: number | null; remotePath: string | null; fileName: string }
-): Promise<import('../media/metadata').WebMediaMetadata | null> {
-  if (item.sourceId == null || !item.remotePath) return null
-  const { nfoCandidateNames, parseNfo, fetchNfoCover, mimeFromImageName, nfoLimits } = await import('../media/nfo')
-  const normalizedPath = item.remotePath.replace(/\\/g, '/')
-  const slash = normalizedPath.lastIndexOf('/')
-  const directory = slash >= 0 ? normalizedPath.slice(0, slash) || '/' : '/'
-  const fileName = slash >= 0 ? normalizedPath.slice(slash + 1) : normalizedPath
-  const listing = await manager.browse(item.sourceId, directory)
-  if (listing.error) return null
-  const files = listing.entries.filter((entry) => !entry.isDirectory)
-  const lookup = new Map(files.map((entry) => [entry.name.toLocaleLowerCase(), entry]))
-  const nfoEntry = nfoCandidateNames(fileName, files.map((entry) => entry.name)).map((name) => lookup.get(name.toLocaleLowerCase())).find(Boolean)
-  if (!nfoEntry || nfoEntry.size > nfoLimits.text) return null
-  const nfoBuffer = await readRemoteBuffer(manager, item.sourceId, joinRemotePath(directory, nfoEntry.name), nfoLimits.text)
-  if (!nfoBuffer) return null
-  const parsed = parseNfo(nfoBuffer.toString('utf8'))
-
-  if (parsed.coverReference && /^https?:\/\//i.test(parsed.coverReference)) {
-    return { ...parsed, ...await fetchNfoCover(parsed.coverReference) }
-  }
-  const stem = fileName.slice(0, Math.max(0, fileName.lastIndexOf('.')) || fileName.length)
-  const coverNames = [parsed.coverReference, `${stem}-poster.jpg`, `${stem}.jpg`, 'poster.jpg', 'folder.jpg', 'cover.jpg']
-    .filter((name): name is string => Boolean(name))
-    .map((name) => name.replace(/\\/g, '/').split('/').pop()!)
-  for (const coverName of coverNames) {
-    const entry = lookup.get(coverName.toLocaleLowerCase())
-    if (!entry || entry.size <= 0 || entry.size > nfoLimits.cover) continue
-    const cover = await readRemoteBuffer(manager, item.sourceId, joinRemotePath(directory, entry.name), nfoLimits.cover)
-    if (cover) return { ...parsed, cover, coverMime: mimeFromImageName(entry.name) }
-  }
-  return parsed
-}
-
-async function readRemoteBuffer(manager: RemoteSourceManager, sourceId: number, remotePath: string, limit: number): Promise<Buffer | null> {
-  try {
-    const stat = await manager.stat(sourceId, remotePath)
-    if (!stat || stat.size <= 0 || stat.size > limit) return null
-    const opened = await manager.openStream(sourceId, remotePath, 0, stat.size - 1)
-    if (!opened) return null
-    const chunks: Buffer[] = []
-    let total = 0
-    for await (const chunk of opened.stream as AsyncIterable<Buffer>) {
-      const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      total += data.length
-      if (total > limit) return null
-      chunks.push(data)
-    }
-    return Buffer.concat(chunks)
-  } catch {
-    return null
-  }
-}
-
-function joinRemotePath(directory: string, fileName: string): string {
-  return directory === '/' ? `/${fileName}` : `${directory.replace(/\/+$/, '')}/${fileName}`
 }

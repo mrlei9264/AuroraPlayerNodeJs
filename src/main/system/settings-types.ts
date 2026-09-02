@@ -1,5 +1,3 @@
-export type MetadataProvider = 'tmdb' | 'tvmaze' | 'custom'
-
 export interface AppSettingsData {
   language: 'en' | 'zh'
   accentIndex: number
@@ -23,10 +21,4 @@ export interface AppSettingsData {
   proxyUsername: string
   proxyPassword: string
   proxyBypassLocal: boolean
-  metadataLookupEnabled: boolean
-  metadataProviders: MetadataProvider[]
-  metadataSources: string[]
-  metadataTmdbAccessToken: string
-  metadataLanguage: 'zh-CN' | 'en-US'
-  metadataOverwriteExisting: boolean
 }

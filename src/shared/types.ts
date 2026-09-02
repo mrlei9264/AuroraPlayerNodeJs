@@ -1,13 +1,3 @@
-export interface ScrapedMediaMetadata {
-  source: string
-  externalId?: string
-  mediaType?: 'movie' | 'series' | 'episode' | 'audio'
-  year?: number
-  description?: string
-  genres?: string[]
-  rating?: number
-}
-
 export interface MediaItem {
   id: number
   url: string
@@ -30,8 +20,6 @@ export interface MediaItem {
   duration: number
   coverPath: string | null
   metaProbed: boolean
-  scrapedMetadata?: ScrapedMediaMetadata | null
-  scrapedAt?: number
 }
 
 export function cleanMediaText(value: unknown): string {
@@ -297,7 +285,7 @@ export interface UpdateStatus {
 }
 
 export interface ProbeProgress {
-  mode: 'single' | 'index'
+  mode: 'single'
   running: boolean
   current: string | null
   completed: number

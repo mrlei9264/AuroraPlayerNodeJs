@@ -104,8 +104,6 @@ export class LibraryRepository {
         | 'remotePath'
         | 'protocol'
         | 'sourceName'
-        | 'scrapedMetadata'
-        | 'scrapedAt'
       >
     >
   ): void {
@@ -124,15 +122,12 @@ export class LibraryRepository {
       sourceId: 'source_id',
       remotePath: 'remote_path',
       protocol: 'protocol',
-      sourceName: 'source_name',
-      scrapedMetadata: 'scraped_metadata',
-      scrapedAt: 'scraped_at'
+      sourceName: 'source_name'
     }
     for (const [k, col] of Object.entries(map)) {
       if (k in fields && fields[k as keyof typeof fields] !== undefined) {
         let v = fields[k as keyof typeof fields] as string | number | boolean | object | null
         if (k === 'title' || k === 'artist' || k === 'album') v = cleanMediaText(v)
-        if (k === 'scrapedMetadata') v = v == null ? null : JSON.stringify(v)
         sets.push(`${col} = ?`)
         vals.push(typeof v === 'boolean' ? (v ? 1 : 0) : v as string | number | null)
       }

@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { E, I } from '../../shared/channels'
 import { MEDIA_EXTS } from '../../shared/types'
-import type { AppSettingsData, MetadataProvider } from './settings-types'
+import type { AppSettingsData } from './settings-types'
 import { colorThemeAt, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import type { CredentialStore } from '../remote/credentials'
 import { makeAppIcon } from '../util'
@@ -55,13 +55,7 @@ const defaults: AppSettingsData = {
   proxyPort: '',
   proxyUsername: '',
   proxyPassword: '',
-  proxyBypassLocal: true,
-  metadataLookupEnabled: true,
-  metadataProviders: ['tvmaze'],
-  metadataSources: [],
-  metadataTmdbAccessToken: '',
-  metadataLanguage: 'zh-CN',
-  metadataOverwriteExisting: false
+  proxyBypassLocal: true
 }
 
 export class SettingsStore {
@@ -77,11 +71,7 @@ export class SettingsStore {
       this.data = {
         ...defaults,
         ...sanitizeSettings(raw),
-        accentIndex: normalizeColorThemeIndex(raw.accentIndex),
-        metadataProviders: Array.isArray(raw.metadataProviders)
-          ? sanitizeMetadataProviders(raw.metadataProviders)
-          : [...defaults.metadataProviders, ...(Array.isArray(raw.metadataSources) && raw.metadataSources.length ? ['custom' as const] : [])],
-        metadataSources: Array.isArray(raw.metadataSources) ? raw.metadataSources.filter((source: unknown): source is string => typeof source === 'string') : []
+        accentIndex: normalizeColorThemeIndex(raw.accentIndex)
       }
     } catch {
       this.data = { ...defaults }
@@ -133,7 +123,7 @@ export class SettingsStore {
   private writeToDisk(): void {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true })
-      const { proxyPassword: _protectedCredential, metadataTmdbAccessToken: _metadataCredential, ...persisted } = this.data
+      const { proxyPassword: _protectedCredential, ...persisted } = this.data
       fs.writeFileSync(this.file, JSON.stringify(persisted, null, 2), 'utf8')
     } catch (err) {
       console.error('[settings] save failed', err)
@@ -159,7 +149,6 @@ export class AppSettings {
       }
       this.store.patch(safe)
       if (safe.proxyPassword !== undefined) await this.persistProxyPassword(safe.proxyPassword)
-      if (safe.metadataTmdbAccessToken !== undefined) await this.persistMetadataToken(safe.metadataTmdbAccessToken)
       this.broadcast(E.settingsChanged, this.store.all())
       const changedKeys = Object.keys(safe) as (keyof AppSettingsData)[]
       for (const key of changedKeys) this.applySystemEffects(key)
@@ -186,10 +175,6 @@ export class AppSettings {
     else await this.credentials.remove('aurora:proxy')
   }
 
-  private async persistMetadataToken(token: string): Promise<void> {
-    if (token) await this.credentials.write('aurora:metadata:tmdb', token, true)
-    else await this.credentials.remove('aurora:metadata:tmdb')
-  }
 }
 
 function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
@@ -202,7 +187,7 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   if (typeof raw.fontFamily === 'string') result.fontFamily = raw.fontFamily
   if ([12, 13, 14, 15, 16].includes(Number(raw.fontSize))) result.fontSize = Number(raw.fontSize) as AppSettingsData['fontSize']
   if (Number.isFinite(raw.playbackVolume)) result.playbackVolume = Math.max(0, Math.min(100, Math.round(Number(raw.playbackVolume))))
-  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'startInFullscreen', 'proxyEnabled', 'proxyBypassLocal', 'metadataLookupEnabled', 'metadataOverwriteExisting'] as const) {
+  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'startInFullscreen', 'proxyEnabled', 'proxyBypassLocal'] as const) {
     if (typeof raw[key] === 'boolean') result[key] = raw[key]
   }
   if (raw.navigationPlayPrimaryAction === 'open-player' || raw.navigationPlayPrimaryAction === 'toggle-playback') result.navigationPlayPrimaryAction = raw.navigationPlayPrimaryAction
@@ -210,17 +195,7 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   for (const key of ['proxyServer', 'proxyPort', 'proxyUsername', 'proxyPassword'] as const) {
     if (typeof raw[key] === 'string') result[key] = raw[key]
   }
-  if (Array.isArray(raw.metadataSources)) result.metadataSources = raw.metadataSources.filter((source): source is string => typeof source === 'string')
-  if (Array.isArray(raw.metadataProviders)) result.metadataProviders = sanitizeMetadataProviders(raw.metadataProviders)
-  if (typeof raw.metadataTmdbAccessToken === 'string') result.metadataTmdbAccessToken = raw.metadataTmdbAccessToken.trim()
-  if (raw.metadataLanguage === 'zh-CN' || raw.metadataLanguage === 'en-US') result.metadataLanguage = raw.metadataLanguage
   return result
-}
-
-function sanitizeMetadataProviders(value: unknown): MetadataProvider[] {
-  if (!Array.isArray(value)) return [...defaults.metadataProviders]
-  const allowed = new Set<MetadataProvider>(['tmdb', 'tvmaze', 'custom'])
-  return [...new Set(value.filter((provider): provider is MetadataProvider => typeof provider === 'string' && allowed.has(provider as MetadataProvider)))]
 }
 
 export function openInShell(p: string): void {

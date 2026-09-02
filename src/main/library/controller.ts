@@ -16,7 +16,8 @@ export class LibraryController {
     private logger: Logger,
     private broadcast: (channel: string, payload: unknown) => void,
     private beforeRemove: (items: MediaItem[]) => void = () => undefined,
-    private afterRestore: (items: MediaItem[]) => void = () => undefined
+    private afterRestore: (items: MediaItem[]) => void = () => undefined,
+    private afterRelocate: (item: MediaItem) => void = () => undefined
   ) {}
 
   init(): void {
@@ -225,6 +226,8 @@ export class LibraryController {
     if (conflict && conflict.id !== id) return false
     this.repo.updateUrl(id, newUrl)
     this.repo.updateFields(id, { title: '', artist: '', album: '', metaProbed: false, sourceAvailable: true })
+    const relocated = this.repo.findById(id)
+    if (relocated) this.afterRelocate(relocated)
     this.changed()
     return true
   }

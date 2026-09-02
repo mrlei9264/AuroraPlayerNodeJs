@@ -9,15 +9,31 @@ import { cleanMediaText, type Chapter, type MediaAudioFeatures, type MediaItem, 
 import { LibraryRepository } from '../library/repository'
 import { Logger } from '../system/diagnostics'
 import { probeTags } from './tags'
-import { MediaMetadataScraper, type WebMediaMetadata } from './metadata'
-import { SettingsStore } from '../system/settings'
-import { readLocalNfo } from './nfo'
 import ffmpegStaticPath from 'ffmpeg-static'
 import { path as ffprobeStaticPath } from 'ffprobe-static'
 
 const execFileAsync = promisify(execFile)
 const ffmpegCommand = bundledCommand(ffmpegStaticPath, 'ffmpeg')
 const ffprobeCommand = bundledCommand(ffprobeStaticPath, 'ffprobe')
+const PROBE_CACHE_LIMIT = 256
+
+function readLru<K, V>(cache: Map<K, V>, key: K): V | undefined {
+  const value = cache.get(key)
+  if (value === undefined) return undefined
+  cache.delete(key)
+  cache.set(key, value)
+  return value
+}
+
+function writeLru<K, V>(cache: Map<K, V>, key: K, value: V): void {
+  cache.delete(key)
+  cache.set(key, value)
+  while (cache.size > PROBE_CACHE_LIMIT) {
+    const oldest = cache.keys().next()
+    if (oldest.done) break
+    cache.delete(oldest.value)
+  }
+}
 
 function bundledCommand(candidate: string | null | undefined, fallback: string): string {
   if (!candidate) return fallback
@@ -30,6 +46,15 @@ function bundledCommand(candidate: string | null | undefined, fallback: string):
 export interface CoverRecord {
   coverPath: string | null
   mime: string
+}
+
+interface EmbeddedMediaMetadata {
+  title?: string
+  artist?: string
+  album?: string
+  duration?: number
+  cover?: Buffer
+  coverMime?: string
 }
 
 type FfprobeAudioStream = {
@@ -160,13 +185,11 @@ export class MediaProbeService {
   private pending: Map<number, { mediaId: number; url: string; remote: boolean }> = new Map()
   private running: number | null = null
   private canceled = false
-  private results: Map<number, CoverRecord> = new Map()
   private progress: ProbeProgress = { mode: 'single', running: false, current: null, completed: 0, total: 0, percent: 0, canceled: false }
   private audioFeatureCache = new Map<number, MediaAudioFeatures>()
   private durationCache = new Map<number, number>()
   private trackCache = new Map<number, MediaTrackCatalog>()
   private coverDir: string
-  private metadataScraper = new MediaMetadataScraper()
 
   constructor(
     private repo: LibraryRepository,
@@ -174,8 +197,6 @@ export class MediaProbeService {
     private broadcast: (channel: string, payload: unknown) => void,
     coverDirectory: string,
     private readRemoteTags: (item: MediaItem) => Promise<{ title?: string; artist?: string; album?: string; duration?: number; cover?: Buffer; coverMime?: string }>,
-    private readRemoteNfo: (item: MediaItem) => Promise<WebMediaMetadata | null>,
-    private settings: SettingsStore,
     private mediaUrlFor: (item: MediaItem) => string
   ) {
     this.coverDir = coverDirectory
@@ -208,7 +229,7 @@ export class MediaProbeService {
   }
 
   async getAudioFeatures(mediaId: number): Promise<MediaAudioFeatures> {
-    const cached = this.audioFeatureCache.get(mediaId)
+    const cached = readLru(this.audioFeatureCache, mediaId)
     if (cached) return cached
     const item = this.repo.findById(mediaId)
     const empty: MediaAudioFeatures = { atmos: false, codec: '', profile: '', channels: 0, channelLayout: '', sampleRate: 0, bitDepth: 0, bitrate: 0 }
@@ -224,7 +245,8 @@ export class MediaProbeService {
       ], { windowsHide: true, timeout: 30_000, maxBuffer: 8 * 1024 * 1024 })
       const parsed = JSON.parse(stdout) as { streams?: FfprobeAudioStream[] }
       const features = audioFeaturesFromStreams(parsed.streams ?? [])
-      this.audioFeatureCache.set(mediaId, features)
+      const current = this.repo.findById(mediaId)
+      if (current?.url === item.url) writeLru(this.audioFeatureCache, mediaId, features)
       return features
     } catch (error) {
       this.logger.warn('probe', `audio feature probe failed media=${mediaId}`, error)
@@ -233,7 +255,7 @@ export class MediaProbeService {
   }
 
   async getPlaybackDuration(mediaId: number): Promise<number> {
-    const cached = this.durationCache.get(mediaId)
+    const cached = readLru(this.durationCache, mediaId)
     if (cached) return cached
     const item = this.repo.findById(mediaId)
     if (!item || item.isImage) return 0
@@ -247,7 +269,8 @@ export class MediaProbeService {
       ], { windowsHide: true, timeout: 20_000, maxBuffer: 1024 * 1024 })
       const duration = durationFromProbe(JSON.parse(stdout) as FfprobeDurationResult)
       if (duration > 0) {
-        this.durationCache.set(mediaId, duration)
+        const current = this.repo.findById(mediaId)
+        if (current?.url === item.url) writeLru(this.durationCache, mediaId, duration)
         if (Math.abs(duration - item.duration) > 0.5) {
           this.repo.updateFields(mediaId, { duration })
           this.emitLibrary()
@@ -262,7 +285,7 @@ export class MediaProbeService {
 
   async getTracks(mediaId: number): Promise<MediaTrackCatalog> {
     const empty: MediaTrackCatalog = { video: [], audio: [], subtitles: [], chapters: [], width: 0, height: 0, fps: 0 }
-    const cached = this.trackCache.get(mediaId)
+    const cached = readLru(this.trackCache, mediaId)
     if (cached) return cached
     const item = this.repo.findById(mediaId)
     if (!item || item.isImage) return empty
@@ -341,7 +364,8 @@ export class MediaProbeService {
         bitDepth: finitePositive(primaryVideo?.bits_per_raw_sample) || pixelBitDepth,
         hdrType
       }
-      this.trackCache.set(mediaId, result)
+      const current = this.repo.findById(mediaId)
+      if (current?.url === item.url) writeLru(this.trackCache, mediaId, result)
       return result
     } catch (error) {
       this.logger.warn('probe', `track probe failed media=${mediaId}`, error)
@@ -362,22 +386,10 @@ export class MediaProbeService {
     return true
   }
 
-  requestAll(force = false): number {
-    let requested = 0
-    for (const item of this.repo.loadAll()) {
-      if (item.isImage || (!force && item.metaProbed)) continue
-      if (force) {
-        this.removeTemporaryCover(item.coverPath)
-        this.repo.updateFields(item.id, { metaProbed: false, coverPath: null })
-      }
-      if (this.request(item.id)) requested++
-    }
-    return requested
-  }
-
-  requestAgain(mediaId: number): boolean {
+  regenerateCover(mediaId: number): boolean {
     const item = this.repo.findById(mediaId)
     if (!item || item.isImage) return false
+    this.forgetMedia(mediaId)
     this.removeTemporaryCover(item.coverPath)
     this.repo.updateFields(mediaId, { metaProbed: false, coverPath: null })
     return this.request(mediaId)
@@ -396,6 +408,15 @@ export class MediaProbeService {
 
   cancel(): void {
     this.canceled = true
+    this.pending.clear()
+    this.setProgress({ ...this.progress, running: this.running !== null, canceled: true })
+  }
+
+  forgetMedia(mediaId: number): void {
+    this.pending.delete(mediaId)
+    this.audioFeatureCache.delete(mediaId)
+    this.durationCache.delete(mediaId)
+    this.trackCache.delete(mediaId)
   }
 
   private async drain(): Promise<void> {
@@ -441,57 +462,8 @@ export class MediaProbeService {
     void this.drain()
   }
 
-  private async finishProbe(item: MediaItem, embedded: WebMediaMetadata): Promise<void> {
-    let metadata = embedded
-    let scrapedMetadata = item.scrapedMetadata ?? null
+  private async finishProbe(item: MediaItem, metadata: EmbeddedMediaMetadata): Promise<void> {
     const isVideo = !item.isAudio && !item.isImage
-    const nfo = isVideo
-      ? item.protocol === 'local' ? await readLocalNfo(item.url) : await this.readRemoteNfo(item)
-      : null
-    const providers = this.settings.get('metadataProviders')
-    const customSources = this.settings.get('metadataSources').map((source) => source.trim()).filter(Boolean)
-    const canLookup = providers.some((provider) => provider !== 'custom' || customSources.length > 0)
-    if (nfo) {
-      const embeddedValues = Object.fromEntries(Object.entries(embedded).filter(([, value]) => value != null && value !== ''))
-      const nfoValues = Object.fromEntries(Object.entries(nfo).filter(([, value]) => value != null && value !== ''))
-      metadata = { ...embeddedValues, ...nfoValues }
-      scrapedMetadata = {
-        source: nfo.source || 'NFO',
-        externalId: nfo.externalId,
-        mediaType: nfo.mediaType,
-        year: nfo.year,
-        description: nfo.description,
-        genres: nfo.genres,
-        rating: nfo.rating
-      }
-    } else if (isVideo && this.settings.get('metadataLookupEnabled') && canLookup) {
-      const web = await this.metadataScraper.lookup(
-        { ...item, title: embedded.title ?? item.title },
-        {
-          providers,
-          customSources,
-          tmdbAccessToken: this.settings.get('metadataTmdbAccessToken'),
-          language: this.settings.get('metadataLanguage')
-        }
-      )
-      if (web) {
-        const embeddedValues = Object.fromEntries(Object.entries(embedded).filter(([, value]) => value != null && value !== ''))
-        const webValues = Object.fromEntries(Object.entries(web).filter(([, value]) => value != null && value !== ''))
-        metadata = this.settings.get('metadataOverwriteExisting')
-          ? { ...embeddedValues, ...webValues }
-          : { ...webValues, ...embeddedValues }
-        scrapedMetadata = {
-          source: web.source || 'online',
-          externalId: web.externalId,
-          mediaType: web.mediaType,
-          year: web.year,
-          description: web.description,
-          genres: web.genres,
-          rating: web.rating
-        }
-      }
-    }
-
     let coverPath: string | null = null
     if (metadata.cover) coverPath = this.saveCover(item.id, metadata.cover, metadata.coverMime ?? 'image/jpeg')
     if (!coverPath && isVideo) coverPath = await this.captureVideoFrame(item)
@@ -502,8 +474,6 @@ export class MediaProbeService {
       album: metadata.album ?? item.album,
       duration: metadata.duration ?? item.duration,
       coverPath: coverPath ?? item.coverPath,
-      scrapedMetadata,
-      scrapedAt: scrapedMetadata ? Date.now() : (item.scrapedAt ?? 0),
       // Record the attempt even if both capture methods fail. Otherwise every
       // library refresh immediately starts the same expensive work again.
       metaProbed: true
@@ -590,60 +560,6 @@ function chaptersFromProbe(raw: FfprobeChapter[]): Chapter[] {
     })
     .filter((chapter): chapter is Chapter => chapter !== null)
     .sort((a, b) => a.time - b.time)
-}
-
-export class MediaIndexerService {
-  private running = false
-  private canceled = false
-  private progress: ProbeProgress = { mode: 'index', running: false, current: null, completed: 0, total: 0, percent: 0, canceled: false }
-
-  constructor(
-    private repo: LibraryRepository,
-    private probe: MediaProbeService,
-    private logger: Logger,
-    private broadcast: (channel: string, payload: unknown) => void
-  ) {}
-
-  init(): void {
-    ipcMain.handle(I.indexRun, (_e, force: boolean) => this.run(force))
-    ipcMain.handle(I.indexCancel, () => {
-      this.canceled = true
-      this.probe.cancel()
-    })
-    ipcMain.handle(I.indexStatus, () => this.progress)
-  }
-
-  async run(force: boolean): Promise<void> {
-    if (this.running) return
-    this.running = true
-    this.canceled = false
-    const all = this.repo.loadAll()
-    const targets = all.filter((i) => !i.isImage && (force || !i.metaProbed))
-    this.progress = {
-      mode: 'index',
-      running: true,
-      current: null,
-      completed: 0,
-      total: targets.length,
-      percent: 0,
-      canceled: false
-    }
-    this.broadcast(E.indexProgress, this.progress)
-    for (const item of targets) {
-      if (this.canceled) break
-      this.progress.current = item.fileName
-      this.progress.completed++
-      this.progress.percent = targets.length ? Math.round((this.progress.completed / targets.length) * 100) : 100
-      this.broadcast(E.indexProgress, this.progress)
-      this.probe.request(item.id)
-      await new Promise((r) => setTimeout(r, 80))
-    }
-    this.running = false
-    this.progress.running = false
-    this.broadcast(E.indexProgress, this.progress)
-    this.broadcast(E.libraryChanged, this.repo.loadAll())
-    this.logger.info('indexer', `index done: ${this.progress.completed}/${targets.length}${this.canceled ? ' (canceled)' : ''}`)
-  }
 }
 
 export function fingerprintFor(pathOrUrl: string, size: number): string {

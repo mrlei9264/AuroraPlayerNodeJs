@@ -236,7 +236,7 @@ export function MusicPlayerPage() {
             aria-label={playbackModeLabel}
             title={playbackModeLabel}
           >
-            <Icon name={playbackMode === 'one' ? 'repeatOne' : playbackMode === 'shuffle' ? 'shuffle' : 'list'} size={21} strokeWidth={1.55} />
+            <Icon name={playbackMode === 'one' ? 'repeatOne' : playbackMode === 'shuffle' ? 'shuffle' : 'repeat'} size={21} strokeWidth={1.55} />
           </button>
         </div>
 

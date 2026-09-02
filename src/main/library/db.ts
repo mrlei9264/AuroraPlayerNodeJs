@@ -36,9 +36,7 @@ function migrate(db: DatabaseSync): void {
       last_position REAL NOT NULL DEFAULT 0,
       duration REAL NOT NULL DEFAULT 0,
       cover_path TEXT,
-      meta_probed INTEGER NOT NULL DEFAULT 0,
-      scraped_metadata TEXT,
-      scraped_at INTEGER NOT NULL DEFAULT 0
+      meta_probed INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_media_is_audio ON media(is_audio);
     CREATE INDEX IF NOT EXISTS idx_media_favorite ON media(favorite);
@@ -91,8 +89,6 @@ function migrate(db: DatabaseSync): void {
   if (!mediaColumns.some((column) => column.name === 'file_size')) {
     db.exec('ALTER TABLE media ADD COLUMN file_size INTEGER NOT NULL DEFAULT 0')
   }
-  if (!mediaColumns.some((column) => column.name === 'scraped_metadata')) db.exec('ALTER TABLE media ADD COLUMN scraped_metadata TEXT')
-  if (!mediaColumns.some((column) => column.name === 'scraped_at')) db.exec('ALTER TABLE media ADD COLUMN scraped_at INTEGER NOT NULL DEFAULT 0')
   const downloadColumns = db.prepare('PRAGMA table_info(downloads)').all() as { name: string }[]
   if (!downloadColumns.some((column) => column.name === 'thread_count')) db.exec('ALTER TABLE downloads ADD COLUMN thread_count INTEGER NOT NULL DEFAULT 4')
   if (!downloadColumns.some((column) => column.name === 'speed_limit_mbps')) db.exec('ALTER TABLE downloads ADD COLUMN speed_limit_mbps REAL NOT NULL DEFAULT 0')
@@ -135,18 +131,6 @@ export function rowToMedia(row: Record<string, unknown> | undefined): import('..
     lastPosition: Number(row.last_position ?? 0),
     duration: Number(row.duration ?? 0),
     coverPath: row.cover_path ? String(row.cover_path) : null,
-    metaProbed: !!row.meta_probed,
-    scrapedMetadata: parseScrapedMetadata(row.scraped_metadata),
-    scrapedAt: Number(row.scraped_at ?? 0)
-  }
-}
-
-function parseScrapedMetadata(value: unknown): import('../../shared/types').ScrapedMediaMetadata | null {
-  if (typeof value !== 'string' || !value) return null
-  try {
-    const parsed = JSON.parse(value) as import('../../shared/types').ScrapedMediaMetadata
-    return parsed && typeof parsed.source === 'string' ? parsed : null
-  } catch {
-    return null
+    metaProbed: !!row.meta_probed
   }
 }

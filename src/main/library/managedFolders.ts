@@ -62,29 +62,35 @@ export class ManagedFolderController {
     return new Promise((resolve) => {
       setImmediate(() => {
         let found = 0
-        const added = this.walk(folderPath, (fileName, full) => {
-          found++
-          if (this.repo.findByUrl(full)) return
-          const kind = this.mediaKind(fileName)
-          this.repo.insert({
-            url: full,
-            fileName,
-            isAudio: kind === 'audio',
-            isImage: false,
-            sourceId: null,
-            remotePath: null,
-            protocol: 'local',
-            sourceName: '',
-            sourceAvailable: true
+        try {
+          const added = this.walk(folderPath, (fileName, full) => {
+            found++
+            if (this.repo.findByUrl(full)) return
+            const kind = this.mediaKind(fileName)
+            this.repo.insert({
+              url: full,
+              fileName,
+              isAudio: kind === 'audio',
+              isImage: false,
+              sourceId: null,
+              remotePath: null,
+              protocol: 'local',
+              sourceName: '',
+              sourceAvailable: true
+            })
           })
-        })
-        this.repo.markFolderScanned(folderPath)
-        this.scanning.delete(folderPath)
-        this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'done', found })
-        this.logger.info('managed-folder', `scan ${folderPath}: found=${found} added=${added}`)
-        this.broadcast(E.libraryChanged, this.snapshot())
-        this.emitChanged()
-        resolve()
+          this.repo.markFolderScanned(folderPath)
+          this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'done', found })
+          this.logger.info('managed-folder', `scan ${folderPath}: found=${found} added=${added}`)
+          this.broadcast(E.libraryChanged, this.snapshot())
+        } catch (error) {
+          this.logger.warn('managed-folder', `scan failed: ${folderPath}`, error as Error)
+          this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'error', found })
+        } finally {
+          this.scanning.delete(folderPath)
+          try { this.emitChanged() } catch { void 0 }
+          resolve()
+        }
       })
     })
   }

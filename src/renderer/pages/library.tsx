@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { p, useRuntime } from '../core/runtime'
 import { FilledIcon, Icon, type IconName } from '../core/icons'
 import { coverUrl } from '../core/player'
@@ -21,6 +22,19 @@ type LibraryCollectionPreference = { manual: ManualCollection[]; excludedAutoIds
 
 const LIBRARY_SORT_STORAGE_KEY = 'aurora.library.sort.v1'
 const LIBRARY_COLLECTION_STORAGE_KEY = 'aurora.library.collections.v1'
+const LIBRARY_VIEW_STORAGE_KEY = 'aurora.library.view.v1'
+const LIBRARY_GRID_CARD_WIDTH = 220
+const LIBRARY_GRID_COLUMN_GAP = 17
+const LIBRARY_GRID_SELECTION_GAP = 14
+const DEFAULT_LIBRARY_GRID_COLUMNS = 4
+
+function readLibraryViewMode(): ViewMode {
+  try {
+    return window.localStorage.getItem(LIBRARY_VIEW_STORAGE_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
 
 function readLibrarySortPreference(): LibrarySortPreference {
   const fallback: LibrarySortPreference = { sortBy: 'added', sortDirection: 'desc' }
@@ -54,6 +68,25 @@ function readLibraryCollectionPreference(): LibraryCollectionPreference {
   }
 }
 
+function pruneCollectionPreference(current: LibraryCollectionPreference, items: MediaItem[]): LibraryCollectionPreference {
+  const availableMediaIds = new Set(items.filter((item) => !item.isImage).map((item) => item.id))
+  const availableAutoCollectionIds = new Set(collectSimilarVideos(
+    items.filter((item) => !item.isAudio && !item.isImage)
+  ).map((collection) => collection.id))
+  const manual = current.manual
+    .map((collection) => ({ ...collection, mediaIds: collection.mediaIds.filter((id) => availableMediaIds.has(id)) }))
+    .filter((collection) => collection.mediaIds.length >= 2)
+  const excludedAutoIds = current.excludedAutoIds.filter((id) => availableAutoCollectionIds.has(id))
+  const manualUnchanged = manual.length === current.manual.length && manual.every((collection, index) => {
+    const previous = current.manual[index]
+    return collection.id === previous.id && collection.title === previous.title &&
+      collection.mediaIds.length === previous.mediaIds.length && collection.mediaIds.every((id, mediaIndex) => id === previous.mediaIds[mediaIndex])
+  })
+  const exclusionsUnchanged = excludedAutoIds.length === current.excludedAutoIds.length &&
+    excludedAutoIds.every((id, index) => id === current.excludedAutoIds[index])
+  return manualUnchanged && exclusionsUnchanged ? current : { manual, excludedAutoIds }
+}
+
 type LibraryCardData = {
   kind: MediaKind
   title: string
@@ -75,6 +108,35 @@ type LibraryMetric = {
 type LibraryDisplayEntry =
   | { type: 'item'; card: LibraryCardData }
   | { type: 'collection'; id: string; title: string; cards: LibraryCardData[]; source: 'auto' | 'manual' }
+
+type LibraryVirtualEntry = { entry: LibraryDisplayEntry; index: number }
+type LibraryVirtualRow = { key: string; entries: LibraryVirtualEntry[]; expanded: boolean }
+
+function displayEntryKey(entry: LibraryDisplayEntry): string {
+  return entry.type === 'item' ? `item-${entry.card.item.id}` : `collection-${entry.id}`
+}
+
+function buildVirtualRows(entries: LibraryDisplayEntry[], columns: number, expandedCollections: Set<string>): LibraryVirtualRow[] {
+  const rows: LibraryVirtualRow[] = []
+  let pending: LibraryVirtualEntry[] = []
+  const flush = () => {
+    if (!pending.length) return
+    rows.push({ key: pending.map(({ entry }) => displayEntryKey(entry)).join('|'), entries: pending, expanded: false })
+    pending = []
+  }
+  entries.forEach((entry, index) => {
+    const expanded = entry.type === 'collection' && expandedCollections.has(entry.id)
+    if (expanded) {
+      flush()
+      rows.push({ key: `expanded-${entry.id}`, entries: [{ entry, index }], expanded: true })
+      return
+    }
+    pending.push({ entry, index })
+    if (pending.length >= columns) flush()
+  })
+  flush()
+  return rows
+}
 
 function formatOverlayDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return ''
@@ -234,19 +296,107 @@ function LibrarySortSelect({
   )
 }
 
+function LibraryFilterControls({
+  kind,
+  query,
+  compact,
+  favorites,
+  videos,
+  audios,
+  locale,
+  mediaTypeLabel,
+  favoritesLabel,
+  videosLabel,
+  audiosLabel,
+  searchLabel,
+  onKindChange,
+  onQueryChange
+}: {
+  kind: LibraryTab
+  query: string
+  compact?: boolean
+  favorites: number
+  videos: number
+  audios: number
+  locale: string
+  mediaTypeLabel: string
+  favoritesLabel: string
+  videosLabel: string
+  audiosLabel: string
+  searchLabel: string
+  onKindChange: (kind: LibraryTab) => void
+  onQueryChange: (query: string) => void
+}) {
+  const tabs = [
+    ['favorite', favoritesLabel, favorites],
+    ['video', videosLabel, videos],
+    ['audio', audiosLabel, audios]
+  ] as const
+  return (
+    <div className={`library-filter-row ${compact ? 'compact' : ''}`}>
+      <div className="library-type-tabs" role="tablist" aria-label={mediaTypeLabel}>
+        {tabs.map(([value, label, count]) => (
+          <button
+            key={value}
+            type="button"
+            className={kind === value ? 'active' : ''}
+            role="tab"
+            aria-selected={kind === value}
+            onClick={() => onKindChange(value)}
+          >
+            {compact ? label : `${label} (${count.toLocaleString(locale)})`}
+          </button>
+        ))}
+      </div>
+      <label className="library-search">
+        <Icon name="search" size={compact ? 17 : 21} />
+        <input
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder={searchLabel}
+          aria-label={searchLabel}
+        />
+      </label>
+    </div>
+  )
+}
+
 export function LibraryPage() {
-  const { t, settings, library, play, addMediaDialog, enqueue, toggleFavorite, removeMedia, confirm, prompt, openPath, openCtxMenu, navigate } = useRuntime()
+  const { t, settings, library, session, play, addMediaDialog, enqueue, toggleFavorite, removeMedia, confirm, prompt, openPath, openCtxMenu, navigate } = useRuntime()
   const locale = settings?.language === 'zh' ? 'zh-CN' : 'en-US'
   const reduceMotion = useReducedMotion()
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState<LibraryTab>('favorite')
-  const [view, setView] = useState<ViewMode>('grid')
+  const [view, setView] = useState<ViewMode>(readLibraryViewMode)
+  const [viewHasChanged, setViewHasChanged] = useState(false)
   const [sortPreference, setSortPreference] = useState<LibrarySortPreference>(readLibrarySortPreference)
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(() => new Set())
   const [collectionPreference, setCollectionPreference] = useState<LibraryCollectionPreference>(readLibraryCollectionPreference)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<number>>(() => new Set())
+  const pageRef = useRef<HTMLElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const toolbarSentinelRef = useRef<HTMLDivElement>(null)
+  const viewAnimationTimerRef = useRef(0)
+  const viewAnchorMediaIdRef = useRef<number | null>(null)
+  const locatedMediaIdRef = useRef<number | null>(null)
+  const collectionCleanupReadyRef = useRef(false)
+  const [toolbarStuck, setToolbarStuck] = useState(false)
+  const [gridWidth, setGridWidth] = useState(0)
+  const [gridScrollMargin, setGridScrollMargin] = useState(0)
   const { sortBy, sortDirection } = sortPreference
+
+  useEffect(() => {
+    const root = pageRef.current
+    const sentinel = toolbarSentinelRef.current
+    if (!root || !sentinel) return
+    const observer = new IntersectionObserver(([entry]) => {
+      const rootTop = entry.rootBounds?.top ?? root.getBoundingClientRect().top
+      setToolbarStuck(!entry.isIntersecting && entry.boundingClientRect.top <= rootTop)
+    }, { root, threshold: 0 })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     try {
@@ -263,7 +413,22 @@ export function LibraryPage() {
   useEffect(() => {
     const available = new Set(library.map((item) => item.id))
     setSelectedMediaIds((current) => new Set([...current].filter((id) => available.has(id))))
+    if (collectionCleanupReadyRef.current) {
+      setCollectionPreference((current) => pruneCollectionPreference(current, library))
+    }
   }, [library])
+
+  useEffect(() => {
+    let active = true
+    void p<MediaItem[]>(I.libraryGet).then((items) => {
+      if (!active) return
+      setCollectionPreference((current) => pruneCollectionPreference(current, items))
+      collectionCleanupReadyRef.current = true
+    }).catch(() => {
+      if (active) collectionCleanupReadyRef.current = true
+    })
+    return () => { active = false }
+  }, [])
 
   const cards = useMemo<LibraryCardData[]>(() => {
     const videos = library.filter((item) => !item.isAudio && !item.isImage)
@@ -368,6 +533,120 @@ export function LibraryPage() {
     return entries
   }, [collectionPreference, visibleCards])
 
+  const gridColumnGap = selectionMode ? LIBRARY_GRID_SELECTION_GAP : LIBRARY_GRID_COLUMN_GAP
+  const measuredGridWidth = gridWidth > 0
+    ? gridWidth
+    : LIBRARY_GRID_CARD_WIDTH * DEFAULT_LIBRARY_GRID_COLUMNS + gridColumnGap * (DEFAULT_LIBRARY_GRID_COLUMNS - 1)
+  const columnCount = view === 'list'
+    ? 1
+    : Math.max(1, Math.floor((measuredGridWidth + gridColumnGap) / (LIBRARY_GRID_CARD_WIDTH + gridColumnGap)))
+  const virtualRows = useMemo(
+    () => buildVirtualRows(displayEntries, columnCount, expandedCollections),
+    [columnCount, displayEntries, expandedCollections]
+  )
+  const estimateRowSize = useCallback((index: number) => {
+    const row = virtualRows[index]
+    if (view === 'list') {
+      if (!row?.expanded) return selectionMode ? 110 : 113
+      const collection = row.entries[0]?.entry
+      const itemCount = collection?.type === 'collection' ? collection.cards.length : 0
+      return 126 + itemCount * (selectionMode ? 110 : 113)
+    }
+    const rowGap = selectionMode ? 25 : 30
+    const cardHeight = LIBRARY_GRID_CARD_WIDTH * (166 / 252) + 70
+    if (!row?.expanded) return cardHeight + rowGap
+    const collection = row.entries[0]?.entry
+    const itemCount = collection?.type === 'collection' ? collection.cards.length : 0
+    return Math.max(240, Math.max(gridWidth, 760) * (166 / 252) + 70) + Math.ceil(itemCount / columnCount) * (cardHeight + rowGap) + 48
+  }, [columnCount, gridWidth, selectionMode, view, virtualRows])
+  const getVirtualRowKey = useCallback((index: number) => virtualRows[index]?.key ?? index, [virtualRows])
+  const rowVirtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
+    count: virtualRows.length,
+    getScrollElement: () => pageRef.current,
+    estimateSize: estimateRowSize,
+    getItemKey: getVirtualRowKey,
+    overscan: view === 'list' ? 8 : 3,
+    scrollMargin: gridScrollMargin
+  })
+
+  useLayoutEffect(() => {
+    const page = pageRef.current
+    const grid = gridRef.current
+    if (!page || !grid) return
+    const updateLayout = () => {
+      const nextWidth = grid.clientWidth
+      const nextMargin = grid.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop
+      setGridWidth((current) => Math.abs(current - nextWidth) > 0.5 ? nextWidth : current)
+      setGridScrollMargin((current) => Math.abs(current - nextMargin) > 0.5 ? nextMargin : current)
+    }
+    updateLayout()
+    const observer = new ResizeObserver(updateLayout)
+    observer.observe(page)
+    const header = page.querySelector<HTMLElement>('.library-header')
+    const overview = page.querySelector<HTMLElement>('.library-overview')
+    const toolbar = page.querySelector<HTMLElement>('.library-files-head')
+    if (header) observer.observe(header)
+    if (overview) observer.observe(overview)
+    if (toolbar) observer.observe(toolbar)
+    return () => observer.disconnect()
+  }, [displayEntries.length, toolbarStuck, view])
+
+  useLayoutEffect(() => {
+    rowVirtualizer.measure()
+  }, [columnCount, gridWidth, rowVirtualizer, selectionMode, view, virtualRows])
+
+  useLayoutEffect(() => {
+    const mediaId = viewAnchorMediaIdRef.current
+    if (mediaId == null) return
+    const rowIndex = virtualRows.findIndex((row) => row.entries.some(({ entry }) => entry.type === 'item'
+      ? entry.card.item.id === mediaId
+      : entry.cards.some((card) => card.item.id === mediaId)))
+    viewAnchorMediaIdRef.current = null
+    if (rowIndex >= 0) rowVirtualizer.scrollToIndex(rowIndex, { align: 'center' })
+  }, [rowVirtualizer, view, virtualRows])
+
+  const currentMediaId = session.mediaId
+  const currentMedia = currentMediaId == null ? null : library.find((item) => item.id === currentMediaId) ?? null
+  const currentMediaKind: MediaKind | null = currentMedia && !currentMedia.isImage ? (currentMedia.isAudio ? 'audio' : 'video') : null
+  const currentMediaRowIndex = useMemo(() => {
+    if (currentMediaId == null) return -1
+    return virtualRows.findIndex((row) => row.entries.some(({ entry }) => entry.type === 'item'
+      ? entry.card.item.id === currentMediaId
+      : entry.cards.some((card) => card.item.id === currentMediaId)))
+  }, [currentMediaId, virtualRows])
+
+  useEffect(() => {
+    locatedMediaIdRef.current = null
+    if (currentMediaId == null || currentMediaKind == null) return
+    setQuery('')
+    setKind(currentMediaKind)
+  }, [currentMediaId, currentMediaKind])
+
+  useEffect(() => {
+    if (currentMediaId == null || locatedMediaIdRef.current === currentMediaId || kind !== currentMediaKind || query) return
+    const collection = displayEntries.find((entry) => entry.type === 'collection' && entry.cards.some((card) => card.item.id === currentMediaId))
+    if (collection?.type === 'collection' && !expandedCollections.has(collection.id)) {
+      setExpandedCollections((current) => new Set(current).add(collection.id))
+      return
+    }
+    let locateFrame = 0
+    const frame = window.requestAnimationFrame(() => {
+      if (currentMediaRowIndex >= 0) {
+        rowVirtualizer.scrollToIndex(currentMediaRowIndex, { align: 'center', behavior: reduceMotion ? 'auto' : 'smooth' })
+      }
+      locateFrame = window.requestAnimationFrame(() => {
+        const target = pageRef.current?.querySelector<HTMLElement>(`[data-media-id="${currentMediaId}"]`)
+        if (!target) return
+        target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center', inline: 'nearest' })
+        locatedMediaIdRef.current = currentMediaId
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.cancelAnimationFrame(locateFrame)
+    }
+  }, [currentMediaId, currentMediaKind, currentMediaRowIndex, displayEntries, expandedCollections, kind, query, reduceMotion, rowVirtualizer])
+
   const visibleMediaIds = useMemo(() => visibleCards.map((card) => card.item.id), [visibleCards])
   const allVisibleSelected = visibleMediaIds.length > 0 && visibleMediaIds.every((id) => selectedMediaIds.has(id))
   const hasAnimatedEntriesRef = useRef(false)
@@ -376,6 +655,32 @@ export function LibraryPage() {
   useEffect(() => {
     if (displayEntries.length > 0) hasAnimatedEntriesRef.current = true
   }, [displayEntries.length])
+
+  useEffect(() => {
+    try { window.localStorage.setItem(LIBRARY_VIEW_STORAGE_KEY, view) } catch { void 0 }
+  }, [view])
+
+  useEffect(() => () => window.clearTimeout(viewAnimationTimerRef.current), [])
+
+  const switchLibraryView = (nextView: ViewMode) => {
+    if (nextView === view) return
+    const page = pageRef.current
+    const viewportCenter = (page?.scrollTop ?? 0) + (page?.clientHeight ?? 0) / 2
+    const virtualItems = rowVirtualizer.getVirtualItems()
+    let anchor = virtualItems[0] ?? null
+    for (const item of virtualItems.slice(1)) {
+      if (!anchor || Math.abs(item.start + item.size / 2 - viewportCenter) < Math.abs(anchor.start + anchor.size / 2 - viewportCenter)) anchor = item
+    }
+    const anchorEntry = anchor ? virtualRows[anchor.index]?.entries[0]?.entry : null
+    viewAnchorMediaIdRef.current = anchorEntry?.type === 'item' ? anchorEntry.card.item.id : anchorEntry?.cards[0]?.item.id ?? null
+    window.clearTimeout(viewAnimationTimerRef.current)
+    setView(nextView)
+    setViewHasChanged(true)
+    viewAnimationTimerRef.current = window.setTimeout(() => {
+      viewAnimationTimerRef.current = 0
+      setViewHasChanged(false)
+    }, 260)
+  }
 
   const filesTitle = kind === 'video' ? t('videoFiles') : kind === 'audio' ? t('audioFiles') : t('favorites')
 
@@ -459,7 +764,7 @@ export function LibraryPage() {
       { label: t('addToQueue'), icon: 'playlist', disabled: !item.sourceAvailable, onSelect: () => void enqueue([item.id]) },
       { label: item.favorite ? t('unfavorite') : t('favorite'), icon: 'heart', checked: item.favorite, onSelect: () => toggleFavorite(item.id) },
       { divider: true },
-      { label: t('regenerateCover'), icon: 'refresh', disabled: !item.sourceAvailable, onSelect: () => void p(I.probeRefreshMedia, item.id) },
+      { label: t('regenerateCover'), icon: 'refresh', disabled: !item.sourceAvailable, onSelect: () => void p(I.probeRegenerateCover, item.id) },
       { label: t('revealFile'), icon: 'folder', disabled: item.protocol !== 'local' || !item.sourceAvailable, onSelect: () => void openPath(item.url) },
       { divider: true },
       {
@@ -515,7 +820,7 @@ export function LibraryPage() {
   }
 
   return (
-    <main className="library-page" aria-labelledby="library-title">
+    <main ref={pageRef} className="library-page" aria-labelledby="library-title">
       <header className="library-header">
         <div className="library-heading">
           <div className="library-eyebrow">{t('yourCollection')}</div>
@@ -524,35 +829,21 @@ export function LibraryPage() {
 
         </div>
 
-        <div className="library-filter-row">
-          <div className="library-type-tabs" role="tablist" aria-label={t('mediaType')}>
-            {([
-              ['favorite', `${t('favorites')} (${libraryStats.favorites.toLocaleString(locale)})`],
-              ['video', `${t('allVideos')} (${libraryStats.videos.toLocaleString(locale)})`],
-              ['audio', `${t('allAudio')} (${libraryStats.audios.toLocaleString(locale)})`]
-            ] as const).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={kind === value ? 'active' : ''}
-                role="tab"
-                aria-selected={kind === value}
-                onClick={() => setKind(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="library-search">
-            <Icon name="search" size={21} />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('search')}
-              aria-label={t('search')}
-            />
-          </label>
-        </div>
+        <LibraryFilterControls
+          kind={kind}
+          query={query}
+          favorites={libraryStats.favorites}
+          videos={libraryStats.videos}
+          audios={libraryStats.audios}
+          locale={locale}
+          mediaTypeLabel={t('mediaType')}
+          favoritesLabel={t('favorites')}
+          videosLabel={t('allVideos')}
+          audiosLabel={t('allAudio')}
+          searchLabel={t('search')}
+          onKindChange={setKind}
+          onQueryChange={setQuery}
+        />
       </header>
 
       <section className="library-overview" aria-label={t('libraryOverview')}>
@@ -574,7 +865,26 @@ export function LibraryPage() {
       </section>
 
       <section className="library-files" aria-labelledby="library-files-title">
-        <div className="library-files-head">
+        <div ref={toolbarSentinelRef} className="library-toolbar-sentinel" aria-hidden="true" />
+        <div className={`library-files-head ${toolbarStuck ? 'is-stuck' : ''}`}>
+          {toolbarStuck && (
+            <LibraryFilterControls
+              compact
+              kind={kind}
+              query={query}
+              favorites={libraryStats.favorites}
+              videos={libraryStats.videos}
+              audios={libraryStats.audios}
+              locale={locale}
+              mediaTypeLabel={t('mediaType')}
+              favoritesLabel={t('favorites')}
+              videosLabel={t('allVideos')}
+              audiosLabel={t('allAudio')}
+              searchLabel={t('search')}
+              onKindChange={setKind}
+              onQueryChange={setQuery}
+            />
+          )}
           <h2 id="library-files-title">{filesTitle} <span>({visibleCards.length.toLocaleString(locale)})</span></h2>
           <div className="library-files-controls">
             <button
@@ -582,7 +892,7 @@ export function LibraryPage() {
               className={`library-selection-toggle ${selectionMode ? 'active' : ''}`}
               onClick={() => selectionMode ? leaveSelectionMode() : setSelectionMode(true)}
             >
-              <Icon name="check" size={17} />{selectionMode ? t('cancelSelection') : t('selectItems')}
+              <Icon name="check" size={17} /><span className="library-selection-label">{selectionMode ? t('cancelSelection') : t('selectItems')}</span>
             </button>
             <LibrarySortSelect
               value={sortBy}
@@ -603,7 +913,7 @@ export function LibraryPage() {
               <button
                 type="button"
                 className={view === 'grid' ? 'active' : ''}
-                onClick={() => setView('grid')}
+                onClick={() => switchLibraryView('grid')}
                 aria-label={t('gridView')}
                 aria-pressed={view === 'grid'}
               >
@@ -612,7 +922,7 @@ export function LibraryPage() {
               <button
                 type="button"
                 className={view === 'list' ? 'active' : ''}
-                onClick={() => setView('list')}
+                onClick={() => switchLibraryView('list')}
                 aria-label={t('listView')}
                 aria-pressed={view === 'list'}
               >
@@ -623,54 +933,72 @@ export function LibraryPage() {
         </div>
 
         {visibleCards.length > 0 ? (
-          <div className={`library-file-grid ${view === 'list' ? 'list-view' : ''} ${selectionMode ? 'selection-mode' : ''}`}>
-            <AnimatePresence mode="popLayout">
-              {displayEntries.map((entry, index) => {
-                const expanded = entry.type === 'collection' && expandedCollections.has(entry.id)
-                const entryDelay = shouldStaggerEntries ? Math.min(index, 8) * 0.035 : 0
-                return (
-                  <motion.div
-                    layout={!reduceMotion}
-                    key={entry.type === 'item' ? `item-${entry.card.item.id}` : `collection-${entry.id}`}
-                    className={`library-entry-motion ${expanded ? 'collection-expanded' : ''}`}
-                    style={{ '--library-entry-index': Math.min(index, 8) } as React.CSSProperties}
-                    initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.985, filter: 'brightness(0.62) saturate(0.72)' }}
-                    animate={{ opacity: 1, y: 0, scale: 1, filter: 'brightness(1) saturate(1)' }}
-                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6, scale: 0.985, filter: 'brightness(0.72) saturate(0.82)' }}
-                    transition={reduceMotion ? { duration: 0 } : {
-                      layout: { duration: 0.42, ease: [0.16, 1, 0.3, 1] },
-                      opacity: { duration: 0.24, delay: entryDelay },
-                      y: { duration: 0.44, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
-                      scale: { duration: 0.4, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
-                      filter: { duration: 0.5, delay: entryDelay, ease: [0.16, 1, 0.3, 1] }
-                    }}
-                  >
-                    {entry.type === 'item' ? (
-                      <LibraryFileCard card={entry.card} selected={selectedMediaIds.has(entry.card.item.id)} selectionMode={selectionMode} favoriteOnly={kind === 'favorite'} onToggleFavorite={() => void toggleFavorite(entry.card.item.id)} onOpen={() => openCard(entry.card)} onContextMenu={(event) => openCardMenu(event, entry.card)} />
-                    ) : (
-                      <LibraryCollectionCard
-                        collection={entry}
-                        expanded={expanded}
-                        onToggle={() => toggleCollection(entry.id)}
-                        selectionMode={selectionMode}
-                        selected={entry.cards.every((card) => selectedMediaIds.has(card.item.id))}
-                        selectedIds={selectedMediaIds}
-                        favoriteOnly={kind === 'favorite'}
-                        onSelect={() => toggleSelected(entry.cards.map((card) => card.item.id))}
-                        onToggleFavorite={(card) => void toggleFavorite(card.item.id)}
-                        onOpen={openCard}
-                        onContextMenu={openCardMenu}
-                        onCollectionContextMenu={openCollectionMenu}
-                        collectionLabel={t('mediaCollection')}
-                        itemLabel={t('collectionItems')}
-                        expandLabel={t('expandCollection')}
-                        collapseLabel={t('collapseCollection')}
-                      />
-                    )}
-                  </motion.div>
-                )
-              })}
-            </AnimatePresence>
+          <div
+            ref={gridRef}
+            className={`library-file-grid ${view === 'list' ? 'list-view' : ''} ${selectionMode ? 'selection-mode' : ''} ${viewHasChanged ? `view-switch-${view}` : ''}`}
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              '--library-columns': columnCount,
+              '--library-card-size': `${LIBRARY_GRID_CARD_WIDTH}px`
+            } as React.CSSProperties}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = virtualRows[virtualRow.index]
+              if (!row) return null
+              return (
+                <div
+                  key={virtualRow.key}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className={`library-virtual-row ${row.expanded ? 'collection-expanded' : ''}`}
+                  style={{ transform: `translate3d(0, ${virtualRow.start - gridScrollMargin}px, 0)` }}
+                >
+                  {row.entries.map(({ entry, index }) => {
+                    const expanded = entry.type === 'collection' && expandedCollections.has(entry.id)
+                    const entryDelay = shouldStaggerEntries ? Math.min(index, 8) * 0.035 : 0
+                    return (
+                      <motion.div
+                        key={displayEntryKey(entry)}
+                        className={`library-entry-motion ${expanded ? 'collection-expanded' : ''}`}
+                        style={{ '--library-entry-index': Math.min(index, 8) } as React.CSSProperties}
+                        initial={reduceMotion || !shouldStaggerEntries ? false : { opacity: 0, y: 10, scale: 0.985, filter: 'brightness(0.62) saturate(0.72)' }}
+                        animate={{ opacity: 1, y: 0, scale: 1, filter: 'brightness(1) saturate(1)' }}
+                        transition={reduceMotion ? { duration: 0 } : {
+                          opacity: { duration: 0.24, delay: entryDelay },
+                          y: { duration: 0.44, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
+                          scale: { duration: 0.4, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
+                          filter: { duration: 0.5, delay: entryDelay, ease: [0.16, 1, 0.3, 1] }
+                        }}
+                      >
+                        {entry.type === 'item' ? (
+                          <LibraryFileCard card={entry.card} current={entry.card.item.id === currentMediaId} selected={selectedMediaIds.has(entry.card.item.id)} selectionMode={selectionMode} favoriteOnly={kind === 'favorite'} onToggleFavorite={() => void toggleFavorite(entry.card.item.id)} onOpen={() => openCard(entry.card)} onContextMenu={(event) => openCardMenu(event, entry.card)} />
+                        ) : (
+                          <LibraryCollectionCard
+                            collection={entry}
+                            expanded={expanded}
+                            onToggle={() => toggleCollection(entry.id)}
+                            selectionMode={selectionMode}
+                            selected={entry.cards.every((card) => selectedMediaIds.has(card.item.id))}
+                            selectedIds={selectedMediaIds}
+                            currentMediaId={currentMediaId}
+                            favoriteOnly={kind === 'favorite'}
+                            onSelect={() => toggleSelected(entry.cards.map((card) => card.item.id))}
+                            onToggleFavorite={(card) => void toggleFavorite(card.item.id)}
+                            onOpen={openCard}
+                            onContextMenu={openCardMenu}
+                            onCollectionContextMenu={openCollectionMenu}
+                            collectionLabel={t('mediaCollection')}
+                            itemLabel={t('collectionItems')}
+                            expandLabel={t('expandCollection')}
+                            collapseLabel={t('collapseCollection')}
+                          />
+                        )}
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="library-empty">
@@ -718,6 +1046,7 @@ function LibraryCollectionCard({
   selectionMode,
   selected,
   selectedIds,
+  currentMediaId,
   favoriteOnly,
   onSelect,
   onToggleFavorite,
@@ -735,6 +1064,7 @@ function LibraryCollectionCard({
   selectionMode: boolean
   selected: boolean
   selectedIds: Set<number>
+  currentMediaId: number | null
   favoriteOnly: boolean
   onSelect: () => void
   onToggleFavorite: (card: LibraryCardData) => void
@@ -748,7 +1078,7 @@ function LibraryCollectionCard({
 }) {
   const previewCards = collection.cards.slice(0, 3)
   return (
-    <section className={`library-collection ${expanded ? 'expanded' : ''} ${selected ? 'selected' : ''}`} data-collection-id={collection.id}>
+    <section className={`library-collection ${expanded ? 'expanded' : ''} ${selected ? 'selected' : ''} ${collection.cards.some((card) => card.item.id === currentMediaId) ? 'contains-current' : ''}`} data-collection-id={collection.id}>
       <button
         type="button"
         className="library-collection-summary"
@@ -779,7 +1109,7 @@ function LibraryCollectionCard({
       {expanded && (
         <div className="library-collection-items">
           {collection.cards.map((card) => (
-            <LibraryFileCard key={card.item.id} card={card} selected={selectedIds.has(card.item.id)} selectionMode={selectionMode} favoriteOnly={favoriteOnly} onToggleFavorite={() => onToggleFavorite(card)} onOpen={() => onOpen(card)} onContextMenu={(event) => onContextMenu(event, card)} />
+            <LibraryFileCard key={card.item.id} card={card} current={card.item.id === currentMediaId} selected={selectedIds.has(card.item.id)} selectionMode={selectionMode} favoriteOnly={favoriteOnly} onToggleFavorite={() => onToggleFavorite(card)} onOpen={() => onOpen(card)} onContextMenu={(event) => onContextMenu(event, card)} />
           ))}
         </div>
       )}
@@ -787,8 +1117,9 @@ function LibraryCollectionCard({
   )
 }
 
-function LibraryFileCard({ card, selected, selectionMode, favoriteOnly, onToggleFavorite, onOpen, onContextMenu }: {
+function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly, onToggleFavorite, onOpen, onContextMenu }: {
   card: LibraryCardData
+  current: boolean
   selected: boolean
   selectionMode: boolean
   favoriteOnly: boolean
@@ -799,8 +1130,8 @@ function LibraryFileCard({ card, selected, selectionMode, favoriteOnly, onToggle
   const { t } = useRuntime()
   const favoriteLabel = card.item.favorite ? t('unfavorite') : t('favorite')
   return (
-    <div className={`library-file-card ${card.kind} ${selected ? 'selected' : ''}`} onContextMenu={onContextMenu} title={card.title}>
-      <button type="button" className="library-file-open" onClick={onOpen} aria-pressed={selectionMode ? selected : undefined}>
+    <div className={`library-file-card ${card.kind} ${selected ? 'selected' : ''} ${current ? 'is-current' : ''}`} data-media-id={card.item.id} onContextMenu={onContextMenu} title={card.title}>
+      <button type="button" className="library-file-open" onClick={onOpen} aria-current={current ? 'true' : undefined} aria-pressed={selectionMode ? selected : undefined}>
         <span className={`library-file-art ${card.kind === 'audio' ? 'audio-art' : ''}`}>
           {card.kind === 'audio' ? (
             <AudioArtwork artwork={card.artwork} />

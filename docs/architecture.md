@@ -22,7 +22,7 @@ flowchart LR
         Library[媒体库服务]
         Remote[网络协议服务]
         Download[下载管理器]
-        Metadata[标签、NFO 与刮削]
+        Metadata[本地标签与技术信息探测]
         System[设置、通知、日志与性能]
         MpvService[libmpv 播放服务]
     end
@@ -37,7 +37,6 @@ flowchart LR
     subgraph External[外部资源]
         LocalMedia[本地媒体]
         NetworkMedia[HTTP WebDAV SMB FTP SFTP]
-        Scrapers[TMDB TVmaze 自定义来源]
         Libmpv[libmpv 与 FFmpeg 解码能力]
     end
 
@@ -58,7 +57,7 @@ flowchart LR
 
     Library --> LocalMedia
     Remote --> NetworkMedia
-    Metadata --> Scrapers
+    Metadata --> LocalMedia
     MpvService --> Libmpv
     PlayerUI <--> MpvService
 ```
@@ -77,6 +76,6 @@ flowchart LR
 ## 主要数据流
 
 1. 界面通过 Preload 暴露的 API 发起操作，不直接访问 Node.js。
-2. 主进程通过 IPC 分发请求到媒体库、网络、下载、刮削或系统服务。
+2. 主进程通过 IPC 分发请求到媒体库、网络、下载、媒体探测或系统服务。
 3. 视频播放由主进程中的 libmpv 服务管理，渲染进程负责显示画面和播放器 UI。
 4. 媒体库、播放历史和下载任务写入 SQLite；设置与网络连接信息分别保存到配置和安全凭据文件。

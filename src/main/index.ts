@@ -18,10 +18,10 @@ import { PerformanceMonitor, DisplaySyncMonitor } from './system/performance'
 import { TrayController } from './platform/tray'
 import { ApplicationBridge } from './platform/bridge'
 import { CredentialStore } from './remote/credentials'
-import { RemoteSourceManager, readRemoteNfo, readRemoteTags } from './remote/manager'
+import { RemoteSourceManager, readRemoteTags } from './remote/manager'
 import { RemoteStreamProxy } from './remote/proxy'
 import { DownloadManager } from './remote/downloads'
-import { MediaProbeService, MediaIndexerService } from './media/probe'
+import { MediaProbeService } from './media/probe'
 import { LyricsService } from './media/lyrics'
 import { PlaybackIpc, makePlannerDeps } from './ipc'
 import { makeAppIcon } from './util'
@@ -53,7 +53,6 @@ let remote: RemoteSourceManager
 let proxy: RemoteStreamProxy
 let downloads: DownloadManager
 let probe: MediaProbeService
-let indexer: MediaIndexerService
 let lyrics: LyricsService
 let perfMonitor: PerformanceMonitor
 let displaySync: DisplaySyncMonitor
@@ -208,10 +207,7 @@ async function bootstrap(): Promise<void> {
   const protectedProxyPassword = await credentials.read('aurora:proxy', true)
   if (!protectedProxyPassword && legacyProxyPassword) await credentials.write('aurora:proxy', legacyProxyPassword, true)
   settingsStore.setTransient('proxyPassword', protectedProxyPassword ?? legacyProxyPassword)
-  const legacyMetadataToken = settingsStore.get('metadataTmdbAccessToken')
-  const protectedMetadataToken = await credentials.read('aurora:metadata:tmdb', true)
-  if (!protectedMetadataToken && legacyMetadataToken) await credentials.write('aurora:metadata:tmdb', legacyMetadataToken, true)
-  settingsStore.setTransient('metadataTmdbAccessToken', protectedMetadataToken ?? legacyMetadataToken)
+  await credentials.remove('aurora:metadata:tmdb')
   await applyNetworkProxy(settingsStore.all())
   remote = new RemoteSourceManager(dataPaths.sourcesFile, credentials, logger, broadcast)
   remote.init()
@@ -230,24 +226,22 @@ async function bootstrap(): Promise<void> {
     broadcast,
     dataPaths.covers,
     (item) => readRemoteTags(remote, item),
-    (item) => readRemoteNfo(remote, item),
-    settingsStore,
     sourceUrlForItem
   )
   probe.init()
-  ipcMain.handle(I.probeRefreshAll, () => probe.requestAll(true))
-  ipcMain.handle(I.probeRefreshMedia, (_event, mediaId: number) => probe.requestAgain(mediaId))
-  indexer = new MediaIndexerService(repo, probe, logger, broadcast)
-  indexer.init()
-
+  ipcMain.handle(I.probeRegenerateCover, (_event, mediaId: number) => probe.regenerateCover(mediaId))
   library = new LibraryController(repo, logger, broadcast, (items) => {
     for (const item of items) {
+      probe.forgetMedia(item.id)
       probe.removeTemporaryCover(item.coverPath)
       queueCtrl?.removeMediaId(item.id)
       playlistsCtrl?.removeMediaIdFromAll(item.id)
     }
   }, (items) => {
     for (const item of items) probe.request(item.id)
+  }, (item) => {
+    probe.forgetMedia(item.id)
+    probe.request(item.id)
   })
   library.init()
   queueCtrl = new QueueController(repo, logger, broadcast)

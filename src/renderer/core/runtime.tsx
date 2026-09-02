@@ -95,7 +95,6 @@ interface RuntimeState {
   downloads: DownloadTask[]
   downloadOptions: DownloadOptions
   probe: ProbeProgress
-  indexRunning: boolean
   nav: NavState
   session: SessionState
   tracks: MediaTrackCatalog
@@ -185,8 +184,6 @@ interface RuntimeApi {
   scanAll: () => Promise<void>
   requestProbe: (ids: number[]) => Promise<void>
   cancelProbe: () => Promise<void>
-  runIndex: () => Promise<void>
-  cancelIndex: () => Promise<void>
   windowMinimize: () => void
   windowMaximizeToggle: () => Promise<boolean>
   windowClose: () => void
@@ -222,7 +219,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [downloads, setDownloads] = useState<DownloadTask[]>([])
   const [downloadOptions, setDownloadOptions] = useState<DownloadOptions>({ threadCount: 4, speedLimitMbps: 0 })
   const [probe, setProbe] = useState<ProbeProgress>({ mode: 'single', running: false, current: null, completed: 0, total: 0, percent: 0, canceled: false })
-  const [indexRunning, setIndexRunning] = useState(false)
   const [nav, setNav] = useState<NavState>({ section: 'home' })
   const playerReturnNavRef = useRef<NavState>({ section: 'home' })
   const [session, setSession] = useState<SessionState>({
@@ -255,6 +251,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogRequest | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const toastTimersRef = useRef<Map<number, ToastTimer>>(new Map())
+  const libraryProgressRef = useRef({ mediaId: null as number | null, paused: true })
 
   const engineRef = useRef<PlayerEngine | null>(null)
   if (!engineRef.current) {
@@ -388,7 +385,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const playRequest = useCallback(
-    async (request: PlayRequest): Promise<PlayPlan> => {
+    async (request: PlayRequest, navigateToPlayer = true): Promise<PlayPlan> => {
       const plan = await p<PlayPlan>(I.playPlan, request)
       if (!plan.ok) {
         if (plan.result === 'localFileMissing') {
@@ -401,8 +398,8 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         return plan
       }
       engine.load(plan, session.volume, session.muted, 1)
-      navigate({ section: 'player' })
-      if (settings?.startInFullscreen) await p(I.winSetFullscreen, true)
+      if (navigateToPlayer) navigate({ section: 'player' })
+      if (navigateToPlayer && settings?.startInFullscreen) await p(I.winSetFullscreen, true)
       return plan
     },
     [engine, navigate, settings, t, toast, session.volume, session.muted]
@@ -459,7 +456,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
           action: targetIndex === currentIndex
             ? 'restart'
             : action === 'previous' ? 'playPrevious' : 'playNext'
-        })
+        }, false)
         return
       }
       if (action === 'next' && session.shuffle) {
@@ -840,14 +837,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     await p(I.probeCancel)
   }, [])
 
-  const runIndex = useCallback(async () => {
-    await p(I.indexRun)
-  }, [])
-
-  const cancelIndex = useCallback(async () => {
-    await p(I.indexCancel)
-  }, [])
-
   const windowMinimize = useCallback(() => window.aurora.windowMinimize(), [])
   const windowMaximizeToggle = useCallback(() => window.aurora.windowMaximizeToggle(), [])
   const windowClose = useCallback(() => {
@@ -892,7 +881,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return
       engine.setVolume(s.playbackVolume)
       setSettings(s)
-      const [lib, q, pl, src, fld, dls, dlOptions, prb, idx, info, wst, notifications] = await Promise.all([
+      const [lib, q, pl, src, fld, dls, dlOptions, prb, info, wst, notifications] = await Promise.all([
         p<MediaItem[]>(I.libraryGet),
         p<QueueEntry[]>(I.queueGet),
         p<Playlist[]>(I.playlistsGet),
@@ -901,7 +890,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         p<DownloadTask[]>(I.downloadsList),
         p<DownloadOptions>(I.downloadOptionsGet),
         p<ProbeProgress>(I.probeGet),
-        p<{ running: boolean }>(I.indexStatus),
         p<AppInfo>(I.appGetInfo),
         p<WindowState>(I.winState),
         p<NotificationRecord[]>(I.notificationsList)
@@ -915,7 +903,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       setDownloads(dls)
       setDownloadOptions(dlOptions)
       setProbe(prb)
-      setIndexRunning(idx.running)
       setAppInfo(info)
       setWin(wst)
       setNotificationHistory((current) => {
@@ -947,16 +934,33 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       onSession: (s) => {
         setSession(s)
         if (s.mediaId != null) {
-          setLibrary((prev) => prev.map((i) => (i.id === s.mediaId ? {
-            ...i,
-            lastPlayedAt: Date.now(),
-            lastPosition: s.position,
-            duration: s.duration || i.duration
-          } : i)))
+          const now = Date.now()
+          const progress = libraryProgressRef.current
+          const mediaChanged = progress.mediaId !== s.mediaId
+          const justPaused = s.paused && !progress.paused
+          progress.paused = s.paused
+          if (mediaChanged || justPaused) {
+            progress.mediaId = s.mediaId
+            setLibrary((prev) => {
+              const index = prev.findIndex((item) => item.id === s.mediaId)
+              if (index < 0) return prev
+              const next = [...prev]
+              next[index] = {
+                ...prev[index],
+                lastPlayedAt: now,
+                lastPosition: s.position,
+                duration: s.duration || prev[index].duration
+              }
+              return next
+            })
+          }
+        } else {
+          libraryProgressRef.current.mediaId = null
+          libraryProgressRef.current.paused = s.paused
         }
       },
       onTracks: setTracks,
-      onSpectrum: setSpectrum,
+      onSpectrum: nav.section === 'player' ? setSpectrum : () => void 0,
       onFps: () => void 0,
       onEnded: () => {
         if (settings?.autoplayNextMedia !== false) void navQueue('naturalEnd')
@@ -970,7 +974,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     return () => {
       e.ev = {}
     }
-  }, [navQueue, toast])
+  }, [nav.section, navQueue, toast])
 
   // ---- subscriptions ----
   useEffect(() => {
@@ -994,7 +998,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         .then((coverDataUrl) => p(I.probeResult, payload.mediaId, 0, coverDataUrl))
         .catch(() => p(I.probeResult, payload.mediaId, 0, null))
     }))
-    unsubs.push(window.aurora.on(E.indexProgress, (prg: { running: boolean }) => setIndexRunning(prg.running)))
     unsubs.push(window.aurora.on(E.downloadsChanged, (dls: DownloadTask[]) => {
       setDownloads(dls)
       const done = dls.find((d) => d.status === 'completed')
@@ -1113,8 +1116,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     scanAll,
     requestProbe,
     cancelProbe,
-    runIndex,
-    cancelIndex,
     patchSettings,
     windowMinimize,
     windowMaximizeToggle,
@@ -1141,7 +1142,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       downloads,
       downloadOptions,
       probe,
-      indexRunning,
       session,
       tracks,
       lyrics,
@@ -1158,7 +1158,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       ...api
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, indexRunning, nav, session, tracks, lyrics, spectrum, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
+    [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, nav, session, tracks, lyrics, spectrum, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
   )
 
   return <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>

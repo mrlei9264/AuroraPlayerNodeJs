@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
-import type { AppSettingsData, MetadataProvider } from '../../main/system/settings-types'
+import type { AppSettingsData } from '../../main/system/settings-types'
 import { Icon, type IconName } from '../core/icons'
 import { p, useRuntime } from '../core/runtime'
 import { I } from '../../shared/channels'
@@ -10,7 +10,7 @@ import bundledAppIconUrl from '../assets/icon/app_icon.png'
 import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS } from '../../shared/types'
 import { FloatingMenu } from '../shared/floatingMenu'
 
-type SettingsCategory = 'general' | 'proxy' | 'metadata' | 'appearance' | 'about'
+type SettingsCategory = 'general' | 'proxy' | 'appearance' | 'about'
 type DraftUpdater<T> = (update: (draft: T) => T) => void
 
 // Keep the last settings panel in renderer memory only. It is restored when
@@ -47,19 +47,9 @@ interface AppearanceDraft {
   reduceTransparency: boolean
 }
 
-interface MetadataDraft {
-  enabled: boolean
-  providers: MetadataProvider[]
-  sources: string[]
-  tmdbAccessToken: string
-  language: AppSettingsData['metadataLanguage']
-  overwriteExisting: boolean
-}
-
 const CATEGORIES: { key: SettingsCategory; icon: IconName }[] = [
   { key: 'general', icon: 'sliders' },
   { key: 'proxy', icon: 'language' },
-  { key: 'metadata', icon: 'search' },
   { key: 'appearance', icon: 'paintbrush' },
   { key: 'about', icon: 'info' }
 ]
@@ -67,7 +57,7 @@ const CATEGORIES: { key: SettingsCategory; icon: IconName }[] = [
 const SETTINGS_COPY = {
   en: {
     categoriesLabel: 'Settings categories',
-    categories: { general: 'General', proxy: 'Proxy', metadata: 'Media Info', appearance: 'Appearance', about: 'About' },
+    categories: { general: 'General', proxy: 'Proxy', appearance: 'Appearance', about: 'About' },
     restoreDefaults: 'Restore Defaults',
     language: 'Language',
     english: 'English (US)',
@@ -97,28 +87,6 @@ const SETTINGS_COPY = {
     hidePassword: 'Hide password',
     bypassLocal: 'Bypass proxy for local addresses',
     bypassLocalDescription: 'Connect directly to local network resources.',
-    metadataLookup: 'Search media information online',
-    metadataLookupDescription: 'Automatically fetch titles, artwork and descriptive information when media is added.',
-    metadataProviders: 'Scraping sources',
-    metadataProvidersDescription: 'Sources are tried from top to bottom according to media type.',
-    tmdbDescription: 'Movies and TV series · API Read Access Token or v3 API key required',
-    tvmazeDescription: 'TV series · no account required',
-    customDescription: 'Parse JSON-LD or Open Graph metadata from your own search pages',
-    tmdbToken: 'TMDB credential',
-    tmdbTokenPlaceholder: 'API Read Access Token or v3 API key',
-    metadataLanguage: 'Metadata language',
-    metadataLanguageDescription: 'Preferred language and storefront used by supported sources.',
-    metadataOverwrite: 'Prefer online metadata',
-    metadataOverwriteDescription: 'Replace existing embedded title, artist and artwork when a source returns a match.',
-    metadataSources: 'Custom websites',
-    metadataSourcesDescription: 'Enter a search page address. Use {query} where the media title should appear.',
-    metadataSourcePlaceholder: 'e.g. https://example.com/search?q={query}',
-    addMetadataSource: 'Add website',
-    removeMetadataSource: 'Remove website',
-    refreshMetadata: 'Re-fetch existing media',
-    refreshMetadataDescription: 'Re-check videos using the selected sources. Local tags and video frame capture remain available as fallbacks.',
-    refreshStarted: 'Existing media will be parsed again in the background',
-    metadataError: 'Unable to apply media information settings',
     colorTheme: 'Color theme',
     colorThemeDescription: 'Changes the background, surfaces, text, controls, and player colors throughout the application.',
     appearanceThemeGroup: 'Theme & branding',
@@ -172,7 +140,7 @@ const SETTINGS_COPY = {
   },
   zh: {
     categoriesLabel: '设置分类',
-    categories: { general: '通用', proxy: '代理', metadata: '媒体信息', appearance: '外观', about: '关于' },
+    categories: { general: '通用', proxy: '代理', appearance: '外观', about: '关于' },
     restoreDefaults: '恢复默认设置',
     language: '语言',
     english: '英语（美国）',
@@ -202,28 +170,6 @@ const SETTINGS_COPY = {
     hidePassword: '隐藏密码',
     bypassLocal: '本地地址不使用代理',
     bypassLocalDescription: '连接本地网络资源时使用直连。',
-    metadataLookup: '联网搜索媒体信息',
-    metadataLookupDescription: '媒体加入媒体库后，自动获取标题、封面和简介等信息。',
-    metadataProviders: '刮削来源',
-    metadataProvidersDescription: '程序会根据媒体类型，按照从上到下的顺序尝试可用来源。',
-    tmdbDescription: '电影与剧集 · 需要 API Read Access Token 或 v3 API Key',
-    tvmazeDescription: '剧集信息 · 无需账号',
-    customDescription: '从自定义搜索页面解析 JSON-LD 或 Open Graph 信息',
-    tmdbToken: 'TMDB 凭据',
-    tmdbTokenPlaceholder: 'API Read Access Token 或 v3 API Key',
-    metadataLanguage: '元数据语言',
-    metadataLanguageDescription: '支持的刮削源会优先返回该语言和地区的信息。',
-    metadataOverwrite: '优先使用在线信息',
-    metadataOverwriteDescription: '刮削成功时，替换文件内嵌的标题、艺术家和封面。',
-    metadataSources: '自定义网站',
-    metadataSourcesDescription: '填写搜索页面地址，使用 {query} 表示媒体标题的位置。',
-    metadataSourcePlaceholder: '例如 https://example.com/search?q={query}',
-    addMetadataSource: '添加网站',
-    removeMetadataSource: '删除网站',
-    refreshMetadata: '重新解析已有媒体',
-    refreshMetadataDescription: '使用当前来源重新检查视频；失败时仍会使用内嵌标签或截取视频画面。',
-    refreshStarted: '已有媒体将在后台重新解析',
-    metadataError: '无法应用媒体信息设置',
     colorTheme: '颜色主题',
     colorThemeDescription: '同步修改整个程序的背景、面板、文字、控件与播放器颜色。',
     appearanceThemeGroup: '主题与品牌',
@@ -309,15 +255,6 @@ const defaultAppearance: AppearanceDraft = {
   reduceTransparency: false
 }
 
-const defaultMetadata: MetadataDraft = {
-  enabled: true,
-  providers: ['tvmaze'],
-  sources: [],
-  tmdbAccessToken: '',
-  language: 'zh-CN',
-  overwriteExisting: false
-}
-
 function generalFrom(settings: AppSettingsData): GeneralDraft {
   return {
     language: settings.language,
@@ -354,24 +291,12 @@ function appearanceFrom(settings: AppSettingsData): AppearanceDraft {
   }
 }
 
-function metadataFrom(settings: AppSettingsData): MetadataDraft {
-  return {
-    enabled: settings.metadataLookupEnabled,
-    providers: settings.metadataProviders,
-    sources: settings.metadataSources,
-    tmdbAccessToken: settings.metadataTmdbAccessToken,
-    language: settings.metadataLanguage,
-    overwriteExisting: settings.metadataOverwriteExisting
-  }
-}
-
 export function SettingsPage() {
   const { settings, patchSettings, toast, appInfo, updateStatus, checkUpdate, openPath } = useRuntime()
   const copy = SETTINGS_COPY[settings.language]
   const [category, setCategory] = useState<SettingsCategory>(() => lastSettingsCategory)
   const [general, setGeneral] = useState<GeneralDraft>(() => generalFrom(settings))
   const [proxy, setProxy] = useState<ProxyDraft>(() => proxyFrom(settings))
-  const [metadata, setMetadata] = useState<MetadataDraft>(() => metadataFrom(settings))
   const [appearance, setAppearance] = useState<AppearanceDraft>(() => appearanceFrom(settings))
   const [showProxyPassword, setShowProxyPassword] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
@@ -386,7 +311,6 @@ export function SettingsPage() {
   useEffect(() => {
     setGeneral(generalFrom(settings))
     setProxy(proxyFrom(settings))
-    setMetadata(metadataFrom(settings))
     setAppearance(appearanceFrom(settings))
   }, [settings])
 
@@ -438,23 +362,9 @@ export function SettingsPage() {
     }).catch(() => toast('error', copy.appearanceError))
   }
 
-  const updateMetadata: DraftUpdater<MetadataDraft> = (update) => {
-    const next = update(metadata)
-    setMetadata(next)
-    void patchSettings({
-      metadataLookupEnabled: next.enabled,
-      metadataProviders: next.providers,
-      metadataSources: next.sources,
-      metadataTmdbAccessToken: next.tmdbAccessToken,
-      metadataLanguage: next.language,
-      metadataOverwriteExisting: next.overwriteExisting
-    }).catch(() => toast('error', copy.metadataError))
-  }
-
   const restoreCurrentCategory = () => {
     if (category === 'general') updateGeneral(() => defaultGeneral)
     if (category === 'proxy') updateProxy(() => defaultProxy)
-    if (category === 'metadata') updateMetadata(() => defaultMetadata)
     if (category === 'appearance') {
       setAppearance(defaultAppearance)
       applyTypographySettings(defaultAppearance)
@@ -473,7 +383,7 @@ export function SettingsPage() {
 
   const signalSettingFeedback = (target: EventTarget | null) => {
     if (reduceMotion || !(target instanceof HTMLElement)) return
-    const surface = target.closest<HTMLElement>('.settings-row, .settings-toggle-card, .settings-provider-card, .settings-source-field')
+    const surface = target.closest<HTMLElement>('.settings-row, .settings-toggle-card')
     if (!surface) return
     const previousTimer = feedbackTimersRef.current.get(surface)
     if (previousTimer) window.clearTimeout(previousTimer)
@@ -560,17 +470,6 @@ export function SettingsPage() {
                 />
               )}
               {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} onThemeChange={() => setThemePulse((pulse) => pulse + 1)} />}
-              {category === 'metadata' && (
-                <MetadataPanel
-                  value={metadata}
-                  onChange={updateMetadata}
-                  copy={copy}
-                  onRefresh={async () => {
-                    await p(I.probeRefreshAll)
-                    toast('success', copy.refreshStarted)
-                  }}
-                />
-              )}
               {category === 'about' && (
                 <AboutPanel
                   version={appInfo?.version ?? '1.0.0'}
@@ -698,127 +597,6 @@ function ProxyPanel({
       </SettingRow>
       <SettingRow label={copy.bypassLocal} description={copy.bypassLocalDescription}>
         <SettingsSwitch checked={value.bypassLocal} label={copy.bypassLocal} onChange={(checked) => onChange((draft) => ({ ...draft, bypassLocal: checked }))} />
-      </SettingRow>
-    </div>
-  )
-}
-
-function MetadataPanel({
-  value,
-  onChange,
-  copy,
-  onRefresh
-}: {
-  value: MetadataDraft
-  onChange: DraftUpdater<MetadataDraft>
-  copy: SettingsCopy
-  onRefresh: () => Promise<void>
-}) {
-  const providerEnabled = (provider: MetadataProvider) => value.providers.includes(provider)
-  const toggleProvider = (provider: MetadataProvider, enabled: boolean) => {
-    onChange((draft) => ({
-      ...draft,
-      providers: (['tmdb', 'tvmaze', 'custom'] as MetadataProvider[])
-        .filter((current) => current === provider ? enabled : draft.providers.includes(current))
-    }))
-  }
-  const updateSource = (index: number, source: string) => {
-    onChange((draft) => ({
-      ...draft,
-      sources: draft.sources.map((current, currentIndex) => currentIndex === index ? source : current)
-    }))
-  }
-
-  const removeSource = (index: number) => {
-    onChange((draft) => ({ ...draft, sources: draft.sources.filter((_, currentIndex) => currentIndex !== index) }))
-  }
-
-  return (
-    <div className="settings-rows settings-metadata-rows">
-      <SettingRow label={copy.metadataLookup} description={copy.metadataLookupDescription}>
-        <SettingsSwitch checked={value.enabled} label={copy.metadataLookup} onChange={(enabled) => onChange((draft) => ({ ...draft, enabled }))} />
-      </SettingRow>
-      <div className="settings-metadata-section">
-        <div className="settings-row-copy">
-          <span className="settings-row-label">
-            <span>{copy.metadataProviders}</span>
-            <SettingsHelp label={copy.metadataProviders} description={copy.metadataProvidersDescription} />
-          </span>
-        </div>
-        <div className="settings-provider-list">
-          {([
-            ['tmdb', 'TMDB', copy.tmdbDescription],
-            ['tvmaze', 'TVmaze', copy.tvmazeDescription],
-            ['custom', copy.metadataSources, copy.customDescription]
-          ] as const).map(([provider, label, description]) => (
-            <div className={`settings-provider-card ${providerEnabled(provider) ? 'active' : ''}`} key={provider}>
-              <div className="settings-provider-copy">
-                <strong>{label}</strong>
-                <small>{description}</small>
-              </div>
-              <SettingsSwitch checked={providerEnabled(provider)} label={label} onChange={(enabled) => toggleProvider(provider, enabled)} />
-              {provider === 'tmdb' && providerEnabled('tmdb') && (
-                <input
-                  className="settings-input settings-provider-credential"
-                  type="password"
-                  aria-label={copy.tmdbToken}
-                  title={copy.tmdbToken}
-                  placeholder={copy.tmdbTokenPlaceholder}
-                  value={value.tmdbAccessToken}
-                  onChange={(event) => onChange((draft) => ({ ...draft, tmdbAccessToken: event.target.value }))}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-      <SettingRow label={copy.metadataLanguage} description={copy.metadataLanguageDescription}>
-        <SettingsSelect
-          label={copy.metadataLanguage}
-          value={value.language}
-          className="settings-metadata-language"
-          options={[{ value: 'zh-CN', label: '简体中文' }, { value: 'en-US', label: 'English (US)' }]}
-          onChange={(language) => onChange((draft) => ({ ...draft, language: language as MetadataDraft['language'] }))}
-        />
-      </SettingRow>
-      <SettingRow label={copy.metadataOverwrite} description={copy.metadataOverwriteDescription}>
-        <SettingsSwitch checked={value.overwriteExisting} label={copy.metadataOverwrite} onChange={(overwriteExisting) => onChange((draft) => ({ ...draft, overwriteExisting }))} />
-      </SettingRow>
-      {providerEnabled('custom') && (
-      <div className="settings-metadata-section">
-        <div className="settings-row-copy">
-          <span className="settings-row-label">
-            <span>{copy.metadataSources}</span>
-            <SettingsHelp label={copy.metadataSources} description={copy.metadataSourcesDescription} />
-          </span>
-        </div>
-        <div className="settings-source-list">
-          {value.sources.map((source, index) => (
-            <div className="settings-source-field" key={index}>
-              <input
-                className="settings-input"
-                aria-label={`${copy.metadataSources} ${index + 1}`}
-                placeholder={copy.metadataSourcePlaceholder}
-                value={source}
-                onChange={(event) => updateSource(index, event.target.value)}
-              />
-              <button type="button" className="settings-icon-button" aria-label={copy.removeMetadataSource} title={copy.removeMetadataSource} onClick={() => removeSource(index)}>
-                <Icon name="trash" size={19} />
-              </button>
-            </div>
-          ))}
-          <button type="button" className="settings-button settings-add-source" onClick={() => onChange((draft) => ({ ...draft, sources: [...draft.sources, 'https://'] }))}>
-            <Icon name="plus" size={18} />
-            {copy.addMetadataSource}
-          </button>
-        </div>
-      </div>
-      )}
-      <SettingRow label={copy.refreshMetadata} description={copy.refreshMetadataDescription}>
-        <button type="button" className="settings-button settings-button-primary" onClick={() => void onRefresh()}>
-          <Icon name="refresh" size={18} />
-          {copy.refreshMetadata}
-        </button>
       </SettingRow>
     </div>
   )

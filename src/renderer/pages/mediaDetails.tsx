@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { formatTime, type MediaTrackCatalog } from '../../shared/types'
 import { I } from '../../shared/channels'
 import { Icon } from '../core/icons'
@@ -8,35 +8,26 @@ import { AudioArtwork } from './mediaArtwork'
 
 const COPY = {
   en: {
-    back: 'Back to library', play: 'Play', refresh: 'Refresh metadata', refreshing: 'Refreshing…',
-    overview: 'Overview', noOverview: 'No overview was returned by the selected scraping source.',
-    scrapedInfo: 'Scraped information', technical: 'Technical details', tracks: 'Tracks', file: 'File information',
-    year: 'Year', genres: 'Genres', rating: 'Rating', source: 'Scraping source', scrapedAt: 'Last scraped',
-    mediaType: 'Media type', movie: 'Movie', series: 'Series', episode: 'Episode', audio: 'Audio', video: 'Video',
+    back: 'Back to library', play: 'Play', technical: 'Technical details', tracks: 'Tracks', file: 'File information',
+    audio: 'Audio', video: 'Video',
     duration: 'Duration', resolution: 'Resolution', frameRate: 'Frame rate', videoCodec: 'Video codec', hdr: 'HDR',
     audioTracks: 'Audio', subtitleTracks: 'Subtitles', chapters: 'Chapters', none: 'None',
-    fileName: 'File name', location: 'Location', fileSize: 'File size', protocol: 'Protocol', unavailable: 'Source unavailable',
-    refreshed: 'Metadata refresh started', refreshFailed: 'Unable to refresh metadata'
+    fileName: 'File name', location: 'Location', fileSize: 'File size', protocol: 'Protocol', unavailable: 'Source unavailable'
   },
   zh: {
-    back: '返回媒体库', play: '播放', refresh: '重新刮削', refreshing: '正在刮削…',
-    overview: '内容简介', noOverview: '当前刮削源没有返回内容简介。',
-    scrapedInfo: '刮削信息', technical: '技术规格', tracks: '轨道信息', file: '文件信息',
-    year: '年份', genres: '分类', rating: '评分', source: '刮削来源', scrapedAt: '最近刮削',
-    mediaType: '媒体类型', movie: '电影', series: '剧集', episode: '单集', audio: '音频', video: '视频',
+    back: '返回媒体库', play: '播放', technical: '技术规格', tracks: '轨道信息', file: '文件信息',
+    audio: '音频', video: '视频',
     duration: '时长', resolution: '分辨率', frameRate: '帧率', videoCodec: '视频编码', hdr: 'HDR',
     audioTracks: '音频', subtitleTracks: '字幕', chapters: '章节', none: '无',
-    fileName: '文件名', location: '位置', fileSize: '文件大小', protocol: '协议', unavailable: '媒体来源不可用',
-    refreshed: '已开始重新刮削媒体信息', refreshFailed: '无法重新刮削媒体信息'
+    fileName: '文件名', location: '位置', fileSize: '文件大小', protocol: '协议', unavailable: '媒体来源不可用'
   }
 } as const
 
 export function MediaDetailsPage({ mediaId }: { mediaId: number }) {
-  const { settings, library, navigate, play, toast, openPath } = useRuntime()
+  const { settings, library, navigate, play, openPath } = useRuntime()
   const copy = COPY[settings.language]
   const item = library.find((candidate) => candidate.id === mediaId)
   const [tracks, setTracks] = useState<MediaTrackCatalog | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -47,33 +38,11 @@ export function MediaDetailsPage({ mediaId }: { mediaId: number }) {
     return () => { active = false }
   }, [mediaId])
 
-  const metadata = item?.scrapedMetadata
   const title = item?.title || item?.fileName || ''
-  const mediaType = metadata?.mediaType || (item?.isAudio ? 'audio' : 'video')
   const artwork = item?.coverPath ? coverUrl(item.coverPath) : ''
-  const facts = useMemo(() => item ? [
-    metadata?.year ? [copy.year, String(metadata.year)] : null,
-    metadata?.genres?.length ? [copy.genres, metadata.genres.join(' / ')] : null,
-    Number.isFinite(metadata?.rating) ? [copy.rating, `${Number(metadata?.rating).toFixed(1)} / 10`] : null,
-    [copy.mediaType, copy[mediaType as keyof typeof copy] || mediaType],
-    metadata?.source ? [copy.source, metadata.source] : null,
-    item.scrapedAt ? [copy.scrapedAt, new Date(item.scrapedAt).toLocaleString(settings.language === 'zh' ? 'zh-CN' : 'en-US')] : null
-  ].filter((value): value is string[] => Boolean(value)) : [], [copy, item, mediaType, metadata, settings.language])
 
   if (!item) {
     return <main className="media-details-page"><button className="media-details-back" onClick={() => navigate({ section: 'library' })}><Icon name="chevronLeft" />{copy.back}</button></main>
-  }
-
-  const refresh = async () => {
-    setRefreshing(true)
-    try {
-      await p(I.probeRefreshMedia, item.id)
-      toast('success', copy.refreshed)
-    } catch {
-      toast('error', copy.refreshFailed)
-    } finally {
-      window.setTimeout(() => setRefreshing(false), 500)
-    }
   }
 
   const resolution = tracks?.width && tracks.height ? `${tracks.width} × ${tracks.height}` : '—'
@@ -92,33 +61,20 @@ export function MediaDetailsPage({ mediaId }: { mediaId: number }) {
           {item.isAudio ? <AudioArtwork artwork={artwork || null} /> : artwork ? <img src={artwork} alt="" /> : <div className="media-details-art-fallback"><Icon name="video" size={46} /></div>}
         </div>
         <div className="media-details-heading">
-          <div className="media-details-kicker"><span>{metadata?.source || item.protocol}</span>{metadata?.year && <span>{metadata.year}</span>}</div>
+          <div className="media-details-kicker"><span>{item.protocol}</span></div>
           <h1>{title}</h1>
           {item.artist && <p className="media-details-byline">{item.artist}{item.album ? ` · ${item.album}` : ''}</p>}
           <div className="media-details-badges">
-            <span><Icon name={item.isAudio ? 'music' : 'video'} size={14} />{copy[mediaType as keyof typeof copy] || mediaType}</span>
-            {metadata?.rating != null && <span className="rating"><Icon name="starFilled" size={14} />{metadata.rating.toFixed(1)}</span>}
-            {metadata?.genres?.map((genre) => <span key={genre}>{genre}</span>)}
+            <span><Icon name={item.isAudio ? 'music' : 'video'} size={14} />{item.isAudio ? copy.audio : copy.video}</span>
           </div>
           <div className="media-details-actions">
             <button className="media-details-play" disabled={!item.sourceAvailable} onClick={() => void play([item.id], 0)}><Icon name="play" size={17} />{copy.play}</button>
-            <button className="media-details-refresh" disabled={refreshing || !item.sourceAvailable} onClick={() => void refresh()}><Icon name="refresh" size={17} />{refreshing ? copy.refreshing : copy.refresh}</button>
           </div>
           {!item.sourceAvailable && <div className="media-details-unavailable"><Icon name="alert" size={16} />{copy.unavailable}</div>}
         </div>
       </section>
 
       <section className="media-details-content">
-        <article className="media-details-panel media-details-overview">
-          <h2>{copy.overview}</h2>
-          <p className={!metadata?.description ? 'empty' : ''}>{metadata?.description || copy.noOverview}</p>
-        </article>
-
-        <article className="media-details-panel">
-          <h2>{copy.scrapedInfo}</h2>
-          <dl className="media-details-facts">{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-        </article>
-
         <article className="media-details-panel wide">
           <h2>{copy.technical}</h2>
           <div className="media-details-specs">

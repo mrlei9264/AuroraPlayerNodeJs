@@ -258,11 +258,9 @@ export function VideoPlayerPage() {
 
   const buffering = session.phase !== 'error' && (session.buffering || session.phase === 'loading' || session.phase === 'buffering')
   const meta = useMemo(() => {
-    const scraped = item?.scrapedMetadata
-    const genres = scraped?.genres?.slice(0, 2).join(' / ')
-    const parts = [formatMetaDuration(duration), scraped?.year, genres, item?.protocol || 'Local']
+    const parts = [formatMetaDuration(duration), item?.protocol || 'Local']
     return parts.filter(Boolean).join('  ·  ')
-  }, [duration, item?.protocol, item?.scrapedMetadata])
+  }, [duration, item?.protocol])
 
   const cycleSpeed = useCallback(() => {
     const currentIndex = SPEEDS.indexOf(session.speed)
