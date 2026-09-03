@@ -31,6 +31,7 @@ import { initializeAppDataPaths, type AppDataPaths } from './system/dataPaths'
 import { NotificationHistoryStore } from './system/notifications'
 import { colorThemeAt } from '../shared/colorThemes'
 import { applyNetworkProxy, installProxyAuthentication } from './system/networkProxy'
+import electronMpvPackage from 'electron-mpv-video/package.json'
 
 let mainWindow: BrowserWindow | null = null
 let mpvMain: MpvMain | null = null
@@ -399,12 +400,14 @@ function registerWindowIpc(): void {
     return win ? { maximized: win.isMaximized(), fullscreen: win.isFullScreen() } : { maximized: false, fullscreen: false }
   })
   ipcMain.handle(I.appGetInfo, () => ({
+    name: app.getName(),
     version: app.getVersion(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
     node: process.versions.node,
     platform: process.platform,
     arch: process.arch,
+    mediaEngine: `libmpv via electron-mpv-video ${electronMpvPackage.version}`,
     homeDir: os.homedir(),
     userData: dataPaths.runtime,
     dataRoot: dataPaths.root,

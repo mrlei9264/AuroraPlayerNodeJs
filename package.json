@@ -12,6 +12,8 @@
     "build": "node scripts/build.mjs",
     "start": "electron .",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "version:check": "node scripts/version.mjs check",
+    "version:set": "node scripts/version.mjs set",
     "postinstall": "patch-package && npm run mpv:rebuild",
     "mpv:rebuild": "node scripts/patch-node-gyp-vs2026.mjs && node scripts/rebuild-mpv.mjs",
     "dist": "npm run build && electron-builder --win --x64 --config electron-builder.json"

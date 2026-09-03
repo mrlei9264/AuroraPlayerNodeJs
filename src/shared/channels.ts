@@ -6,6 +6,7 @@ export const I = {
   appGetInfo: 'app:getInfo',
   appQuit: 'app:quit',
   appCheckUpdate: 'app:checkUpdate',
+  appOpenUpdatePage: 'app:openUpdatePage',
   appExportBundle: 'app:exportBundle',
   appOpenPath: 'app:openPath',
   winMinimize: 'win:minimize',

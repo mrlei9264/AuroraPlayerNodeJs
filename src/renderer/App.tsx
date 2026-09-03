@@ -59,6 +59,22 @@ function ShellInner() {
   }, [settings?.language])
 
   useEffect(() => {
+    const manageGlobalKeyboardFocus = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        event.preventDefault()
+        return
+      }
+      if (event.key !== 'Escape') return
+      window.requestAnimationFrame(() => {
+        const focused = document.activeElement
+        if (focused instanceof HTMLElement && focused.matches('button, a[href], [role="button"], [role="tab"], [role="option"]')) focused.blur()
+      })
+    }
+    document.addEventListener('keydown', manageGlobalKeyboardFocus, true)
+    return () => document.removeEventListener('keydown', manageGlobalKeyboardFocus, true)
+  }, [])
+
+  useEffect(() => {
     if (!settings) return
     document.documentElement.classList.toggle('reduce-motion', settings.reducedMotion)
     document.documentElement.classList.toggle('reduce-transparency', settings.reduceTransparency)

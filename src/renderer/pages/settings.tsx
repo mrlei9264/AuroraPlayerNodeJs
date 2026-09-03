@@ -7,7 +7,7 @@ import { I } from '../../shared/channels'
 import { applyTypographySettings } from '../core/appearance'
 import { COLOR_THEMES, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
-import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS } from '../../shared/types'
+import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS, type UpdateStatus } from '../../shared/types'
 import { FloatingMenu } from '../shared/floatingMenu'
 
 type SettingsCategory = 'general' | 'proxy' | 'appearance' | 'about'
@@ -23,7 +23,6 @@ interface GeneralDraft {
   navigationPlayPrimaryAction: AppSettingsData['navigationPlayPrimaryAction']
   resumePlayback: boolean
   rememberPlaybackPosition: boolean
-  startInFullscreen: boolean
   performanceHudEnabled: boolean
 }
 
@@ -69,9 +68,6 @@ const SETTINGS_COPY = {
     togglePlayback: 'Play / Pause',
     resumePlayback: 'Resume playback',
     rememberPosition: 'Remember playback position',
-    startFullscreen: 'Start in fullscreen',
-    windowed: 'Windowed',
-    fullscreen: 'Fullscreen',
     performanceHud: 'Performance HUD',
     performanceHudDescription: 'Show CPU, GPU, memory usage in MB, and the application rendering refresh rate.',
     enableProxy: 'Enable proxy',
@@ -107,14 +103,14 @@ const SETTINGS_COPY = {
     reduceMotion: 'Reduce motion',
     application: 'Application',
     version: 'Version',
-    build: 'Build',
+    platform: 'Platform',
+    runtime: 'Application runtime',
     mediaEngine: 'Media Engine',
-    license: 'License',
+    applicationLicense: 'Application license',
     supportedFormats: 'Supported file formats',
     supportedFormatsDescription: 'Extensions recognized by the library and available for local or network playback. Codec availability is provided by the bundled media engine.',
     videoFormats: 'Video',
     audioFormats: 'Audio',
-    lyricsFormats: 'Lyrics',
     embeddedSubtitleSupport: 'Subtitle tracks embedded in supported video containers are detected automatically. Standalone subtitle files are not imported as media items.',
     dataStorage: 'Application data',
     dataStorageDescription: 'All files created by Aurora Player are organized under this data directory. Original media files remain in their existing locations.',
@@ -133,6 +129,14 @@ const SETTINGS_COPY = {
     checking: 'Checking...',
     upToDate: 'Up to Date',
     checkUpdates: 'Check for Updates',
+    softwareUpdate: 'Software update',
+    updateDescription: 'Check GitHub Releases for the latest stable version of Aurora Player.',
+    updateAvailableFor: (version: string) => `Aurora Player ${version} is available.`,
+    currentVersionIsLatest: (version: string) => `Version ${version} is the latest version.`,
+    updateCheckFailed: 'Unable to check for updates. Please verify the network or proxy settings and try again.',
+    getUpdate: 'Get Update',
+    retryUpdate: 'Try Again',
+    checkAgain: 'Check Again',
     generalError: 'Unable to apply general settings',
     proxyError: 'Unable to apply proxy settings',
     appearanceError: 'Unable to apply appearance settings',
@@ -152,9 +156,6 @@ const SETTINGS_COPY = {
     togglePlayback: '播放 / 暂停',
     resumePlayback: '继续上次播放',
     rememberPosition: '记住播放位置',
-    startFullscreen: '启动时全屏',
-    windowed: '窗口模式',
-    fullscreen: '全屏模式',
     performanceHud: '性能指标 HUD',
     performanceHudDescription: '显示 CPU、GPU、内存占用（MB）和程序实时渲染刷新率。',
     enableProxy: '启用代理',
@@ -190,14 +191,14 @@ const SETTINGS_COPY = {
     reduceMotion: '减少动画',
     application: '应用程序',
     version: '版本',
-    build: '构建信息',
+    platform: '运行平台',
+    runtime: '应用运行时',
     mediaEngine: '媒体引擎',
-    license: '许可证',
+    applicationLicense: '应用许可证',
     supportedFormats: '支持的文件格式',
     supportedFormatsDescription: '以下扩展名可被媒体库识别，并支持本地或网络播放。具体编解码能力由程序内置媒体引擎提供。',
     videoFormats: '视频',
     audioFormats: '音频',
-    lyricsFormats: '歌词',
     embeddedSubtitleSupport: '支持自动识别视频容器中的内嵌字幕轨道；独立字幕文件不会作为媒体项目导入。',
     dataStorage: '应用数据',
     dataStorageDescription: 'Aurora Player 运行时产生的文件均分类保存在此 data 目录中，原始音视频文件仍保留在其原有位置。',
@@ -216,6 +217,14 @@ const SETTINGS_COPY = {
     checking: '正在检查...',
     upToDate: '已是最新版本',
     checkUpdates: '检查更新',
+    softwareUpdate: '软件更新',
+    updateDescription: '通过 GitHub Releases 检查 Aurora Player 的最新稳定版本。',
+    updateAvailableFor: (version: string) => `发现 Aurora Player ${version}，可前往更新。`,
+    currentVersionIsLatest: (version: string) => `当前 ${version} 已是最新版本。`,
+    updateCheckFailed: '检查更新失败，请确认网络或代理设置后重试。',
+    getUpdate: '获取更新',
+    retryUpdate: '重新检查',
+    checkAgain: '再次检查',
     generalError: '无法应用通用设置',
     proxyError: '无法应用代理设置',
     appearanceError: '无法应用外观设置',
@@ -231,7 +240,6 @@ const defaultGeneral: GeneralDraft = {
   navigationPlayPrimaryAction: 'open-player',
   resumePlayback: true,
   rememberPlaybackPosition: true,
-  startInFullscreen: false,
   performanceHudEnabled: true
 }
 
@@ -262,7 +270,6 @@ function generalFrom(settings: AppSettingsData): GeneralDraft {
     navigationPlayPrimaryAction: settings.navigationPlayPrimaryAction,
     resumePlayback: settings.resumePlayback,
     rememberPlaybackPosition: settings.rememberPlaybackPosition,
-    startInFullscreen: settings.startInFullscreen,
     performanceHudEnabled: settings.performanceHudEnabled
   }
 }
@@ -292,7 +299,7 @@ function appearanceFrom(settings: AppSettingsData): AppearanceDraft {
 }
 
 export function SettingsPage() {
-  const { settings, patchSettings, toast, appInfo, updateStatus, checkUpdate, openPath } = useRuntime()
+  const { settings, patchSettings, toast, appInfo, updateStatus, checkUpdate, openUpdatePage, openPath } = useRuntime()
   const copy = SETTINGS_COPY[settings.language]
   const [category, setCategory] = useState<SettingsCategory>(() => lastSettingsCategory)
   const [general, setGeneral] = useState<GeneralDraft>(() => generalFrom(settings))
@@ -328,7 +335,6 @@ export function SettingsPage() {
       navigationPlayPrimaryAction: next.navigationPlayPrimaryAction,
       resumePlayback: next.resumePlayback,
       rememberPlaybackPosition: next.rememberPlaybackPosition,
-      startInFullscreen: next.startInFullscreen,
       performanceHudEnabled: next.performanceHudEnabled
     }).catch(() => toast('error', copy.generalError))
   }
@@ -472,10 +478,12 @@ export function SettingsPage() {
               {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} onThemeChange={() => setThemePulse((pulse) => pulse + 1)} />}
               {category === 'about' && (
                 <AboutPanel
-                  version={appInfo?.version ?? '1.0.0'}
-                  build={`${appInfo?.platform ?? 'desktop'} ${appInfo?.arch ?? ''}`.trim()}
-                  engine={`Chromium ${appInfo?.chrome ?? '-'}`}
-                  updateState={updateStatus.status}
+                  application={appInfo?.name ?? 'Aurora Player'}
+                  version={appInfo?.version ?? '-'}
+                  platform={formatPlatform(appInfo?.platform, appInfo?.arch)}
+                  runtime={`Electron ${appInfo?.electron ?? '-'} · Chromium ${appInfo?.chrome ?? '-'}`}
+                  engine={appInfo?.mediaEngine ?? 'libmpv'}
+                  updateStatus={updateStatus}
                   checking={checkingUpdates}
                   copy={copy}
                   dataRoot={appInfo?.dataRoot ?? ''}
@@ -483,9 +491,13 @@ export function SettingsPage() {
                   onOpenData={() => appInfo?.dataRoot && void openPath(appInfo.dataRoot)}
                   onCheck={async () => {
                     setCheckingUpdates(true)
-                    await checkUpdate()
-                    setCheckingUpdates(false)
+                    try {
+                      await checkUpdate()
+                    } finally {
+                      setCheckingUpdates(false)
+                    }
                   }}
+                  onOpenUpdate={() => void openUpdatePage()}
                 />
               )}
             </motion.div>
@@ -532,14 +544,6 @@ function GeneralPanel({ value, onChange, copy }: { value: GeneralDraft; onChange
       </SettingRow>
       <SettingRow label={copy.rememberPosition}>
         <SettingsSwitch checked={value.rememberPlaybackPosition} label={copy.rememberPosition} onChange={(checked) => onChange((draft) => ({ ...draft, rememberPlaybackPosition: checked }))} />
-      </SettingRow>
-      <SettingRow label={copy.startFullscreen}>
-        <SegmentedControl
-          label={copy.startFullscreen}
-          options={[{ value: 'windowed', label: copy.windowed }, { value: 'fullscreen', label: copy.fullscreen }]}
-          selected={value.startInFullscreen ? 'fullscreen' : 'windowed'}
-          onSelect={(selected) => onChange((draft) => ({ ...draft, startInFullscreen: selected === 'fullscreen' }))}
-        />
       </SettingRow>
       <SettingRow label={copy.performanceHud} description={copy.performanceHudDescription}>
         <SettingsSwitch checked={value.performanceHudEnabled} label={copy.performanceHud} onChange={(checked) => onChange((draft) => ({ ...draft, performanceHudEnabled: checked }))} />
@@ -857,35 +861,57 @@ function FontFamilySelect({ fonts, value, onChange, copy }: { fonts: string[]; v
 }
 
 function AboutPanel({
+  application,
   version,
-  build,
+  platform,
+  runtime,
   engine,
-  updateState,
+  updateStatus,
   checking,
   copy,
   dataRoot,
   dataDirectories,
   onOpenData,
-  onCheck
+  onCheck,
+  onOpenUpdate
 }: {
+  application: string
   version: string
-  build: string
+  platform: string
+  runtime: string
   engine: string
-  updateState: string
+  updateStatus: UpdateStatus
   checking: boolean
   copy: SettingsCopy
   dataRoot: string
   dataDirectories: Record<'config' | 'database' | 'security' | 'logs' | 'temp' | 'downloads' | 'diagnostics' | 'runtime', string> | null
   onOpenData: () => void
   onCheck: () => Promise<void>
+  onOpenUpdate: () => void
 }) {
   const { appIconUrl } = useRuntime()
+  const isChecking = checking || updateStatus.status === 'checking'
+  const updateMessage = updateStatus.status === 'available'
+    ? copy.updateAvailableFor(updateStatus.version ?? '-')
+    : updateStatus.status === 'uptodate'
+      ? copy.currentVersionIsLatest(updateStatus.version ?? version)
+      : updateStatus.status === 'error'
+        ? copy.updateCheckFailed
+        : copy.updateDescription
+  const updateButtonLabel = isChecking
+    ? copy.checking
+    : updateStatus.status === 'disabled'
+      ? copy.checkUpdates
+      : updateStatus.status === 'error'
+        ? copy.retryUpdate
+        : copy.checkAgain
   const rows = [
-    [copy.application, 'Aurora Player'],
+    [copy.application, application],
     [copy.version, version],
-    [copy.build, build || 'desktop'],
+    [copy.platform, platform],
+    [copy.runtime, runtime],
     [copy.mediaEngine, engine],
-    [copy.license, 'MIT']
+    [copy.applicationLicense, 'MIT']
   ]
   return (
     <div className="settings-about-content">
@@ -900,6 +926,34 @@ function AboutPanel({
           ))}
         </div>
       </div>
+      <section className={`settings-update-section ${updateStatus.status}`} aria-live="polite">
+        <div className="settings-update-copy">
+          <span className="settings-update-icon" aria-hidden="true">
+            <Icon name={updateStatus.status === 'available' ? 'download' : updateStatus.status === 'error' ? 'alert' : updateStatus.status === 'uptodate' ? 'check' : 'refresh'} size={20} />
+          </span>
+          <div>
+            <h3>{copy.softwareUpdate}</h3>
+            <p>{updateMessage}</p>
+          </div>
+        </div>
+        <div className="settings-update-actions">
+          <button
+            type="button"
+            className="settings-button settings-update-button"
+            onClick={() => void onCheck()}
+            disabled={isChecking}
+          >
+            <Icon name="refresh" size={17} />
+            {updateButtonLabel}
+          </button>
+          {updateStatus.status === 'available' && (
+            <button type="button" className="settings-button settings-button-primary settings-update-button" onClick={onOpenUpdate}>
+              <Icon name="download" size={17} />
+              {copy.getUpdate}
+            </button>
+          )}
+        </div>
+      </section>
       <section className="settings-format-section" aria-labelledby="settings-format-title">
         <div className="settings-format-heading">
           <h3 id="settings-format-title">{copy.supportedFormats}</h3>
@@ -908,7 +962,6 @@ function AboutPanel({
         <div className="settings-format-groups">
           <FormatGroup label={copy.videoFormats} extensions={MEDIA_VIDEO_EXTS} />
           <FormatGroup label={copy.audioFormats} extensions={MEDIA_AUDIO_EXTS} />
-          <FormatGroup label={copy.lyricsFormats} extensions={['lrc']} />
         </div>
         <p className="settings-format-note">{copy.embeddedSubtitleSupport}</p>
       </section>
@@ -939,11 +992,13 @@ function AboutPanel({
           ))}
         </div>
       </section>
-      <button type="button" className="settings-button settings-button-primary settings-update-button" onClick={() => void onCheck()} disabled={checking || updateState === 'checking'}>
-        {checking || updateState === 'checking' ? copy.checking : updateState === 'uptodate' ? copy.upToDate : copy.checkUpdates}
-      </button>
     </div>
   )
+}
+
+function formatPlatform(platform?: string, arch?: string): string {
+  const platformName = platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : platform === 'linux' ? 'Linux' : platform || '-'
+  return arch ? `${platformName} · ${arch}` : platformName
 }
 
 function FormatGroup({ label, extensions }: { label: string; extensions: readonly string[] }) {

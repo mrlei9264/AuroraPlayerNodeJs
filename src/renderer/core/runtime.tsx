@@ -69,12 +69,14 @@ export interface CtxMenuState {
 }
 
 export interface AppInfo {
+  name: string
   version: string
   electron: string
   chrome: string
   node: string
   platform: string
   arch: string
+  mediaEngine: string
   homeDir: string
   userData: string
   dataRoot: string
@@ -189,7 +191,8 @@ interface RuntimeApi {
   windowClose: () => void
   setFullscreen: (full: boolean) => Promise<void>
   quitApp: () => Promise<void>
-  checkUpdate: () => Promise<void>
+  checkUpdate: () => Promise<UpdateStatus>
+  openUpdatePage: () => Promise<void>
   exportBundle: () => Promise<void>
   openPath: (path: string) => Promise<void>
   loadLyrics: (mediaId: number, url: string, remote: boolean, sourceId?: number | null, remotePath?: string | null) => Promise<LyricsData | null>
@@ -399,7 +402,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       }
       engine.load(plan, session.volume, session.muted, 1)
       if (navigateToPlayer) navigate({ section: 'player' })
-      if (navigateToPlayer && settings?.startInFullscreen) await p(I.winSetFullscreen, true)
       return plan
     },
     [engine, navigate, settings, t, toast, session.volume, session.muted]
@@ -471,10 +473,9 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       if (plan && plan.ok) {
         engine.load(plan, session.volume, session.muted, 1)
         setNav((prev) => ({ ...prev, section: 'player' }))
-        if (settings?.startInFullscreen) await p(I.winSetFullscreen, true)
       }
     },
-    [engine, session, library, queue, settings?.startInFullscreen, playRequest]
+    [engine, session, library, queue, playRequest]
   )
 
   const playNext = useCallback(() => navQueue('next'), [navQueue])
@@ -854,7 +855,11 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   }, [engine])
 
   const checkUpdate = useCallback(async () => {
-    await p(I.appCheckUpdate)
+    return await p<UpdateStatus>(I.appCheckUpdate)
+  }, [])
+
+  const openUpdatePage = useCallback(async () => {
+    await p(I.appOpenUpdatePage)
   }, [])
 
   const exportBundle = useCallback(async () => {
@@ -1123,6 +1128,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     setFullscreen,
     quitApp,
     checkUpdate,
+    openUpdatePage,
     exportBundle,
     openPath,
     loadLyrics

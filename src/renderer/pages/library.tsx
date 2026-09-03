@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { LayoutGroup, motion, useReducedMotion } from 'motion/react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { p, useRuntime } from '../core/runtime'
 import { FilledIcon, Icon, type IconName } from '../core/icons'
@@ -327,6 +327,7 @@ function LibraryFilterControls({
   onKindChange: (kind: LibraryTab) => void
   onQueryChange: (query: string) => void
 }) {
+  const reduceMotion = useReducedMotion()
   const tabs = [
     ['favorite', favoritesLabel, favorites],
     ['video', videosLabel, videos],
@@ -334,20 +335,30 @@ function LibraryFilterControls({
   ] as const
   return (
     <div className={`library-filter-row ${compact ? 'compact' : ''}`}>
-      <div className="library-type-tabs" role="tablist" aria-label={mediaTypeLabel}>
-        {tabs.map(([value, label, count]) => (
-          <button
-            key={value}
-            type="button"
-            className={kind === value ? 'active' : ''}
-            role="tab"
-            aria-selected={kind === value}
-            onClick={() => onKindChange(value)}
-          >
-            {compact ? label : `${label} (${count.toLocaleString(locale)})`}
-          </button>
-        ))}
-      </div>
+      <LayoutGroup id={compact ? 'library-tabs-compact' : 'library-tabs-primary'}>
+        <div className="library-type-tabs" role="tablist" aria-label={mediaTypeLabel}>
+          {tabs.map(([value, label, count]) => (
+            <button
+              key={value}
+              type="button"
+              className={kind === value ? 'active' : ''}
+              role="tab"
+              aria-selected={kind === value}
+              onClick={() => onKindChange(value)}
+            >
+              {kind === value && (
+                <motion.span
+                  className="library-type-tab-active-motion"
+                  layoutId="library-type-tab-active"
+                  transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 410, damping: 36, mass: 0.72 }}
+                  aria-hidden="true"
+                />
+              )}
+              <span className="library-type-tab-label">{compact ? label : `${label} (${count.toLocaleString(locale)})`}</span>
+            </button>
+          ))}
+        </div>
+      </LayoutGroup>
       <label className="library-search">
         <Icon name="search" size={compact ? 17 : 21} />
         <input
@@ -864,7 +875,7 @@ export function LibraryPage() {
         ))}
       </section>
 
-      <section className="library-files" aria-labelledby="library-files-title">
+      <section className="library-files" aria-label={filesTitle}>
         <div ref={toolbarSentinelRef} className="library-toolbar-sentinel" aria-hidden="true" />
         <div className={`library-files-head ${toolbarStuck ? 'is-stuck' : ''}`}>
           {toolbarStuck && (
@@ -885,7 +896,6 @@ export function LibraryPage() {
               onQueryChange={setQuery}
             />
           )}
-          <h2 id="library-files-title">{filesTitle} <span>({visibleCards.length.toLocaleString(locale)})</span></h2>
           <div className="library-files-controls">
             <button
               type="button"
@@ -1146,10 +1156,6 @@ function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly,
         </span>
         <span className="library-file-copy">
           <span className="library-file-title">{card.title}</span>
-          <span className="library-file-meta">
-            <Icon name={card.kind === 'video' ? 'file' : 'music'} size={14} />
-            <span>{card.metadata}</span>
-          </span>
         </span>
       </button>
       {!selectionMode && (

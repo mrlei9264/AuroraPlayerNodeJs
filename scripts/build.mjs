@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url'
 
 const root = path.dirname(fileURLToPath(import.meta.url)) + '/..'
 
+execSync('node scripts/version.mjs check', { cwd: root, stdio: 'inherit' })
+
 console.log('building main + preload...')
 execSync('node scripts/build-main.mjs', { cwd: root, stdio: 'inherit' })
 

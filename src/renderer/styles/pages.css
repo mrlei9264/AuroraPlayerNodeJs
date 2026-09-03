@@ -669,11 +669,22 @@
 .library-type-tabs button:active { transform: scale(0.98); }
 .library-type-tabs button.active {
   color: #fff8ef;
+}
+.library-type-tab-active-motion {
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  pointer-events: none;
+  border: 1px solid rgba(235, 161, 70, 0.8);
+  border-radius: inherit;
   background:
     linear-gradient(100deg, rgba(214, 139, 62, 0.64), rgba(68, 43, 23, 0.48) 76%),
     rgba(228, 175, 105, 0.12);
-  border: 1px solid rgba(235, 161, 70, 0.8);
   box-shadow: inset 0 1px 0 rgba(255, 225, 184, 0.19), 0 7px 24px rgba(183, 104, 35, 0.2);
+}
+.library-type-tab-label {
+  position: relative;
+  z-index: 1;
 }
 .library-type-tabs button.active::before,
 .library-type-tabs button.active + button::before { opacity: 0; }
@@ -825,7 +836,6 @@
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 234, 204, 0.045);
   backdrop-filter: blur(22px) saturate(116%);
 }
-.library-files-head.is-stuck > h2 { display: none; }
 .library-files-head.is-stuck .library-files-controls { margin-left: auto; }
 .library-files-head .library-filter-row.compact {
   min-width: 0;
@@ -881,18 +891,11 @@
   pointer-events: none;
   background: linear-gradient(180deg, rgba(6, 8, 9, 0.35), transparent);
 }
-.library-files-head h2 {
-  padding-top: 7px;
-  color: var(--library-text);
-  font-size: clamp(calc(18px * var(--font-scale, 1)), calc(1.89vh * var(--font-scale, 1)), calc(20px * var(--font-scale, 1)));
-  font-weight: 500;
-  letter-spacing: -0.015em;
-}
-.library-files-head h2 span { color: var(--library-dim); font-weight: 450; }
 .library-files-controls {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 .library-sort-select {
   position: relative;
@@ -3796,9 +3799,48 @@
 .settings-data-row strong { color: var(--settings-text); font-size: var(--settings-font-large); font-weight: 500; }
 .settings-data-row span { color: var(--settings-muted); font-size: var(--settings-font-small); }
 .settings-data-row code { color: #dca33c; font: 500 var(--settings-font-small)/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.settings-update-section {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 15px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.settings-update-section.available {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.settings-update-section.error { border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); }
+.settings-update-copy { min-width: 0; display: flex; align-items: center; gap: 13px; }
+.settings-update-icon {
+  width: 39px;
+  height: 39px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--accent-end);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.settings-update-section.error .settings-update-icon { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.settings-update-copy h3 { color: var(--settings-text); font-size: var(--settings-font-large); font-weight: 540; }
+.settings-update-copy p { max-width: 620px; margin-top: 5px; color: var(--settings-muted); font-size: var(--settings-font-small); line-height: 1.45; }
+.settings-update-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .settings-update-button {
-  align-self: flex-start;
-  flex: 0 0 calc(51px * var(--control-scale, 1));
+  min-width: 126px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 /* The selected color theme owns the complete settings surface, rather than
@@ -4024,6 +4066,9 @@
   .settings-data-list { grid-template-columns: 1fr; }
   .settings-format-groups { grid-template-columns: 1fr; }
   .settings-toggle-grid { grid-template-columns: 1fr; }
+  .settings-update-section { align-items: stretch; flex-direction: column; gap: 14px; }
+  .settings-update-actions { width: 100%; }
+  .settings-update-button { min-width: max-content; flex: 1 1 auto; }
 }
 
 @media (max-height: 850px) {

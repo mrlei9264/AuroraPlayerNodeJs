@@ -45,6 +45,12 @@ button {
   cursor: pointer;
 }
 
+*:focus,
+*:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
 input,
 select,
 textarea {

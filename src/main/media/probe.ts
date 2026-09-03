@@ -85,6 +85,8 @@ type FfprobeTrackStream = {
   height?: number
   avg_frame_rate?: string
   r_frame_rate?: string
+  duration?: string | number
+  nb_frames?: string | number
   profile?: string
   pix_fmt?: string
   color_space?: string
@@ -149,6 +151,26 @@ function parseFrameRate(value?: string): number {
   const [numerator, denominator] = value.split('/').map(Number)
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return 0
   return numerator / denominator
+}
+
+const MAX_PLAUSIBLE_MEDIA_FPS = 480
+
+function plausibleFrameRate(value: number): number {
+  return Number.isFinite(value) && value > 0 && value <= MAX_PLAUSIBLE_MEDIA_FPS ? value : 0
+}
+
+function frameRateFromVideoStream(stream: FfprobeTrackStream): number {
+  const average = plausibleFrameRate(parseFrameRate(stream.avg_frame_rate))
+  if (average) return average
+
+  const frameCount = finitePositive(stream.nb_frames)
+  const duration = finitePositive(stream.duration)
+  const countedAverage = plausibleFrameRate(frameCount && duration ? frameCount / duration : 0)
+  if (countedAverage) return countedAverage
+
+  // r_frame_rate can be a codec/container time base (for example 90000/1),
+  // so only use it when it falls within a realistic playback range.
+  return plausibleFrameRate(parseFrameRate(stream.r_frame_rate))
 }
 
 function bitDepthFromPixelFormat(pixelFormat?: string): number {
@@ -325,7 +347,7 @@ export class MediaProbeService {
           info.width = Number(stream.width) || undefined
           info.height = Number(stream.height) || undefined
           info.profile = cleanMediaText(stream.profile)
-          info.fps = parseFrameRate(stream.avg_frame_rate) || parseFrameRate(stream.r_frame_rate)
+          info.fps = frameRateFromVideoStream(stream)
           info.pixelFormat = cleanMediaText(stream.pix_fmt)
           info.colorTransfer = cleanMediaText(stream.color_transfer)
           info.colorPrimaries = cleanMediaText(stream.color_primaries)
@@ -334,7 +356,7 @@ export class MediaProbeService {
           video.push(info)
           if (!width && Number.isFinite(stream.width)) width = Number(stream.width)
           if (!height && Number.isFinite(stream.height)) height = Number(stream.height)
-          if (!fps) fps = parseFrameRate(stream.avg_frame_rate) || parseFrameRate(stream.r_frame_rate)
+          if (!fps) fps = frameRateFromVideoStream(stream)
         } else if (kind === 'audio') {
           info.profile = cleanMediaText(stream.profile)
           info.channels = finitePositive(stream.channels)

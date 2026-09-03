@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, shell } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -234,11 +234,15 @@ export class DiagnosticsController {
 
 export class UpdateChecker {
   private last: UpdateStatus = { status: 'disabled' }
+  private inFlight: Promise<UpdateStatus> | null = null
 
   constructor(private broadcast: (channel: string, payload: unknown) => void) {}
 
   init(): void {
     ipcMain.handle(I.appCheckUpdate, async () => this.check())
+    ipcMain.handle(I.appOpenUpdatePage, async () => {
+      await shell.openExternal(RELEASES_LATEST_URL)
+    })
   }
 
   get lastStatus(): UpdateStatus {
@@ -246,20 +250,37 @@ export class UpdateChecker {
   }
 
   async check(): Promise<UpdateStatus> {
+    if (this.inFlight) return this.inFlight
+    this.inFlight = this.performCheck()
+    try {
+      return await this.inFlight
+    } finally {
+      this.inFlight = null
+    }
+  }
+
+  private async performCheck(): Promise<UpdateStatus> {
     this.last = { status: 'checking' }
     this.broadcast(E.updateStatus, this.last)
     try {
-      const res = await requestBuffer('https://api.github.com/repos/aurora-player/aurora-player/releases/latest', {
-        timeoutMs: 8000,
+      const res = await requestBuffer(RELEASES_API_URL, {
+        timeoutMs: 10_000,
         maxBytes: 1024 * 1024,
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'AuroraPlayer/1.0' }
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': `AuroraPlayer/${app.getVersion()}`,
+          'X-GitHub-Api-Version': '2022-11-28'
+        }
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = JSON.parse(res.data.toString('utf8')) as { tag_name?: string; html_url?: string }
-      const remote = (data.tag_name ?? '').replace(/^v/, '')
-      const local = app.getVersion().replace(/^v/, '')
-      if (remote && compareVersions(remote, local) > 0) {
-        this.last = { status: 'available', version: remote, url: data.html_url }
+      const data = JSON.parse(res.data.toString('utf8')) as { tag_name?: string; draft?: boolean; prerelease?: boolean }
+      if (data.draft || data.prerelease) throw new Error('latest release is not stable')
+      const remote = normalizeVersion(data.tag_name)
+      const local = normalizeVersion(app.getVersion())
+      if (!remote) throw new Error('release version is missing or invalid')
+      if (!local) throw new Error('application version is invalid')
+      if (compareVersions(remote, local) > 0) {
+        this.last = { status: 'available', version: remote, url: RELEASES_LATEST_URL }
       } else {
         this.last = { status: 'uptodate', version: local }
       }
@@ -271,13 +292,41 @@ export class UpdateChecker {
   }
 }
 
+const RELEASES_API_URL = 'https://api.github.com/repos/mrlei9264/AuroraPlayerNodeJs/releases/latest'
+const RELEASES_LATEST_URL = 'https://github.com/mrlei9264/AuroraPlayerNodeJs/releases/latest'
+
+function normalizeVersion(value: string | undefined): string | null {
+  if (!value) return null
+  const normalized = value.trim().replace(/^[vV]/, '').split('+', 1)[0]
+  return /^\d+(?:\.\d+)*(?:-[0-9A-Za-z.-]+)?$/.test(normalized) ? normalized : null
+}
+
 function compareVersions(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const x = pa[i] ?? 0
-    const y = pb[i] ?? 0
+  const [aCore, aPrerelease] = a.split('-', 2)
+  const [bCore, bPrerelease] = b.split('-', 2)
+  const aParts = aCore.split('.').map(Number)
+  const bParts = bCore.split('.').map(Number)
+  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+    const x = aParts[i] ?? 0
+    const y = bParts[i] ?? 0
     if (x !== y) return x > y ? 1 : -1
+  }
+  if (!aPrerelease && !bPrerelease) return 0
+  if (!aPrerelease) return 1
+  if (!bPrerelease) return -1
+  const aIdentifiers = aPrerelease.split('.')
+  const bIdentifiers = bPrerelease.split('.')
+  for (let i = 0; i < Math.max(aIdentifiers.length, bIdentifiers.length); i++) {
+    const x = aIdentifiers[i]
+    const y = bIdentifiers[i]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    if (x === y) continue
+    const xNumeric = /^\d+$/.test(x)
+    const yNumeric = /^\d+$/.test(y)
+    if (xNumeric && yNumeric) return Number(x) > Number(y) ? 1 : -1
+    if (xNumeric !== yNumeric) return xNumeric ? -1 : 1
+    return x > y ? 1 : -1
   }
   return 0
 }

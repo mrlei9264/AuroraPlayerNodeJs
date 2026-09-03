@@ -48,7 +48,6 @@ const defaults: AppSettingsData = {
   autoplayNextMedia: true,
   navigationPlayPrimaryAction: 'open-player',
   rememberPlaybackPosition: true,
-  startInFullscreen: false,
   proxyEnabled: false,
   proxyType: 'http',
   proxyServer: '',
@@ -187,7 +186,7 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   if (typeof raw.fontFamily === 'string') result.fontFamily = raw.fontFamily
   if ([12, 13, 14, 15, 16].includes(Number(raw.fontSize))) result.fontSize = Number(raw.fontSize) as AppSettingsData['fontSize']
   if (Number.isFinite(raw.playbackVolume)) result.playbackVolume = Math.max(0, Math.min(100, Math.round(Number(raw.playbackVolume))))
-  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'startInFullscreen', 'proxyEnabled', 'proxyBypassLocal'] as const) {
+  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'proxyEnabled', 'proxyBypassLocal'] as const) {
     if (typeof raw[key] === 'boolean') result[key] = raw[key]
   }
   if (raw.navigationPlayPrimaryAction === 'open-player' || raw.navigationPlayPrimaryAction === 'toggle-playback') result.navigationPlayPrimaryAction = raw.navigationPlayPrimaryAction

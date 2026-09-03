@@ -13,7 +13,6 @@ export interface AppSettingsData {
   autoplayNextMedia: boolean
   navigationPlayPrimaryAction: 'open-player' | 'toggle-playback'
   rememberPlaybackPosition: boolean
-  startInFullscreen: boolean
   proxyEnabled: boolean
   proxyType: 'http' | 'https' | 'socks5'
   proxyServer: string

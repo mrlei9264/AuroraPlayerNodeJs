@@ -168,6 +168,24 @@ npm run dev
 | `npm run dev` | 启动开发环境。运行前必须已经成功生成原生插件和运行库。 |
 | `npm run build` | 构建主进程和渲染进程代码，不重新编译 libmpv。 |
 | `npm run dist` | 构建并生成 Windows x64 安装包。打包前应先确认 mpv 原生模块已正确构建。 |
+| `npm run version:check` | 校验 `package.json` 与 lockfile 中的版本号一致。构建时会自动执行。 |
+| `npm run version:set -- 1.1.0` | 将项目唯一版本号更新为指定的语义化版本，并同步 lockfile。 |
+
+### 版本与发布标记
+
+`package.json` 的 `version` 是 Aurora Player 唯一的版本来源；Electron、安装包和“关于”页面都会读取该值，不在源码中维护第二份版本常量。准备发布新版本时执行：
+
+```powershell
+npm run version:set -- 1.1.0
+npm run typecheck
+npm run dist
+git add package.json package-lock.json
+git commit -m "release: v1.1.0"
+git tag v1.1.0
+git push origin HEAD --follow-tags
+```
+
+GitHub Release 的标签应与 `package.json` 保持一致，并使用 `v<版本号>`，例如 `v1.1.0`。应用检查更新时会兼容带或不带 `v` 前缀的标签。
 
 ### patch-package 补丁流程
 

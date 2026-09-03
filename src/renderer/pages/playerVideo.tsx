@@ -8,6 +8,8 @@ import { playbackErrorKey } from '../core/i18n'
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 const CHAPTER_RAIL_SIZE = 9
+type PlayerHint = { icon: IconName; value?: string }
+type PlayerMenu = 'tracks' | 'speed' | null
 
 export function VideoPlayerPage() {
   const {
@@ -38,16 +40,22 @@ export function VideoPlayerPage() {
 
   const stageRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
-  const [hint, setHint] = useState<IconName | null>(null)
+  const trackDrawerRef = useRef<HTMLElement>(null)
+  const speedMenuRef = useRef<HTMLDivElement>(null)
+  const hintTimerRef = useRef<number | null>(null)
+  const [hint, setHint] = useState<PlayerHint | null>(null)
   const [controlsHover, setControlsHover] = useState(false)
+  const [topHover, setTopHover] = useState(false)
   const [focusWithin, setFocusWithin] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [tracksOpen, setTracksOpen] = useState(false)
+  const [openMenu, setOpenMenu] = useState<PlayerMenu>(null)
   const [selectedVideo, setSelectedVideo] = useState(0)
   const [selectedAudio, setSelectedAudio] = useState(0)
   const [selectedSubtitle, setSelectedSubtitle] = useState(-1)
   const [chapterRailExpanded, setChapterRailExpanded] = useState(false)
-  const keyboardStateRef = useRef({ position: 0, speed: 1, volume: 80, muted: false, fullscreen: false, phase: session.phase, tracksOpen: false })
+  const tracksOpen = openMenu === 'tracks'
+  const speedOpen = openMenu === 'speed'
+  const keyboardStateRef = useRef({ position: 0, speed: 1, volume: 80, muted: false, fullscreen: false, phase: session.phase, tracksOpen: false, speedOpen: false })
   const keyboardActionsRef = useRef<{
     togglePlayback: () => void
     jump: (seconds: number) => void
@@ -56,7 +64,7 @@ export function VideoPlayerPage() {
     setFullscreen: (fullscreen: boolean) => Promise<void>
     toggleMute: () => void
     stopPlayback: () => void
-    showHint: (icon: IconName) => void
+    showHint: (icon: IconName, value?: string) => void
   }>({
     togglePlayback: () => void 0,
     jump: (_seconds: number) => void 0,
@@ -65,7 +73,7 @@ export function VideoPlayerPage() {
     setFullscreen: (_fullscreen: boolean) => Promise.resolve(),
     toggleMute: () => void 0,
     stopPlayback: () => void 0,
-    showHint: (_icon: IconName) => void 0
+    showHint: (_icon: IconName, _value?: string) => void 0
   })
 
   const item = library.find((candidate) => candidate.id === session.mediaId)
@@ -102,7 +110,7 @@ export function VideoPlayerPage() {
       selectAudioTrack(feature.target.index)
     }
   }, [selectAudioTrack, selectVideoTrack])
-  const uiLocked = tracksOpen || focusWithin || dragging
+  const uiLocked = openMenu !== null || focusWithin || dragging
   const showChrome = controlsHover || uiLocked
   // Keep the entry point visible for every video. Some Chromium builds do not
   // expose native track lists until the media is inspected, so hiding the
@@ -129,9 +137,17 @@ export function VideoPlayerPage() {
     return () => { current = false }
   }, [engine, session.mediaId])
 
-  const showHint = useCallback((icon: IconName) => {
-    setHint(icon)
-    window.setTimeout(() => setHint(null), 700)
+  const showHint = useCallback((icon: IconName, value?: string) => {
+    if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current)
+    setHint({ icon, value })
+    hintTimerRef.current = window.setTimeout(() => {
+      setHint(null)
+      hintTimerRef.current = null
+    }, 760)
+  }, [])
+
+  useEffect(() => () => {
+    if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current)
   }, [])
 
   const togglePlayback = useCallback(() => {
@@ -144,6 +160,12 @@ export function VideoPlayerPage() {
     showHint(seconds > 0 ? 'forward10' : 'rewind10')
   }, [seek, session.position, showHint])
 
+  const toggleMutedWithHint = useCallback(() => {
+    const nextMuted = !session.muted
+    toggleMute()
+    showHint(nextMuted ? 'volumeMute' : 'volume', `${Math.round(nextMuted ? 0 : session.volume)}%`)
+  }, [session.muted, session.volume, showHint, toggleMute])
+
   keyboardStateRef.current = {
     position: session.position,
     speed: session.speed,
@@ -151,7 +173,8 @@ export function VideoPlayerPage() {
     muted: session.muted,
     fullscreen: win.fullscreen,
     phase: session.phase,
-    tracksOpen
+    tracksOpen,
+    speedOpen
   }
   keyboardActionsRef.current = {
     togglePlayback,
@@ -159,7 +182,7 @@ export function VideoPlayerPage() {
     setVolume,
     setSpeed,
     setFullscreen,
-    toggleMute,
+    toggleMute: toggleMutedWithHint,
     stopPlayback,
     showHint
   }
@@ -169,6 +192,22 @@ export function VideoPlayerPage() {
     if (stage && isVideo) engine.attach(stage, session.muted, session.volume, session.speed)
     return () => engine.detach()
   }, [engine, isVideo]) // the engine preserves the active video element across attaches
+
+  useEffect(() => {
+    if (openMenu === null) return
+    const closeFromOutside = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (trackDrawerRef.current?.contains(target) || speedMenuRef.current?.contains(target) || target.closest('[data-player-menu-trigger]')) return
+      setOpenMenu(null)
+    }
+    window.addEventListener('pointerdown', closeFromOutside, true)
+    return () => window.removeEventListener('pointerdown', closeFromOutside, true)
+  }, [openMenu])
+
+  useEffect(() => {
+    if (!win.fullscreen) setTopHover(false)
+  }, [win.fullscreen])
 
   useEffect(() => {
     type DirectionHold = { key: 'ArrowLeft' | 'ArrowRight'; timer: number; long: boolean; originalSpeed: number }
@@ -206,23 +245,27 @@ export function VideoPlayerPage() {
       if (key === 'ArrowUp' || key === 'ArrowDown' || key === '+' || key === '-' || key === '=') {
         event.preventDefault()
         const increase = key === 'ArrowUp' || key === '+' || key === '='
-        actions.setVolume(Math.max(0, Math.min(100, state.volume + (increase ? 5 : -5))))
-        actions.showHint(increase || state.volume > 5 ? 'volume' : 'volumeMute')
+        const nextVolume = Math.max(0, Math.min(100, state.volume + (increase ? 5 : -5)))
+        actions.setVolume(nextVolume)
+        state.volume = nextVolume
+        state.muted = false
+        actions.showHint(nextVolume > 0 ? 'volume' : 'volumeMute', `${nextVolume}%`)
         return
       }
       const focusedButton = Boolean((event.target as HTMLElement | null)?.closest('button'))
-      if (focusedButton && (key === ' ' || key === 'Enter')) return
+      if (focusedButton && key === ' ') return
       if ((key === ' ' || key.toLowerCase() === 'k') && !event.repeat) {
         event.preventDefault()
         actions.togglePlayback()
-      } else if (key.toLowerCase() === 'f' && !event.repeat) {
+      } else if ((key === 'Enter' || key.toLowerCase() === 'f') && !event.repeat) {
         event.preventDefault()
         void actions.setFullscreen(!state.fullscreen)
       } else if (key.toLowerCase() === 'm' && !event.repeat) {
         event.preventDefault()
         actions.toggleMute()
       } else if (key === 'Escape') {
-        if (state.tracksOpen) setTracksOpen(false)
+        event.preventDefault()
+        if (state.tracksOpen || state.speedOpen) setOpenMenu(null)
         else if (state.fullscreen) void actions.setFullscreen(false)
         else if (state.phase === 'error') actions.stopPlayback()
       }
@@ -262,22 +305,25 @@ export function VideoPlayerPage() {
     return parts.filter(Boolean).join('  ·  ')
   }, [duration, item?.protocol])
 
-  const cycleSpeed = useCallback(() => {
-    const currentIndex = SPEEDS.indexOf(session.speed)
-    setSpeed(SPEEDS[(currentIndex + 1) % SPEEDS.length])
-  }, [session.speed, setSpeed])
-
   return (
     <div
-      className={`player-root cinematic-player ${showChrome ? 'show-chrome' : 'hide-chrome'}`}
+      className={`player-root cinematic-player ${showChrome ? 'show-chrome' : 'hide-chrome'} ${win.fullscreen ? 'is-fullscreen' : ''} ${topHover ? 'show-top-chrome' : 'hide-top-chrome'}`}
       onTouchStart={() => setControlsHover(true)}
       onMouseMove={(event) => {
+        if (win.fullscreen) {
+          const topRevealBoundary = Math.min(190, window.innerHeight * 0.25)
+          const overTop = event.clientY <= topRevealBoundary
+          setTopHover((current) => current === overTop ? current : overTop)
+        }
         if (uiLocked) return
         const target = event.target instanceof Element ? event.target : null
         const overControls = Boolean(target?.closest('.cinematic-console, .cinematic-console-hover-zone'))
         setControlsHover((current) => current === overControls ? current : overControls)
       }}
-      onMouseLeave={() => { if (!uiLocked) setControlsHover(false) }}
+      onMouseLeave={() => {
+        setTopHover(false)
+        if (!uiLocked) setControlsHover(false)
+      }}
     >
       <div
         ref={stageRef}
@@ -325,7 +371,7 @@ export function VideoPlayerPage() {
         {qualityFeatures.length > 0 && (
           <div className="cinematic-quality-row" aria-label={t('videoQuality')}>
             {qualityFeatures.map((feature) => {
-              const content = <>{feature.icon && <Icon name={feature.icon} size={12} strokeWidth={1.7} />}<span>{feature.label}</span></>
+              const content = <>{feature.icon && <Icon name={feature.icon} size={15} strokeWidth={1.7} />}<span>{feature.label}</span></>
               const label = `${feature.label}: ${feature.active ? t('active') : t('inactive')}`
               return feature.target ? (
                 <button
@@ -361,7 +407,12 @@ export function VideoPlayerPage() {
         />
       )}
 
-      {hint && <div className="vp-center-hint"><Icon name={hint} size={30} /></div>}
+      {hint && (
+        <div className={`vp-center-hint ${hint.value ? 'has-value' : ''}`}>
+          <Icon name={hint.icon} size={hint.icon === 'forward10' || hint.icon === 'rewind10' ? 50 : 34} />
+          {hint.value && <span className="vp-center-hint-value">{hint.value}</span>}
+        </div>
+      )}
 
       {visibleChapters.length > 0 && (
         <nav
@@ -452,7 +503,7 @@ export function VideoPlayerPage() {
         <div className="cinematic-lower-row">
           <div className="cinematic-left-cluster">
             <div className="cinematic-volume-group">
-              <ControlButton icon={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} label={session.muted ? t('unmute') : t('mute')} onClick={toggleMute} />
+              <ControlButton icon={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} label={session.muted ? t('unmute') : t('mute')} onClick={toggleMutedWithHint} />
               <input
                 className="cinematic-volume"
                 type="range"
@@ -464,7 +515,11 @@ export function VideoPlayerPage() {
                 style={{ '--vp-volume': `${session.muted ? 0 : session.volume}%` } as React.CSSProperties}
                 onPointerDown={() => setDragging(true)}
                 onPointerUp={() => setDragging(false)}
-                onChange={(event) => setVolume(Number(event.currentTarget.value))}
+                onChange={(event) => {
+                  const nextVolume = Number(event.currentTarget.value)
+                  setVolume(nextVolume)
+                  showHint(nextVolume > 0 ? 'volume' : 'volumeMute', `${Math.round(nextVolume)}%`)
+                }}
               />
             </div>
           </div>
@@ -483,8 +538,8 @@ export function VideoPlayerPage() {
 
           <div className="cinematic-right-cluster">
             <div className="cinematic-utility-group">
-              {hasTrackChoices && <ControlButton icon="track" label={t('tracks')} active={tracksOpen} onClick={() => setTracksOpen((open) => !open)} />}
-              <SpeedControl speed={session.speed} label={t('speed')} onClick={cycleSpeed} />
+              {hasTrackChoices && <ControlButton icon="track" label={t('tracks')} active={tracksOpen} menu="tracks" onClick={() => setOpenMenu((current) => current === 'tracks' ? null : 'tracks')} />}
+              <SpeedControl speed={session.speed} label={t('speed')} open={speedOpen} onClick={() => setOpenMenu((current) => current === 'speed' ? null : 'speed')} />
               <ControlButton icon={win.fullscreen ? 'fullscreenExit' : 'fullscreen'} label={win.fullscreen ? t('exitFullscreen') : t('fullscreen')} onClick={() => void setFullscreen(!win.fullscreen)} />
             </div>
           </div>
@@ -493,84 +548,153 @@ export function VideoPlayerPage() {
 
       {tracksOpen && hasTrackChoices && (
         <TrackDrawer
+          drawerRef={trackDrawerRef}
           tracks={tracks}
           selectedVideo={selectedVideo}
           selectedAudio={selectedAudio}
           selectedSubtitle={selectedSubtitle}
-          onClose={() => setTracksOpen(false)}
           onVideo={(index) => { setSelectedVideo(index); selectVideoTrack(index) }}
           onAudio={(index) => { setSelectedAudio(index); selectAudioTrack(index) }}
           onSubtitle={(index) => { setSelectedSubtitle(index); selectSubtitleTrack(index) }}
           t={t}
         />
       )}
+
+      {speedOpen && (
+        <SpeedMenu
+          menuRef={speedMenuRef}
+          speed={session.speed}
+          label={t('speed')}
+          onSelect={(nextSpeed) => {
+            setSpeed(nextSpeed)
+            setOpenMenu(null)
+          }}
+        />
+      )}
     </div>
   )
 }
 
-function ControlButton({ icon, label, active = false, onClick }: { icon: IconName; label: string; active?: boolean; onClick?: () => void }) {
+function ControlButton({ icon, label, active = false, menu, onClick }: { icon: IconName; label: string; active?: boolean; menu?: Exclude<PlayerMenu, null>; onClick?: () => void }) {
   return (
-    <button className={`cinematic-control-btn ${active ? 'active' : ''}`} type="button" aria-label={label} aria-pressed={active} title={label} onClick={onClick}>
+    <button
+      className={`cinematic-control-btn ${active ? 'active' : ''}`}
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      aria-expanded={menu ? active : undefined}
+      aria-controls={menu === 'tracks' ? 'video-track-menu' : undefined}
+      data-player-menu-trigger={menu ? menu : undefined}
+      title={label}
+      onClick={onClick}
+    >
       <Icon name={icon} size={23} strokeWidth={1.7} />
     </button>
   )
 }
 
-function SpeedControl({ speed, label, onClick }: { speed: number; label: string; onClick: () => void }) {
+function SpeedControl({ speed, label, open, onClick }: { speed: number; label: string; open: boolean; onClick: () => void }) {
   return (
-    <button className={`cinematic-speed-control ${speed !== 1 ? 'active' : ''}`} type="button" onClick={onClick} aria-label={`${label} ${speed}x`} title={label}>
+    <button
+      className={`cinematic-speed-control ${open ? 'active' : ''}`}
+      type="button"
+      onClick={onClick}
+      aria-label={`${label} ${speed}x`}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-controls="video-speed-menu"
+      data-player-menu-trigger="speed"
+      title={label}
+    >
       <Icon name="speed" size={19} strokeWidth={1.7} />
       <span>{speed}×</span>
     </button>
   )
 }
 
+function SpeedMenu({ menuRef, speed, label, onSelect }: { menuRef: React.RefObject<HTMLDivElement | null>; speed: number; label: string; onSelect: (speed: number) => void }) {
+  return (
+    <div ref={menuRef} id="video-speed-menu" className="cinematic-speed-menu" role="menu" aria-label={label}>
+      {SPEEDS.map((option) => {
+        const selected = option === speed
+        return (
+          <button key={option} type="button" role="menuitemradio" aria-checked={selected} className={selected ? 'active' : ''} onClick={() => onSelect(option)}>
+            <span>{option}×</span>
+            {selected && <Icon name="check" size={17} />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function TrackDrawer({
+  drawerRef,
   tracks,
   selectedVideo,
   selectedAudio,
   selectedSubtitle,
-  onClose,
   onVideo,
   onAudio,
   onSubtitle,
   t
 }: {
+  drawerRef: React.RefObject<HTMLElement | null>
   tracks: { video: TrackInfo[]; audio: TrackInfo[]; subtitles: TrackInfo[] }
   selectedVideo: number
   selectedAudio: number
   selectedSubtitle: number
-  onClose: () => void
   onVideo: (index: number) => void
   onAudio: (index: number) => void
   onSubtitle: (index: number) => void
   t: (key: string) => string
 }) {
   return (
-    <aside className="vp-drawer cinematic-track-drawer" aria-label={t('tracks')} onMouseEnter={(event) => event.stopPropagation()}>
-      <div className="vd-head"><Icon name="track" size={18} /><span>{t('tracks')}</span><span className="spacer" /><button className="drawer-icon-btn" type="button" aria-label={t('close')} title={t('close')} onClick={onClose}><Icon name="close" size={18} /></button></div>
+    <aside ref={drawerRef} id="video-track-menu" className="vp-drawer cinematic-track-drawer" aria-label={t('tracks')}>
       <div className="vd-body">
-        {tracks.video.length > 0 ? <TrackSection title={t('videoTracks')} tracks={tracks.video} selected={selectedVideo} onSelect={onVideo} /> : <TrackEmpty label={t('videoTracks')} />}
-        {tracks.audio.length > 0 ? <TrackSection title={t('audioTracks')} tracks={tracks.audio} selected={selectedAudio} onSelect={onAudio} /> : <TrackEmpty label={t('audioTracks')} />}
-        <div className="vd-section-title">{t('subtitleTracks')}</div>
-        <TrackOption active={selectedSubtitle < 0} label={t('off')} onClick={() => onSubtitle(-1)} />
-        {tracks.subtitles.map((track, index) => <TrackOption key={`subtitle-${track.id}`} active={selectedSubtitle === index} label={track.title || `${t('subtitleTracks')} ${index + 1}`} detail={track.language} onClick={() => onSubtitle(index)} />)}
-        {tracks.subtitles.length === 0 && <TrackEmpty label={t('subtitleTracks')} />}
+        <TrackSection icon="video" kind="video" title={t('videoTracks')} tracks={tracks.video} selected={selectedVideo} emptyLabel={t('noTracks')} onSelect={onVideo} />
+        <TrackSection icon="music" kind="audio" title={t('audioTracks')} tracks={tracks.audio} selected={selectedAudio} emptyLabel={t('noTracks')} onSelect={onAudio} />
+        <section className="vd-track-section">
+          <div className="vd-section-title"><span className="vd-section-icon"><Icon name="subtitle" size={17} /></span><span>{t('subtitleTracks')}</span><span className="vd-section-count">{tracks.subtitles.length}</span></div>
+          <div className="vd-options">
+            <TrackOption active={selectedSubtitle < 0} label={t('off')} onClick={() => onSubtitle(-1)} />
+            {tracks.subtitles.map((track, index) => <TrackOption key={`subtitle-${track.id}`} active={selectedSubtitle === index} label={track.title || `${t('subtitleTracks')} ${index + 1}`} detail={formatTrackDetail(track, 'subtitle')} onClick={() => onSubtitle(index)} />)}
+          </div>
+        </section>
       </div>
     </aside>
   )
 }
 
-function TrackSection({ title, tracks, selected, onSelect }: { title: string; tracks: TrackInfo[]; selected: number; onSelect: (index: number) => void }) {
-  return <><div className="vd-section-title">{title}</div>{tracks.map((track, index) => <TrackOption key={`${title}-${track.id}`} active={selected === index} label={track.title || `${title} ${index + 1}`} detail={track.language} onClick={() => onSelect(index)} />)}</>
+function TrackSection({ icon, kind, title, tracks, selected, emptyLabel, onSelect }: { icon: IconName; kind: 'video' | 'audio'; title: string; tracks: TrackInfo[]; selected: number; emptyLabel: string; onSelect: (index: number) => void }) {
+  return (
+    <section className="vd-track-section">
+      <div className="vd-section-title"><span className="vd-section-icon"><Icon name={icon} size={17} /></span><span>{title}</span><span className="vd-section-count">{tracks.length}</span></div>
+      <div className="vd-options">
+        {tracks.length > 0
+          ? tracks.map((track, index) => <TrackOption key={`${title}-${track.id}`} active={selected === index} label={track.title || `${title} ${index + 1}`} detail={formatTrackDetail(track, kind)} onClick={() => onSelect(index)} />)
+          : <TrackEmpty label={emptyLabel} />}
+      </div>
+    </section>
+  )
 }
 
 function TrackOption({ active, label, detail, onClick }: { active: boolean; label: string; detail?: string; onClick: () => void }) {
-  return <button className={`vd-item ${active ? 'active' : ''}`} type="button" aria-pressed={active} onClick={onClick}><span className="vd-main">{label}</span>{detail && <span className="vd-sub">{detail}</span>}{active && <Icon name="check" size={15} />}</button>
+  return <button className={`vd-item ${active ? 'active' : ''}`} type="button" aria-pressed={active} onClick={onClick}><span className="vd-copy"><span className="vd-main">{label}</span>{detail && <span className="vd-sub">{detail}</span>}</span><span className="vd-selection-indicator" aria-hidden="true">{active && <Icon name="check" size={17} />}</span></button>
 }
 
 function TrackEmpty({ label }: { label: string }) {
   return <div className="vd-empty">{label}</div>
+}
+
+function formatTrackDetail(track: TrackInfo, kind: 'video' | 'audio' | 'subtitle'): string {
+  const parts: string[] = []
+  if (track.language) parts.push(track.language.toUpperCase())
+  if (track.codec) parts.push(track.codec.toUpperCase())
+  if (kind === 'video' && track.width && track.height) parts.push(`${track.width}×${track.height}`)
+  if (kind === 'video' && track.fps) parts.push(formatFrameRate(track.fps))
+  if (kind === 'audio' && track.channels) parts.push(`${track.channels}ch`)
+  return parts.join(' · ')
 }
 
 function formatMetaDuration(seconds: number): string {
