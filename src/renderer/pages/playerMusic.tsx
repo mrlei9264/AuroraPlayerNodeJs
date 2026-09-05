@@ -4,8 +4,9 @@ import { Icon } from '../core/icons'
 import { I } from '../../shared/channels'
 import { formatTime, isAudioExt, type MediaAudioFeatures } from '../../shared/types'
 import { shapeAudioVisualizerSpectrum } from './audioVisualizerSpectrum'
-import { audioVisualizerThemeForColorTheme } from './audioVisualizerThemes'
+import { audioVisualizerPaletteForColorTheme } from './audioVisualizerThemes'
 import { NetworkMediaLoader } from './networkMediaLoader'
+import { AudioLyrics } from './audioLyrics'
 import { fontFamilyStack } from '../core/appearance'
 import {
   activeAudioTitleGlyphIndex,
@@ -41,7 +42,6 @@ export function MusicPlayerPage() {
   const playbackModeLabel = t(playbackMode === 'one' ? 'singleRepeat' : playbackMode === 'shuffle' ? 'shufflePlayback' : 'sequentialPlayback')
   const networkMedia = Boolean(item && (item.sourceId !== null || item.protocol !== 'local'))
   const buffering = session.phase !== 'error' && (session.buffering || session.phase === 'loading' || session.phase === 'buffering')
-  const blackGold = theme.isDark && theme.variant === 'classic' && settings.accentIndex % 6 === 2
   const titleFontFamily = useMemo(() => fontFamilyStack(settings.fontFamily), [settings.fontFamily])
 
   useEffect(() => {
@@ -67,15 +67,15 @@ export function MusicPlayerPage() {
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
-  const visualizerTheme = useMemo(() => {
-    return audioVisualizerThemeForColorTheme(theme.accentIndex)
+  const visualizerPalette = useMemo(() => {
+    return audioVisualizerPaletteForColorTheme(theme.accentIndex)
   }, [theme.accentIndex])
 
   useEffect(() => {
     const frame = visualizerRef.current?.contentWindow
     if (!frame) return
     const properties = {
-      theme: { value: visualizerTheme }, showPlayerController: { value: false }, showAlbumCover: { value: false },
+      palette: { value: visualizerPalette }, showPlayerController: { value: false }, showAlbumCover: { value: false },
       gridSize: { value: 160 }, audioIntensity: { value: 0.82 }, responseRange: { value: 0.86 },
       cameraDistance: { value: 88 }, cameraAngleX: { value: 116 }, cameraAngleY: { value: 24 },
       autoRotateEnabled: { value: false }, pulseEnabled: { value: true }, pulseSensitivity: { value: 0.46 }, pulseCooldown: { value: 30 }, meteorEnabled: { value: false },
@@ -85,7 +85,7 @@ export function MusicPlayerPage() {
     frame.postMessage({ type: 'aurora-visualizer-config', properties }, '*')
     const retry = window.setTimeout(() => frame.postMessage({ type: 'aurora-visualizer-config', properties }, '*'), 500)
     return () => window.clearTimeout(retry)
-  }, [visualizerReady, visualizerTheme])
+  }, [visualizerReady, visualizerPalette])
 
   useEffect(() => {
     const frame = visualizerRef.current?.contentWindow
@@ -101,39 +101,20 @@ export function MusicPlayerPage() {
     () => technicalLabels(item?.fileName ?? '', item?.fileSize ?? 0, duration, audioFeatures),
     [audioFeatures, duration, item?.fileName, item?.fileSize]
   )
-  const visibleLyrics = useMemo(() => {
-    const lines = lyrics?.lines.filter((line) => line.text.trim()) ?? []
-    if (!lines.length) return { activeIndex: -1, lines: [] }
-    const lyricPosition = session.position - (lyrics?.offsetMs ?? 0) / 1000
-    let activeIndex = -1
-    for (let index = 0; index < lines.length; index += 1) {
-      if (lines[index].time >= 0 && lines[index].time <= lyricPosition) activeIndex = index
-      if (lines[index].time > lyricPosition) break
-    }
-    if (activeIndex < 0) {
-      const untimedIndex = lines.findIndex((line) => line.time < 0)
-      activeIndex = untimedIndex >= 0 ? untimedIndex : 0
-    }
-    const start = Math.max(0, Math.min(activeIndex - 2, Math.max(0, lines.length - 5)))
-    return {
-      activeIndex,
-      lines: lines.slice(start, start + 5).map((line, index) => ({ line, index: start + index }))
-    }
-  }, [lyrics, session.position])
-  const titleColors = useMemo(() => blackGold
-    ? { outline: '#ffbd28', head: '#ffe0a3', base: '#ffe3a3' }
-    : { outline: theme.colors.accent, head: theme.colors.accentEnd, base: theme.colors.fg0 },
-  [blackGold, theme.colors.accent, theme.colors.accentEnd, theme.colors.fg0])
+  const titleColors = useMemo(
+    () => ({ outline: theme.colors.accent, head: theme.colors.accentEnd, base: theme.colors.fg0 }),
+    [theme.colors.accent, theme.colors.accentEnd, theme.colors.fg0]
+  )
   const rootStyle = {
     '--audio-progress': `${progress}%`, '--audio-volume': `${volume}%`, '--audio-accent': theme.colors.accent,
     '--audio-accent-start': theme.colors.accentStart, '--audio-accent-end': theme.colors.accentEnd,
-    '--audio-accent-soft': blackGold ? 'rgba(255,184,0,.12)' : theme.colors.accentSoft,
-    '--audio-ink': blackGold ? '#ffe3a3' : theme.colors.fg0,
-    '--audio-copy': blackGold ? 'rgba(255,205,111,.82)' : theme.colors.fg1,
-    '--audio-muted': blackGold ? 'rgba(218,158,62,.64)' : theme.colors.fg2,
-    '--audio-bg': blackGold ? '#030201' : theme.colors.bg0,
-    '--audio-surface': blackGold ? '#120c04' : theme.colors.surface,
-    '--audio-border': blackGold ? 'rgba(255,184,0,.28)' : theme.colors.borderStrong
+    '--audio-accent-soft': theme.colors.accentSoft,
+    '--audio-ink': theme.colors.fg0,
+    '--audio-copy': theme.colors.fg1,
+    '--audio-muted': theme.colors.fg2,
+    '--audio-bg': theme.colors.bg0,
+    '--audio-surface': theme.colors.surface,
+    '--audio-border': theme.colors.borderStrong
   } as React.CSSProperties
   const cyclePlaybackMode = () => {
     if (playbackMode === 'sequential') {
@@ -152,7 +133,7 @@ export function MusicPlayerPage() {
   }
 
   return (
-    <div className={`music-player immersive-audio-player ${theme.isDark ? 'audio-dark' : 'audio-light'} ${blackGold ? 'audio-black-gold' : ''}`} style={rootStyle}>
+    <div className={`music-player immersive-audio-player ${theme.isDark ? 'audio-dark' : 'audio-light'}`} style={rootStyle}>
       <div className="audio-player-drag-region" />
       <div className="audio-ambient" aria-hidden="true" />
 
@@ -194,18 +175,14 @@ export function MusicPlayerPage() {
           </div>
         </section>
 
-        <section className="audio-lyrics-panel" aria-label={t('lyrics')}>
-          {visibleLyrics.lines.length > 0 ? visibleLyrics.lines.map(({ line, index }) => (
-            <div
-              className={`audio-lyric-line ${index === visibleLyrics.activeIndex ? 'active' : index < visibleLyrics.activeIndex ? 'played' : 'upcoming'}`}
-              key={`${line.time}-${index}`}
-            >
-              {line.text}
-            </div>
-          )) : (
-            <div className="audio-lyrics-empty">{t('lyricsNotFound')}</div>
-          )}
-        </section>
+        <AudioLyrics
+          key={session.mediaId}
+          lyrics={lyrics}
+          session={session}
+          reducedMotion={settings.reducedMotion}
+          label={t('lyrics')}
+          emptyLabel={t('lyricsNotFound')}
+        />
       </main>
 
       <section className="audio-control-console" aria-label="Playback controls">

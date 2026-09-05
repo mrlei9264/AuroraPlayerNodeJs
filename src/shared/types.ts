@@ -96,9 +96,16 @@ export interface RemoteEntry {
   modifiedAt: number
 }
 
+export interface LyricsWord {
+  time: number
+  endTime?: number
+  text: string
+}
+
 export interface LyricsLine {
   time: number
   text: string
+  words?: LyricsWord[]
 }
 
 export interface LyricsData {

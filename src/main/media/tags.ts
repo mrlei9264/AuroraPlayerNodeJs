@@ -203,7 +203,7 @@ function parseFlac(buf: Buffer): { comments: Map<string, string>; pic?: Buffer; 
     const header = buf[off]
     const isLast = header & 0x80
     const type = header & 0x7f
-    const len = ((buf[off + 1] & 0x7f) << 16) | ((buf[off + 2] & 0x7f) << 8) | (buf[off + 3] & 0x7f)
+    const len = buf.readUIntBE(off + 1, 3)
     off += 4
     if (off + len > buf.length) break
     const block = buf.subarray(off, off + len)
@@ -213,7 +213,11 @@ function parseFlac(buf: Buffer): { comments: Map<string, string>; pic?: Buffer; 
       totalSamples = ls
     } else if (type === 4) {
       const comments = new Map<string, string>()
-      let o = 0
+      // Vorbis comments begin with a vendor string, followed by the entry count.
+      if (block.length < 8) break
+      const vendorLength = block.readUInt32LE(0)
+      let o = 4 + vendorLength
+      if (o + 4 > block.length) break
       const count = block.readUInt32LE(o)
       o += 4
       for (let i = 0; i < count && o + 4 <= block.length; i++) {
@@ -529,7 +533,8 @@ export function probeEmbeddedLyrics(p: string): string | undefined {
     }
     if (head.toString('ascii', 0, 4) === 'fLaC') {
       const { comments } = parseFlac(head)
-      return comments.get('LYRICS') ?? comments.get('UNSYNCEDLYRICS')
+      return ['LYRICS', 'UNSYNCEDLYRICS', 'UNSYNCED LYRICS', 'SYNCEDLYRICS', 'SYNCED LYRICS']
+        .map((key) => comments.get(key)?.trim()).find(Boolean)
     }
     if (head.indexOf('ftyp') >= 0) {
       const { tags } = parseMp4(head)

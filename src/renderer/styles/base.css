@@ -1933,30 +1933,30 @@ body.library-mode .ctx-menu .ctx-item {
 .home-shell .main,
 .home-shell.settings-shell .main { background: var(--bg0); }
 .home-shell .sidebar .nav-list {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+  border-color: var(--border);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--fg0) 3.5%, transparent), color-mix(in srgb, var(--fg0) 1%, transparent)),
     color-mix(in srgb, var(--surface) 82%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg0) 5%, transparent), 0 18px 55px var(--shadow);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg0) 5%, transparent), 0 8px 28px var(--shadow);
 }
 .home-shell .sidebar .nav-mark {
   color: var(--accent-end);
-  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 60%, transparent));
+  filter: none;
 }
 .home-shell .sidebar .nav-mark::after { box-shadow: 0 0 8px color-mix(in srgb, var(--accent-end) 68%, transparent); }
 .home-shell .sidebar .nav-item { color: var(--fg1); }
 .home-shell .sidebar .nav-item:hover { color: var(--fg0); background: color-mix(in srgb, var(--fg0) 6%, transparent); }
 .home-shell .sidebar .nav-item.active {
-  color: var(--fg0);
-  border-color: color-mix(in srgb, var(--accent) 82%, transparent);
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 25%, transparent), color-mix(in srgb, var(--surface) 88%, transparent) 68%);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 17%, transparent), inset 0 1px 0 color-mix(in srgb, var(--accent-end) 9%, transparent);
+  color: var(--accent-end);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg0) 4%, transparent);
 }
 .sidebar .nav-item:focus-visible,
 .sidebar .home-profile:focus-visible,
 .sidebar .home-playback-toggle:focus-visible { outline-color: var(--accent-end); }
 .home-shell .sidebar .home-playback-status {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--accent) 13%, transparent), color-mix(in srgb, var(--fg0) 2%, transparent)),
     color-mix(in srgb, var(--surface) 90%, transparent);
@@ -1966,13 +1966,13 @@ body.library-mode .ctx-menu .ctx-item {
 .home-shell .sidebar .home-playback-toggle:hover:not(:disabled) { color: var(--bg0); background: var(--accent-gradient); }
 .home-shell .sidebar .home-playback-toggle:disabled { color: var(--fg3); background: color-mix(in srgb, var(--fg0) 2.5%, transparent); }
 .home-shell .sidebar .home-playback-status[data-playback-state='playing'] {
-  border-color: color-mix(in srgb, var(--accent-end) 78%, transparent);
+  border-color: color-mix(in srgb, var(--accent-end) 40%, var(--border));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-end) 12%, transparent), 0 12px 30px var(--shadow);
 }
 .home-shell .cinema-mini-player {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border));
   background: linear-gradient(135deg, color-mix(in srgb, var(--fg0) 3.5%, transparent), transparent), color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: 0 18px 55px var(--shadow), inset 0 1px 0 color-mix(in srgb, var(--fg0) 5%, transparent);
+  box-shadow: 0 8px 28px var(--shadow), inset 0 1px 0 color-mix(in srgb, var(--fg0) 5%, transparent);
 }
 .home-shell .cinema-mini-player .mp-cover { border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
 .home-shell .cinema-mini-player .mp-title { color: var(--fg0); }

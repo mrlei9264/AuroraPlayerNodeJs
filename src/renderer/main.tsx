@@ -9,6 +9,7 @@ import './styles/startup.css'
 import './styles/pages.css'
 import './styles/player.css'
 import './styles/theme-accent.css'
+import './styles/library.css'
 
 defineMpvVideoElement()
 

@@ -475,7 +475,7 @@ export function SettingsPage() {
                   onTogglePassword={() => setShowProxyPassword((visible) => !visible)}
                 />
               )}
-              {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} onThemeChange={() => setThemePulse((pulse) => pulse + 1)} />}
+              {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} language={settings.language} onThemeChange={() => setThemePulse((pulse) => pulse + 1)} />}
               {category === 'about' && (
                 <AboutPanel
                   application={appInfo?.name ?? 'Aurora Player'}
@@ -606,7 +606,7 @@ function ProxyPanel({
   )
 }
 
-function AppearancePanel({ value, onChange, copy, onThemeChange }: { value: AppearanceDraft; onChange: DraftUpdater<AppearanceDraft>; copy: SettingsCopy; onThemeChange: () => void }) {
+function AppearancePanel({ value, onChange, copy, language, onThemeChange }: { value: AppearanceDraft; onChange: DraftUpdater<AppearanceDraft>; copy: SettingsCopy; language: AppSettingsData['language']; onThemeChange: () => void }) {
   const fontSizes: AppSettingsData['fontSize'][] = [12, 13, 14, 15, 16]
   const [fontFamilies, setFontFamilies] = useState<string[]>([])
   const [appIcons, setAppIcons] = useState<AppIconOption[]>([])
@@ -654,10 +654,10 @@ function AppearancePanel({ value, onChange, copy, onThemeChange }: { value: Appe
             label={copy.colorTheme}
             value={String(value.accentIndex)}
             className="settings-color-theme-control"
-            options={COLOR_THEMES.map((colorTheme, index) => ({
-              value: String(index),
-              label: colorTheme.name,
-              swatch: [colorTheme.start, colorTheme.end] as [string, string]
+            options={COLOR_THEMES.map((colorTheme) => ({
+              value: String(colorTheme.index),
+              label: language === 'zh' ? colorTheme.nameZh : colorTheme.name,
+              swatch: [colorTheme.windowBackground, colorTheme.palette.bg3, colorTheme.start] as [string, string, string]
             }))}
             onChange={(accentIndex) => {
               onThemeChange()
@@ -722,7 +722,7 @@ function AppearancePanel({ value, onChange, copy, onThemeChange }: { value: Appe
 interface SettingsSelectOption {
   value: string
   label: string
-  swatch?: [string, string]
+  swatch?: [string, string, string]
   fontFamily?: string
   image?: string
   imageOnly?: boolean
@@ -838,8 +838,8 @@ function SettingsSelect({
   )
 }
 
-function ColorThemeSwatch({ colors }: { colors: [string, string] }) {
-  return <span className="settings-color-theme-swatch" aria-hidden="true" style={{ background: `linear-gradient(135deg, ${colors[0]}, ${colors[1]})` }} />
+function ColorThemeSwatch({ colors }: { colors: [string, string, string] }) {
+  return <span className="settings-color-theme-swatch" aria-hidden="true" style={{ background: `linear-gradient(110deg, ${colors[0]} 0% 38%, ${colors[1]} 38% 67%, ${colors[2]} 67% 100%)` }} />
 }
 
 function FontFamilySelect({ fonts, value, onChange, copy }: { fonts: string[]; value: string; onChange: (font: string) => void; copy: SettingsCopy }) {

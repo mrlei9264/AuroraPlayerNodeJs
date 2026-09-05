@@ -41,11 +41,19 @@
 
         const applyConfig = () => {
           if (!pendingConfig || !window.wallpaperPropertyListener?.applyUserProperties) return false
-          window.wallpaperPropertyListener.applyUserProperties(pendingConfig)
+          let properties = pendingConfig
+          if (properties.palette?.value) {
+            if (!window.__auroraApplyVisualizerPalette) return false
+            const themeId = window.__auroraApplyVisualizerPalette(properties.palette.value)
+            if (!themeId) return false
+            properties = { ...properties, theme: { value: themeId } }
+          }
+          window.wallpaperPropertyListener.applyUserProperties(properties)
           return true
         }
 
         window.addEventListener('message', (event) => {
+          if (event.source !== window.parent) return
           if (event.data?.type === 'aurora-audio-spectrum') {
             pendingAudio = event.data.samples
             const samples = Array.isArray(pendingAudio) ? pendingAudio : Array.from(pendingAudio || [])

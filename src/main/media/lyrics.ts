@@ -2,12 +2,33 @@ import fs from 'fs'
 import path from 'path'
 import { ipcMain } from 'electron'
 import { I } from '../../shared/channels'
-import type { LyricsData, LyricsLine } from '../../shared/types'
+import type { LyricsData, LyricsLine, LyricsWord } from '../../shared/types'
 import { probeEmbeddedLyrics } from './tags'
 import { requestBuffer } from '../system/networkProxy'
 import { decodeTextBuffer } from '../util'
 
 const TS_RE = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g
+const WORD_TS_RE = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/g
+
+function parseWords(content: string, start: number): LyricsWord[] | undefined {
+  const stamps = Array.from(content.matchAll(WORD_TS_RE))
+  if (!stamps.length) return undefined
+  const words: LyricsWord[] = []
+  let cursor = 0
+  let time = start
+  for (const stamp of stamps) {
+    const nextTime = Number(stamp[1]) * 60 + Number(stamp[2]) + Number((stamp[3] ?? '').padEnd(3, '0')) / 1000
+    // Ignore malformed timing while still removing its markup from displayed text.
+    if (nextTime < time) return undefined
+    const text = content.slice(cursor, stamp.index)
+    if (text) words.push({ time, endTime: nextTime, text })
+    time = nextTime
+    cursor = stamp.index! + stamp[0].length
+  }
+  const tail = content.slice(cursor)
+  if (tail) words.push({ time, text: tail })
+  return words.length ? words : undefined
+}
 
 export function parseLrc(text: string): LyricsData {
   const lines: LyricsLine[] = []
@@ -18,7 +39,7 @@ export function parseLrc(text: string): LyricsData {
 
   const raw = text.replace(/\r/g, '').split('\n')
   for (const line of raw) {
-    const meta = line.match(/^\[(\w+):(.*)\]$/)
+    const meta = line.match(/^\[([a-z]+):(.*)\]$/i)
     if (meta) {
       const key = meta[1].toLowerCase()
       const val = meta[2].trim()
@@ -42,9 +63,17 @@ export function parseLrc(text: string): LyricsData {
       matches.push({ time: min * 60 + sec + frac / 1000 })
     }
     if (matches.length) {
-      const text = line.replace(TS_RE, '').trim()
-      for (const mm of matches) lines.push({ time: mm.time, text })
-    } else if (!lines.length && line.trim()) {
+      const content = line.replace(TS_RE, '').trim()
+      const text = content.replace(WORD_TS_RE, '')
+      const words = parseWords(content, matches[0].time)
+      for (const mm of matches) {
+        const shift = mm.time - matches[0].time
+        lines.push({ time: mm.time, text, words: words?.map((word) => ({
+          ...word, time: word.time + shift,
+          endTime: word.endTime === undefined ? undefined : word.endTime + shift
+        })) })
+      }
+    } else if (line.trim()) {
       lines.push({ time: -1, text: line.trim() })
     }
   }
