@@ -1,6 +1,6 @@
 /* ============ base ============ */
 :root {
-  --font-aurora: 'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --font-aurora: 'Space Grotesk Variable', 'Noto Sans SC Variable', 'Microsoft YaHei UI', 'Segoe UI', system-ui, sans-serif;
 }
 
 *,
@@ -20,13 +20,13 @@ body,
 
 body {
   font-family: var(--font-family, var(--font-aurora));
-  font-feature-settings: 'ss01' 1, 'ss02' 1, 'tnum' 1;
+  font-variant-numeric: tabular-nums;
   background: var(--bg0);
   color: var(--fg1);
   font-size: calc(14px * var(--font-scale, 1));
-  line-height: 1.45;
+  line-height: 1.5;
   user-select: none;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: auto;
   -webkit-user-select: none;
 }
 

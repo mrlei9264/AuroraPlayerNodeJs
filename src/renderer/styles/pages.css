@@ -472,7 +472,7 @@
 }
 @keyframes cinema-copy-rise {
   from { opacity: 0; transform: translate3d(0, 14px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes cinema-rule-sweep {
   from { opacity: 0; transform: scaleX(0); }
@@ -2728,11 +2728,11 @@
 
 @keyframes network-handshake-enter {
   from { opacity: 0; transform: translate3d(0, 10px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes network-source-card-enter {
   from { opacity: 0; filter: brightness(.72) saturate(.82); transform: translate3d(0, 10px, 0) scale(.99); }
-  to { opacity: 1; filter: brightness(1) saturate(1); transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 1; filter: none; transform: none; }
 }
 @keyframes network-handshake-dot {
   0%, 100% { opacity: .28; transform: translateY(0) scale(.82); }
@@ -2744,19 +2744,19 @@
 }
 @keyframes network-test-result-in {
   from { opacity: 0; transform: translate3d(0, 6px, 0) scale(.99); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes network-directory-forward {
   from { opacity: 0; transform: translate3d(18px, 0, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes network-directory-back {
   from { opacity: 0; transform: translate3d(-18px, 0, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes network-download-row-enter {
   from { opacity: 0; transform: translate3d(0, 8px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes network-packet-flow {
   from { background-position: 140% 0; }
@@ -2971,10 +2971,9 @@
   --settings-gold-light: #f0bf72;
   --settings-text: #f2f0ec;
   --settings-muted: rgba(240, 238, 232, 0.68);
-  /* The global default font scale is 12 / 14. Compensate for it here so
-     the default visual sizes remain exactly 15px and 13px. */
-  --settings-font-large: calc(15px * var(--font-scale, 1) * 1.1666667);
-  --settings-font-small: calc(13px * var(--font-scale, 1) * 1.1666667);
+  /* Use the same size scale as the rest of the interface. */
+  --settings-font-large: calc(15px * var(--font-scale, 1));
+  --settings-font-small: calc(13px * var(--font-scale, 1));
   width: 100%;
   height: 100%;
   min-height: 0;

@@ -256,7 +256,7 @@ const defaultProxy: ProxyDraft = {
 const defaultAppearance: AppearanceDraft = {
   accentIndex: 1,
   appIcon: 'app_icon.png',
-  fontFamily: '',
+  fontFamily: 'Space Grotesk Variable',
   fontSize: 13,
   startupAnimationEnabled: true,
   reducedMotion: false,
@@ -691,10 +691,9 @@ function AppearancePanel({ value, onChange, copy, language, onThemeChange }: { v
           <SettingsSelect
             label={copy.fontSize}
             value={String(value.fontSize)}
-            options={fontSizes.map((size) => {
-              const visualSize = size - 2
-              return { value: String(size), label: `${visualSize} px${visualSize === 11 ? ` (${copy.recommended})` : ''}` }
-            })}
+            options={fontSizes.map((size) => ({
+              value: String(size), label: `${size} px${size === 13 ? ` (${copy.recommended})` : ''}`,
+            }))}
             onChange={(fontSize) => onChange((draft) => ({ ...draft, fontSize: Number(fontSize) as AppSettingsData['fontSize'] }))}
           />
         </SettingRow>
@@ -851,7 +850,7 @@ function FontFamilySelect({ fonts, value, onChange, copy }: { fonts: string[]; v
         { value: '', label: copy.systemDefault },
         ...fonts.map((font) => ({
           value: font,
-          label: font,
+          label: font === 'Space Grotesk Variable' ? `${font} (${copy.recommended})` : font,
           fontFamily: `"${font.replace(/["\\]/g, '\\$&')}"`
         }))
       ]}

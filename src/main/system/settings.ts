@@ -37,7 +37,7 @@ const defaults: AppSettingsData = {
   language: 'zh',
   accentIndex: 1,
   appIcon: 'app_icon.png',
-  fontFamily: '',
+  fontFamily: 'Space Grotesk Variable',
   fontSize: 13,
   reducedMotion: false,
   reduceTransparency: false,

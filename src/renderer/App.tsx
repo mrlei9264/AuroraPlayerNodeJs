@@ -127,14 +127,14 @@ function ShellInner() {
         {!isPlayer && <WindowChrome key="window-chrome" />}
       </AnimatePresence>
       <motion.div
-        layout={!reducedMotion}
+        layout={reducedMotion ? false : 'position'}
         className={`shell ${isCinema ? 'home-shell' : ''} ${isLibrary ? 'library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}
         transition={routeTransition}
       >
         <AnimatePresence initial={false}>
           {!isPlayer && <Sidebar key="sidebar" />}
         </AnimatePresence>
-        <motion.div className="main" layout={!reducedMotion} transition={routeTransition}>
+        <motion.div className="main" layout={reducedMotion ? false : 'position'} transition={routeTransition}>
           {!isPlayer && !booted ? (
             <div className="center" style={{ flex: 1 }}>
               <div className="skeleton" style={{ width: 420, height: 120, borderRadius: 20 }} />
@@ -144,9 +144,9 @@ function ShellInner() {
               <motion.div
                 key={routeKey}
                 className="route-stage"
-                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.995 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.998 }}
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
                 transition={routeTransition}
               >
                 <MainView />
