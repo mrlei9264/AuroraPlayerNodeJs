@@ -10,6 +10,8 @@ import { Logger } from '../system/diagnostics'
 export class LibraryController {
   private undoStack: { ids: number[]; items: MediaItem[]; expiresAt: number }[] = []
   private localSizesRefreshed = false
+  private availabilityTask: Promise<void> | null = null
+  private availabilityIncludesRemote = false
 
   constructor(
     private repo: LibraryRepository,
@@ -17,12 +19,14 @@ export class LibraryController {
     private broadcast: (channel: string, payload: unknown) => void,
     private beforeRemove: (items: MediaItem[]) => void = () => undefined,
     private afterRestore: (items: MediaItem[]) => void = () => undefined,
-    private afterRelocate: (item: MediaItem) => void = () => undefined
+    private afterRelocate: (item: MediaItem) => void = () => undefined,
+    private checkAvailable: (item: MediaItem) => Promise<boolean> = async (item) => fs.existsSync(item.url)
   ) {}
 
   init(): void {
     ipcMain.handle(I.libraryAddPaths, (_e, paths: string[]) => this.addPaths(paths))
     ipcMain.handle(I.libraryGet, () => this.snapshot())
+    ipcMain.handle(I.libraryRefreshAvailability, (_event, includeRemote?: boolean) => this.refreshAvailability(includeRemote !== false))
     ipcMain.handle(I.libraryAddUrl, (_e, url: string) => this.addUrl(url))
     ipcMain.handle(
       I.libraryAddRemote,
@@ -115,7 +119,7 @@ export class LibraryController {
     const fileSize = this.localFileSize(p)
     const existing = this.repo.findByUrl(p)
     if (existing) {
-      if (fileSize !== existing.fileSize) this.repo.updateFields(existing.id, { fileSize })
+      if (fileSize !== existing.fileSize || !existing.sourceAvailable) this.repo.updateFields(existing.id, { fileSize, sourceAvailable: fileSize > 0 })
       return this.repo.findById(existing.id)
     }
     const item = this.repo.insert({
@@ -248,18 +252,47 @@ export class LibraryController {
     return matched
   }
 
-  refreshAvailability(): void {
-    const all = this.repo.loadAll()
-    let changed = false
-    for (const item of all) {
-      if (item.protocol !== 'local') continue
-      const exists = fs.existsSync(item.url)
-      if (exists !== item.sourceAvailable) {
-        this.repo.updateFields(item.id, { sourceAvailable: exists })
-        changed = true
-      }
+  async checkItemAvailability(id: number): Promise<boolean> {
+    const item = this.repo.findById(id)
+    if (!item) return false
+    const available = await this.checkAvailable(item)
+    const current = this.repo.findById(id)
+    if (!current || current.url !== item.url) return false
+    if (current.sourceAvailable !== available) {
+      this.repo.updateFields(id, { sourceAvailable: available })
+      this.changed()
     }
-    if (changed) this.changed()
+    return available
+  }
+
+  refreshAvailability(includeRemote = true): Promise<void> {
+    if (this.availabilityTask) {
+      if (includeRemote && !this.availabilityIncludesRemote) {
+        return this.availabilityTask.then(() => this.refreshAvailability(true))
+      }
+      return this.availabilityTask
+    }
+    this.availabilityIncludesRemote = includeRemote
+    this.availabilityTask = this.refreshAvailabilityBatch(includeRemote).finally(() => { this.availabilityTask = null })
+    return this.availabilityTask
+  }
+
+  private async refreshAvailabilityBatch(includeRemote: boolean): Promise<void> {
+    const items = this.repo.loadAll().filter((item) => includeRemote || item.protocol === 'local')
+    let index = 0
+    let dirty = false
+    // Limit disk/network work and publish one snapshot per batch, not per file.
+    await Promise.all(Array.from({ length: Math.min(4, items.length) }, async () => {
+      while (index < items.length) {
+        const item = items[index++]
+        const available = await this.checkAvailable(item)
+        const current = this.repo.findById(item.id)
+        if (!current || current.url !== item.url || current.sourceAvailable === available) continue
+        this.repo.updateFields(item.id, { sourceAvailable: available })
+        dirty = true
+      }
+    }))
+    if (dirty) this.changed()
   }
 
   private changed(): void {

@@ -309,8 +309,9 @@ export class DownloadManager {
     const active = [...(this.active.get(id) ?? [])]
     for (const part of active) { part.stream.destroy(); part.writer.destroy() }
     await Promise.all(active.map((part) => part.writer.closed ? Promise.resolve() : new Promise<void>((resolve) => {
-      const timeout = setTimeout(resolve, 300)
-      part.writer.once('close', () => { clearTimeout(timeout); resolve() })
+      const done = () => { clearTimeout(timeout); part.writer.off('close', done); resolve() }
+      const timeout = setTimeout(done, 300)
+      part.writer.once('close', done)
     })))
   }
 

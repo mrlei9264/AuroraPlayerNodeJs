@@ -5,10 +5,10 @@ import { Icon, type IconName } from '../core/icons'
 import { p, useRuntime } from '../core/runtime'
 import { I } from '../../shared/channels'
 import { applyTypographySettings } from '../core/appearance'
-import { COLOR_THEMES, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
 import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS, type UpdateStatus } from '../../shared/types'
 import { FloatingMenu } from '../shared/floatingMenu'
+import { ThemeChoices } from '../shared/themeSettings'
 
 type SettingsCategory = 'general' | 'proxy' | 'appearance' | 'about'
 type DraftUpdater<T> = (update: (draft: T) => T) => void
@@ -37,7 +37,7 @@ interface ProxyDraft {
 }
 
 interface AppearanceDraft {
-  accentIndex: number
+  themeStyle: AppSettingsData['themeStyle']
   appIcon: string
   fontFamily: string
   fontSize: AppSettingsData['fontSize']
@@ -83,8 +83,6 @@ const SETTINGS_COPY = {
     hidePassword: 'Hide password',
     bypassLocal: 'Bypass proxy for local addresses',
     bypassLocalDescription: 'Connect directly to local network resources.',
-    colorTheme: 'Color theme',
-    colorThemeDescription: 'Changes the background, surfaces, text, controls, and player colors throughout the application.',
     appearanceThemeGroup: 'Theme & branding',
     appearanceTypographyGroup: 'Typography & scale',
     appearanceMotionGroup: 'Motion & material',
@@ -171,8 +169,6 @@ const SETTINGS_COPY = {
     hidePassword: '隐藏密码',
     bypassLocal: '本地地址不使用代理',
     bypassLocalDescription: '连接本地网络资源时使用直连。',
-    colorTheme: '颜色主题',
-    colorThemeDescription: '同步修改整个程序的背景、面板、文字、控件与播放器颜色。',
     appearanceThemeGroup: '主题与品牌',
     appearanceTypographyGroup: '字体与尺寸',
     appearanceMotionGroup: '动效与材质',
@@ -254,7 +250,7 @@ const defaultProxy: ProxyDraft = {
 }
 
 const defaultAppearance: AppearanceDraft = {
-  accentIndex: 1,
+  themeStyle: 'classic',
   appIcon: 'app_icon.png',
   fontFamily: 'Space Grotesk Variable',
   fontSize: 13,
@@ -288,7 +284,7 @@ function proxyFrom(settings: AppSettingsData): ProxyDraft {
 
 function appearanceFrom(settings: AppSettingsData): AppearanceDraft {
   return {
-    accentIndex: normalizeColorThemeIndex(settings.accentIndex),
+    themeStyle: settings.themeStyle ?? 'classic',
     appIcon: settings.appIcon,
     fontFamily: settings.fontFamily,
     fontSize: settings.fontSize,
@@ -358,7 +354,7 @@ export function SettingsPage() {
     setAppearance(next)
     applyTypographySettings(next)
     void patchSettings({
-      accentIndex: next.accentIndex,
+      themeStyle: next.themeStyle,
       appIcon: next.appIcon,
       fontFamily: next.fontFamily.trim(),
       fontSize: next.fontSize,
@@ -649,22 +645,12 @@ function AppearancePanel({ value, onChange, copy, language, onThemeChange }: { v
   return (
     <div className="settings-rows settings-appearance-rows">
       <SettingsGroup title={copy.appearanceThemeGroup}>
-        <SettingRow label={copy.colorTheme} description={copy.colorThemeDescription}>
-          <SettingsSelect
-            label={copy.colorTheme}
-            value={String(value.accentIndex)}
-            className="settings-color-theme-control"
-            options={COLOR_THEMES.map((colorTheme) => ({
-              value: String(colorTheme.index),
-              label: language === 'zh' ? colorTheme.nameZh : colorTheme.name,
-              swatch: [colorTheme.windowBackground, colorTheme.palette.bg3, colorTheme.start] as [string, string, string]
-            }))}
-            onChange={(accentIndex) => {
-              onThemeChange()
-              onChange((draft) => ({ ...draft, accentIndex: normalizeColorThemeIndex(accentIndex) }))
-            }}
-          />
-        </SettingRow>
+        <div className="settings-theme-style">
+          <ThemeChoices value={value.themeStyle} language={language} onChange={(themeStyle) => {
+            onThemeChange()
+            onChange((draft) => ({ ...draft, themeStyle }))
+          }} />
+        </div>
         <SettingRow label={copy.appIcon} description={copy.appIconDescription}>
           <SettingsSelect
             label={copy.appIcon}
@@ -738,13 +724,15 @@ function SettingsSelect({
   value,
   options,
   onChange,
-  className = ''
+  className = '',
+  disabled = false
 }: {
   label: string
   value: string
   options: SettingsSelectOption[]
   onChange: (value: string) => void
   className?: string
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -752,6 +740,10 @@ function SettingsSelect({
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
   const selected = options[selectedIndex] ?? options[0]
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
 
   useEffect(() => {
     if (!open) return
@@ -776,6 +768,7 @@ function SettingsSelect({
         ref={triggerRef}
         type="button"
         className="settings-font-select-trigger"
+        disabled={disabled}
         aria-label={label}
         title={label}
         aria-haspopup="listbox"

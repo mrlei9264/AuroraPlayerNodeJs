@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { I, E } from '../../shared/channels'
 import type {
   MediaItem,
@@ -27,6 +27,7 @@ import type { AppSettingsData } from '../../main/system/settings-types'
 import { initMediaBase, PlayerEngine } from './player'
 import { makeT, playbackErrorKey, type TKey } from './i18n'
 import { buildTheme, injectThemeVars } from './theme'
+import { stopThemeTransition, transitionTheme } from './themeTransition'
 
 export const p = <T,>(channel: string, ...args: unknown[]): Promise<T> =>
   window.aurora.invoke(channel as never, ...args) as Promise<T>
@@ -212,6 +213,9 @@ interface ToastTimer {
 
 export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettingsData | null>(null)
+  const settingsRef = useRef(settings)
+  useLayoutEffect(() => { settingsRef.current = settings }, [settings])
+  useEffect(() => stopThemeTransition, [])
   const [appIconUrl, setAppIconUrl] = useState<string | null>(null)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [library, setLibrary] = useState<MediaItem[]>([])
@@ -260,15 +264,25 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   if (!engineRef.current) {
     engineRef.current = new PlayerEngine({})
   }
+  const captureLifetime = useRef<AbortController | null>(null)
   const engine = engineRef.current
+  useEffect(() => {
+    engine.mount()
+    const controller = new AbortController()
+    captureLifetime.current = controller
+    return () => {
+      controller.abort()
+      engine.dispose()
+    }
+  }, [engine])
 
   const t = useMemo(() => (settings ? makeT(settings.language) : makeT('en')), [settings?.language])
   const theme = useMemo(
-    () => buildTheme(settings?.accentIndex ?? 0),
-    [settings?.accentIndex]
+    () => buildTheme(settings?.accentIndex ?? 0, settings?.themeStyle ?? 'classic'),
+    [settings?.accentIndex, settings?.themeStyle]
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     injectThemeVars(theme)
   }, [theme])
 
@@ -381,7 +395,15 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const patchSettings = useCallback(async (partial: Partial<AppSettingsData>) => {
-    setSettings((prev) => (prev ? { ...prev, ...partial } : prev))
+    const current = settingsRef.current
+    const nextStyle = partial.themeStyle ?? current?.themeStyle ?? 'classic'
+    const changesTheme = current != null && (
+      nextStyle !== current.themeStyle ||
+      (nextStyle === 'classic' && partial.accentIndex !== undefined && partial.accentIndex !== current.accentIndex)
+    )
+    const update = () => setSettings((prev) => (prev ? { ...prev, ...partial } : prev))
+    if (changesTheme) await transitionTheme(update, partial.reducedMotion ?? current?.reducedMotion ?? false)
+    else update()
     const updated = await p<AppSettingsData>(I.settingsPatch, partial)
     setSettings(updated)
     return updated
@@ -999,7 +1021,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     }))
     unsubs.push(window.aurora.on(E.probeProgress, (prg: ProbeProgress) => setProbe(prg)))
     unsubs.push(window.aurora.on(E.probeFrameRequested, (payload: { mediaId: number; url: string }) => {
-      void captureVideoCover(payload.url)
+      void captureVideoCover(payload.url, captureLifetime.current?.signal)
         .then((coverDataUrl) => p(I.probeResult, payload.mediaId, 0, coverDataUrl))
         .catch(() => p(I.probeResult, payload.mediaId, 0, null))
     }))
@@ -1170,14 +1192,18 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   return <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>
 }
 
-async function captureVideoCover(url: string): Promise<string | null> {
+async function captureVideoCover(url: string, signal?: AbortSignal): Promise<string | null> {
   return await new Promise((resolve) => {
     const video = document.createElement('video')
+    const events = new AbortController()
+    const onAbort = () => done(null)
     let settled = false
     const done = (value: string | null) => {
       if (settled) return
       settled = true
       window.clearTimeout(timeout)
+      events.abort()
+      signal?.removeEventListener('abort', onAbort)
       video.pause()
       video.removeAttribute('src')
       video.load()
@@ -1186,32 +1212,37 @@ async function captureVideoCover(url: string): Promise<string | null> {
     const capture = () => {
       try {
         if (!video.videoWidth || !video.videoHeight) return done(null)
-        const width = Math.min(640, video.videoWidth)
-        const height = Math.max(2, Math.round(width * video.videoHeight / video.videoWidth / 2) * 2)
+        const scale = Math.min(1, 640 / video.videoWidth, 640 / video.videoHeight)
+        const width = Math.max(2, Math.round(video.videoWidth * scale / 2) * 2)
+        const height = Math.max(2, Math.round(video.videoHeight * scale / 2) * 2)
         const canvas = document.createElement('canvas')
         canvas.width = width
         canvas.height = height
         const context = canvas.getContext('2d')
         if (!context) return done(null)
         context.drawImage(video, 0, 0, width, height)
-        done(canvas.toDataURL('image/jpeg', 0.84))
+        const data = canvas.toDataURL('image/jpeg', 0.84)
+        canvas.width = canvas.height = 0
+        done(data)
       } catch {
         done(null)
       }
     }
     const timeout = window.setTimeout(() => done(null), 30_000)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) return done(null)
     video.crossOrigin = 'anonymous'
     video.preload = 'metadata'
     video.muted = true
-    video.addEventListener('error', () => done(null), { once: true })
+    video.addEventListener('error', () => done(null), { once: true, signal: events.signal })
     video.addEventListener('loadedmetadata', () => {
       const target = Number.isFinite(video.duration) && video.duration > 0 ? Math.min(10, Math.max(0.2, video.duration * 0.1)) : 0.2
       video.currentTime = target
-    }, { once: true })
-    video.addEventListener('seeked', capture, { once: true })
+    }, { once: true, signal: events.signal })
+    video.addEventListener('seeked', capture, { once: true, signal: events.signal })
     video.addEventListener('loadeddata', () => {
       if (!Number.isFinite(video.duration) || video.duration <= 0) capture()
-    }, { once: true })
+    }, { once: true, signal: events.signal })
     video.src = url
     video.load()
   })

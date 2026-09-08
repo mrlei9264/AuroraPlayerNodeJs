@@ -1,20 +1,21 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, lazy, Suspense } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { RuntimeProvider, useRuntime } from './core/runtime'
 import { WindowChrome, Sidebar, ToastHost, DialogHost, CtxMenuHost, HudHost, MiniPlayer, GlobalShortcuts, DragDropImporter } from './shell/shell'
-import { HomePage } from './pages/home'
-import { BrowsePage } from './pages/browse'
-import { LibraryPage } from './pages/library'
-import { PlaylistsPage } from './pages/playlists'
-import { RemotePage } from './pages/remote'
-import { DownloadsPage } from './pages/downloads'
-import { SettingsPage } from './pages/settings'
-import { VideoPlayerPage } from './pages/playerVideo'
-import { MusicPlayerPage } from './pages/playerMusic'
-import { MediaDetailsPage } from './pages/mediaDetails'
+const HomePage = lazy(() => import('./pages/home').then((module) => ({ default: module.HomePage })))
+const BrowsePage = lazy(() => import('./pages/browse').then((module) => ({ default: module.BrowsePage })))
+const LibraryPage = lazy(() => import('./pages/library').then((module) => ({ default: module.LibraryPage })))
+const PlaylistsPage = lazy(() => import('./pages/playlists').then((module) => ({ default: module.PlaylistsPage })))
+const RemotePage = lazy(() => import('./pages/remote').then((module) => ({ default: module.RemotePage })))
+const DownloadsPage = lazy(() => import('./pages/downloads').then((module) => ({ default: module.DownloadsPage })))
+const SettingsPage = lazy(() => import('./pages/settings').then((module) => ({ default: module.SettingsPage })))
+const VideoPlayerPage = lazy(() => import('./pages/playerVideo').then((module) => ({ default: module.VideoPlayerPage })))
+const MusicPlayerPage = lazy(() => import('./pages/playerMusic').then((module) => ({ default: module.MusicPlayerPage })))
+const MediaDetailsPage = lazy(() => import('./pages/mediaDetails').then((module) => ({ default: module.MediaDetailsPage })))
 import { applyTypographySettings } from './core/appearance'
 import { StartupAnimation } from './shell/startupAnimation'
-import { MotionLabPage } from './pages/motionLab'
+const MotionLabPage = lazy(() => import('./pages/motionLab').then((module) => ({ default: module.MotionLabPage })))
+import { TahoeLighting } from './shared/tahoeLighting'
 
 function MainView() {
   const { nav, session } = useRuntime()
@@ -61,6 +62,7 @@ function ShellInner() {
   useEffect(() => {
     const manageGlobalKeyboardFocus = (event: KeyboardEvent) => {
       if (event.key === 'Tab') {
+        if (event.target instanceof HTMLElement && event.target.closest('.theme-choices, .theme-settings-popover, .theme-settings-button')) return
         event.preventDefault()
         return
       }
@@ -118,6 +120,7 @@ function ShellInner() {
 
   return (
     <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
+      <TahoeLighting enabled={true} reducedMotion={reducedMotion} reduceTransparency={settings?.reduceTransparency ?? false} routeKey={routeKey} />
       {settings == null
         ? <div className="startup-animation" aria-hidden="true" />
         : settings.startupAnimationEnabled
@@ -149,7 +152,7 @@ function ShellInner() {
                 exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
                 transition={routeTransition}
               >
-                <MainView />
+                <Suspense fallback={<div className="center" role="status">{settings?.language === 'zh' ? '正在加载…' : 'Loading…'}</div>}><MainView /></Suspense>
               </motion.div>
             </AnimatePresence>
           )}

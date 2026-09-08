@@ -22,7 +22,7 @@ export function AuroraBackground({ seed = 7 }: { seed?: number }) {
     const reduce = settingsReducedMotion
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      const dpr = 1
       w = canvas.clientWidth
       h = canvas.clientHeight
       canvas.width = Math.max(1, w * dpr)
@@ -30,7 +30,8 @@ export function AuroraBackground({ seed = 7 }: { seed?: number }) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
     resize()
-    window.addEventListener('resize', resize)
+    const onResize = () => { resize(); if (reduce) draw() }
+    window.addEventListener('resize', onResize)
 
     const hexToRgb = (hex: string): [number, number, number] => {
       const n = parseInt(hex.slice(1), 16)
@@ -62,14 +63,15 @@ export function AuroraBackground({ seed = 7 }: { seed?: number }) {
         const col = i % 3 === 0 ? [r1, g1, b1] : i % 3 === 1 ? [r2, g2, b2] : [r3, g3, b3]
         blob(x, y, rad, col[0], col[1], col[2], a)
       }
-      raf = requestAnimationFrame(draw)
+      if (!reduce) raf = requestAnimationFrame(draw)
     }
     draw()
     return () => {
       cancelAnimationFrame(raf)
-      window.removeEventListener('resize', resize)
+      window.removeEventListener('resize', onResize)
+      canvas.width = canvas.height = 0
     }
-  }, [theme, seed])
+  }, [theme, seed, settingsReducedMotion])
 
   return <canvas ref={canvasRef} className="viz-canvas" style={{ opacity: theme.richEffectsEnabled ? 0.85 : 0.35 }} />
 }

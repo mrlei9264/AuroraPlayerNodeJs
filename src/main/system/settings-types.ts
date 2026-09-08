@@ -1,6 +1,7 @@
 export interface AppSettingsData {
   language: 'en' | 'zh'
   accentIndex: number
+  themeStyle: 'classic' | 'tahoe'
   appIcon: string
   fontFamily: string
   fontSize: 12 | 13 | 14 | 15 | 16

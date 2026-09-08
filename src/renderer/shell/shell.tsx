@@ -53,13 +53,13 @@ export function WindowChrome() {
         )}
       </AnimatePresence>
       <div className="tb-controls">
-        <motion.button className="tb-btn" whileTap={{ scale: 0.92 }} title={t('minimize')} onClick={windowMinimize}>
+        <motion.button className="tb-btn minimize" whileTap={{ scale: 0.92 }} title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
         </motion.button>
-        <motion.button className="tb-btn" whileTap={{ scale: 0.92 }} title={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        <motion.button className="tb-btn maximize" whileTap={{ scale: 0.92 }} title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
         </motion.button>
-        <motion.button className="tb-btn close" whileTap={{ scale: 0.92 }} title={t('close')} onClick={windowClose}>
+        <motion.button className="tb-btn close" whileTap={{ scale: 0.92 }} title={t('close')} aria-label={t('close')} onClick={windowClose}>
           <Icon name="close" size={16} />
         </motion.button>
       </div>

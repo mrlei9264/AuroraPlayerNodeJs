@@ -1,4 +1,5 @@
-import { COLOR_THEMES, colorThemeAt, normalizeColorThemeIndex, type ColorThemeId } from '../../shared/colorThemes'
+import { COLOR_THEMES, TAHOE_WINDOW_BACKGROUND, colorThemeAt, type ColorThemeId } from '../../shared/colorThemes'
+import type { AppSettingsData } from '../../main/system/settings-types'
 
 export type Accent = { name: string; start: string; end: string }
 
@@ -8,7 +9,7 @@ export interface Theme {
   id: ColorThemeId
   accentIndex: number
   isDark: boolean
-  variant: 'classic'
+  variant: AppSettingsData['themeStyle']
   colors: {
     bg0: string
     bg1: string
@@ -43,11 +44,11 @@ export interface Theme {
   richEffectsEnabled: boolean
 }
 
-export function buildTheme(accentIndex: number): Theme {
-  const resolvedIndex = normalizeColorThemeIndex(accentIndex)
+export function buildTheme(_accentIndex: number, variant: Theme['variant'] = 'classic'): Theme {
+  const resolvedIndex = 1
   const definition = colorThemeAt(resolvedIndex)
   const base = definition.palette
-  return {
+  const theme: Theme = {
     id: definition.id,
     accentIndex: resolvedIndex,
     isDark: !definition.isLight,
@@ -82,6 +83,23 @@ export function buildTheme(accentIndex: number): Theme {
     effectsEnabled: true,
     richEffectsEnabled: true
   }
+  if (variant === 'tahoe') {
+    // Web approximation of macOS Tahoe materials; native Liquid Glass is an Apple platform API.
+    theme.variant = 'tahoe'
+    theme.isDark = false
+    theme.colors = {
+      ...theme.colors,
+      bg0: TAHOE_WINDOW_BACKGROUND, bg1: '#ffffff', bg2: '#f0f5fa', bg3: '#dfe8f2',
+      surface: '#ffffff', surface2: '#f0f5fa',
+      fg0: '#1d1d1f', fg1: '#3a3a3c', fg2: '#40536a', fg3: '#4e6074',
+      border: '#54759b55', borderStrong: '#54759b80',
+      accentStart: '#0066db', accentEnd: '#0071e3', accent: '#0066db', accentSoft: '#007aff17',
+      danger: '#c42b24', success: '#24823c', warning: '#996500', info: '#0066db',
+      overlay: '#70899c12', shadow: 'rgba(54, 82, 114, 0.035)',
+      projection: '#0071e3', neonCyan: '#0066db', neonGold: '#0071e3', archiveViolet: '#0066db'
+    }
+  }
+  return theme
 }
 
 export function injectThemeVars(theme: Theme): void {

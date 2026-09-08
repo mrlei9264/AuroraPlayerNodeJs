@@ -48,7 +48,9 @@ export class PlayerEngine {
   private container: HTMLElement | null = null
   private readonly hiddenHost: HTMLDivElement
   private plan: PlayPlan | null = null
-  private disposed = false
+  private disposed = true
+  private audioEvents: AbortController | null = null
+  private frequencyData = new Uint8Array(256)
   private loadEpoch = 0
   private trackEpoch = 0
   private loadTimeout = 0
@@ -110,8 +112,23 @@ export class PlayerEngine {
     if (events) this.ev = events
     this.hiddenHost = document.createElement('div')
     this.hiddenHost.style.cssText = 'position:fixed;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;left:-9999px;top:0'
+  }
+
+  mount(): void {
+    if (!this.disposed) return
+    this.disposed = false
     document.body.appendChild(this.hiddenHost)
     this.raf = requestAnimationFrame(this.loop)
+  }
+
+  dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    cancelAnimationFrame(this.raf)
+    this.raf = 0
+    this.ev = {}
+    this.stop()
+    this.hiddenHost.remove()
   }
 
   attach(container: HTMLElement, muted: boolean, volume: number, speed: number): void {
@@ -133,6 +150,7 @@ export class PlayerEngine {
   }
 
   load(plan: PlayPlan, volume: number, muted: boolean, speed: number): void {
+    if (this.disposed) return
     const epoch = ++this.loadEpoch
     this.stopBackends()
     this.plan = plan
@@ -191,6 +209,8 @@ export class PlayerEngine {
 
   private loadAudio(plan: PlayPlan, epoch: number): void {
     const audio = document.createElement('audio')
+    this.audioEvents = new AbortController()
+    const options = { signal: this.audioEvents.signal }
     audio.crossOrigin = 'anonymous'
     audio.preload = 'auto'
     audio.volume = this.volume / 100
@@ -203,7 +223,7 @@ export class PlayerEngine {
       this.session.duration = this.knownDuration || nativeDuration || this.session.duration
       if (this.pendingResume > 0.5 && this.pendingResume < this.session.duration - 0.5) audio.currentTime = this.pendingResume
       this.markLoaded()
-    })
+    }, options)
     audio.addEventListener('playing', () => {
       if (epoch !== this.loadEpoch) return
       this.session.phase = 'playing'
@@ -211,7 +231,7 @@ export class PlayerEngine {
       this.setBuffering(false)
       this.ensureAudioGraph()
       this.emitSession()
-    })
+    }, options)
     audio.addEventListener('pause', () => {
       if (epoch !== this.loadEpoch || this.session.idle || this.session.phase === 'error') return
       this.updateAudioPosition(audio)
@@ -219,20 +239,20 @@ export class PlayerEngine {
       this.session.paused = true
       this.emitSession()
       this.persistPlaybackProgress()
-    })
-    audio.addEventListener('waiting', () => this.setBuffering(true))
-    audio.addEventListener('canplay', () => this.setBuffering(false))
-    audio.addEventListener('seeking', () => { this.session.seeking = true; this.emitSession() })
+    }, options)
+    audio.addEventListener('waiting', () => this.setBuffering(true), options)
+    audio.addEventListener('canplay', () => this.setBuffering(false), options)
+    audio.addEventListener('seeking', () => { this.session.seeking = true; this.emitSession() }, options)
     audio.addEventListener('seeked', () => {
       this.session.seeking = false
       this.updateAudioPosition(audio)
       this.emitSession()
-    })
-    audio.addEventListener('ended', () => this.handleEnded())
+    }, options)
+    audio.addEventListener('ended', () => this.handleEnded(), options)
     audio.addEventListener('error', () => {
       const code = audio.error?.code
       this.failPlayback(code === 2 ? 'Network error while loading media' : code === 3 ? 'Could not decode this media' : code === 4 ? 'This media is not supported' : 'Playback error')
-    })
+    }, options)
     this.hiddenHost.appendChild(audio)
     this.video = audio
     audio.src = plan.url
@@ -648,7 +668,7 @@ export class PlayerEngine {
     }
     if (this.analyser && now - this.lastSpectrumAt >= 32) {
       this.lastSpectrumAt = now
-      const raw = new Uint8Array(this.analyser.frequencyBinCount)
+      const raw = this.frequencyData
       this.analyser.getByteFrequencyData(raw)
       for (let i = 0; i < this.spectrum.length; i++) {
         const start = Math.floor((i / this.spectrum.length) * raw.length)
@@ -836,6 +856,8 @@ export class PlayerEngine {
   }
 
   private stopBackends(): void {
+    this.audioEvents?.abort()
+    this.audioEvents = null
     this.destroyAudioGraph()
     if (this.video) {
       this.video.pause()

@@ -36,6 +36,7 @@ export class RemoteSourceManager {
       return this.saveSource(input, id)
     })
     ipcMain.handle(I.sourceRemove, async (_e, id: number) => {
+      this.disposeAdapter(id)
       this.sources = this.sources.filter((s) => s.id !== id)
       await this.credentials.remove(`aurora:source:${id}`)
       this.persist()
@@ -261,6 +262,17 @@ export class RemoteSourceManager {
       void a.close()
       this.adapters.delete(sourceId)
     }
+  }
+
+  async statIsolated(sourceId: number, path: string): Promise<{ size: number } | null> {
+    const source = this.getSource(sourceId)
+    if (!source) return null
+    let adapter: IRemoteAdapter | null = null
+    try {
+      adapter = await this.createAdapterFor(source)
+      return await adapter.stat(path)
+    } catch { return null }
+    finally { await adapter?.close().catch(() => undefined) }
   }
 
   async stat(sourceId: number, path: string): Promise<{ size: number } | null> {

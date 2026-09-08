@@ -1,5 +1,8 @@
 export type ColorThemeId = 'aurora' | 'neon-cyan' | 'neon-gold' | 'emerald' | 'rose'
 
+/** Shared by the native window, renderer and player to avoid dark seams. */
+export const TAHOE_WINDOW_BACKGROUND = '#f8fbff'
+
 export interface ColorThemeDefinition {
   /** Persisted preference key, independent of the order in the picker. */
   index: number
@@ -24,8 +27,8 @@ export const COLOR_THEMES: readonly ColorThemeDefinition[] = [
   },
   {
     index: 1, id: 'neon-cyan', name: 'Glacier', nameZh: '冰川蓝',
-    start: '#93bdd5', end: '#b2d1e4', windowBackground: '#11161b', isLight: false,
-    palette: { bg1: '#192129', bg2: '#242f39', bg3: '#303d49', fg0: '#eef3f6', fg1: '#c1cdd5', fg2: '#96a5b1', fg3: '#748591' }
+    start: '#8cc8ff', end: '#afdfff', windowBackground: '#101923', isLight: false,
+    palette: { bg1: '#192737', bg2: '#23364a', bg3: '#304960', fg0: '#f4f8ff', fg1: '#dae6f4', fg2: '#b9cce0', fg3: '#a6bbd2' }
   },
   {
     index: 2, id: 'neon-gold', name: 'Champagne', nameZh: '香槟金',

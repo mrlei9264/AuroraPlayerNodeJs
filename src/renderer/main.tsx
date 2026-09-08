@@ -10,6 +10,8 @@ import './styles/pages.css'
 import './styles/player.css'
 import './styles/theme-accent.css'
 import './styles/library.css'
+import './styles/theme-tahoe.css'
+import './styles/tahoe-optics.css'
 
 defineMpvVideoElement()
 

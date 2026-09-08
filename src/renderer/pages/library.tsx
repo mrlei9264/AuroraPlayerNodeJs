@@ -339,6 +339,30 @@ function readBrowsePreference(): { kind: LibraryTab; query: string; source: Sour
 export function LibraryPage() {
   const { t, settings, library, session, play, addMediaDialog, enqueue, toggleFavorite, removeMedia, confirm, prompt, openPath, openCtxMenu, navigate, addFolderDialog, toast } = useRuntime()
   const locale = settings?.language === 'zh' ? 'zh-CN' : 'en-US'
+  const [availabilityRefreshing, setAvailabilityRefreshing] = useState(false)
+  const refreshAvailability = useCallback(async (includeRemote = true) => {
+    setAvailabilityRefreshing(true)
+    try { await p(I.libraryRefreshAvailability, includeRemote) }
+    catch { toast('error', settings.language === 'zh' ? '无法检查文件状态，请重试' : 'Unable to check file availability') }
+    finally { setAvailabilityRefreshing(false) }
+  }, [settings.language, toast])
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden) void refreshAvailability()
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    // Poll local paths only; remote checks run on entry, focus and explicit refresh.
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void refreshAvailability(false)
+    }, 30_000)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [refreshAvailability])
   const systemReducedMotion = useReducedMotion()
   const reduceMotion = settings.reducedMotion || systemReducedMotion
   const [initialBrowse] = useState(readBrowsePreference)
@@ -877,6 +901,7 @@ export function LibraryPage() {
           <p>{t('librarySummary', { count: libraryStats.total.toLocaleString(locale) })}</p>
         </div>
         <div className="library-import-actions">
+          <button type="button" className="library-action" disabled={availabilityRefreshing} onClick={() => void refreshAvailability()} aria-busy={availabilityRefreshing}><Icon name="refresh" size={17} />{settings.language === 'zh' ? (availabilityRefreshing ? '检查中…' : '检查文件') : (availabilityRefreshing ? 'Checking…' : 'Check files')}</button>
           <button type="button" className="library-action" onClick={() => void addFolderDialog()}><Icon name="folder" size={17} />{t('libraryAddFolder')}</button>
           <button type="button" className="library-action primary" onClick={() => void addMediaDialog()}><Icon name="plus" size={17} />{t('addMedia')}</button>
         </div>
@@ -1077,7 +1102,7 @@ function LibraryCollectionCard({
         <span className="library-collection-art">
           {previewCards.map((card, index) => (
             <span className="library-collection-preview" key={card.item.id} style={{ '--preview-index': index } as React.CSSProperties}>
-              {card.artwork ? <img src={card.artwork} alt="" /> : <span className="media-artwork-fallback compact"><Icon name={card.kind === 'audio' ? 'music' : 'video'} size={30} /></span>}
+              {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={30} /></span>}
             </span>
           ))}
           {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
@@ -1124,7 +1149,7 @@ function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly,
     <div className={`library-file-card ${card.kind} ${selected ? 'selected' : ''} ${current ? 'is-current' : ''} ${!card.item.sourceAvailable ? 'is-unavailable' : ''}`} data-media-id={card.item.id} onContextMenu={onContextMenu}>
       <button type="button" className="library-file-open" onClick={onOpen} aria-label={`${selectionMode ? t('selectItem') : card.item.sourceAvailable ? t('play') : t('mediaInfo')}: ${card.title}`} aria-current={current ? 'true' : undefined} aria-pressed={selectionMode ? selected : undefined}>
         <span className={`library-file-art ${card.kind === 'audio' ? 'audio-art' : ''}`}>
-          {card.artwork ? <img src={card.artwork} alt="" loading="lazy" /> : card.kind === 'audio' ? <AudioArtwork variant="library" identity={card.item.album || card.item.artist || card.title} /> : <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>}
+          {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>}
           {!selectionMode && card.item.sourceAvailable && <span className="library-card-play"><Icon name="play" size={23} /></span>}
           {card.overlayDuration && <span className="library-file-duration">{card.overlayDuration}</span>}
           {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}

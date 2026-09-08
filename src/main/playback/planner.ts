@@ -30,15 +30,16 @@ export class PlaybackLaunchPlanner {
     const kind: MediaKind = item.isAudio ? 'audio' : 'video'
 
     if (item.protocol === 'local') {
-      if (!this.deps.fileExists(item.url)) {
+      if (!item.sourceAvailable || !this.deps.fileExists(item.url)) {
         return { ok: false, result: 'localFileMissing', item, url: '', kind, resumePosition: 0 }
       }
     } else if (item.sourceId !== null) {
-      if (!this.deps.sourceAvailable(item.sourceId)) {
+      if (!item.sourceAvailable || !this.deps.sourceAvailable(item.sourceId)) {
         return { ok: false, result: 'remoteSourceMissing', item, url: '', kind, resumePosition: 0 }
       }
     }
 
+    if (!item.sourceAvailable) return { ok: false, result: 'remoteSourceMissing', item, url: '', kind, resumePosition: 0 }
     const url = this.deps.urlFor(item)
     if (request.action === 'restart' || request.action === 'playNext' || request.action === 'playPrevious') {
       return { ok: true, result: 'ready', item, url, kind, resumePosition: 0 }

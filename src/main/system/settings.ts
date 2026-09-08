@@ -6,7 +6,7 @@ import path from 'path'
 import { E, I } from '../../shared/channels'
 import { MEDIA_EXTS } from '../../shared/types'
 import type { AppSettingsData } from './settings-types'
-import { colorThemeAt, normalizeColorThemeIndex } from '../../shared/colorThemes'
+import { TAHOE_WINDOW_BACKGROUND, colorThemeAt, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import type { CredentialStore } from '../remote/credentials'
 import { makeAppIcon } from '../util'
 
@@ -36,6 +36,7 @@ async function getAvailableFontFamilies(): Promise<string[]> {
 const defaults: AppSettingsData = {
   language: 'zh',
   accentIndex: 1,
+  themeStyle: 'classic',
   appIcon: 'app_icon.png',
   fontFamily: 'Space Grotesk Variable',
   fontSize: 13,
@@ -159,9 +160,9 @@ export class AppSettings {
   }
 
   private applySystemEffects(key: keyof AppSettingsData): void {
-    if (key === 'accentIndex') {
+    if (key === 'accentIndex' || key === 'themeStyle') {
       const win = BrowserWindow.getAllWindows()[0]
-      win?.setBackgroundColor(colorThemeAt(this.store.get('accentIndex')).windowBackground)
+      win?.setBackgroundColor(this.store.get('themeStyle') === 'tahoe' ? TAHOE_WINDOW_BACKGROUND : colorThemeAt(1).windowBackground)
     }
     if (key === 'appIcon') {
       const icon = nativeImage.createFromBuffer(makeAppIcon(256, this.store.get('appIcon')))
@@ -181,6 +182,7 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   const raw = input as Record<string, unknown>
   const result: Partial<AppSettingsData> = {}
   if (raw.language === 'en' || raw.language === 'zh') result.language = raw.language
+  if (raw.themeStyle === 'classic' || raw.themeStyle === 'tahoe') result.themeStyle = raw.themeStyle
   if (Number.isFinite(raw.accentIndex)) result.accentIndex = normalizeColorThemeIndex(Number(raw.accentIndex))
   if (typeof raw.appIcon === 'string') result.appIcon = raw.appIcon
   if (typeof raw.fontFamily === 'string') result.fontFamily = raw.fontFamily

@@ -18,6 +18,7 @@ export const I = {
   libraryAddUrl: 'library:addUrl',
   libraryAddRemote: 'library:addRemote',
   libraryGet: 'library:get',
+  libraryRefreshAvailability: 'library:refreshAvailability',
   libraryRemove: 'library:remove',
   libraryUndoRemove: 'library:undoRemove',
   libraryFavorite: 'library:favorite',

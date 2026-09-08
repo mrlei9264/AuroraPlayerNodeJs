@@ -29,6 +29,11 @@ export class PerformanceMonitor {
     } else if (!enabled && this.timer) {
       clearInterval(this.timer)
       this.timer = null
+      if (this.metricsTimeout) clearTimeout(this.metricsTimeout)
+      this.metricsTimeout = null
+      this.metricsChild?.kill()
+      this.metricsChild = null
+      this.windowsMetricsBusy = false
     }
   }
 
@@ -84,6 +89,8 @@ export class PerformanceMonitor {
 
   private lastWindowsMetricsAt = 0
   private windowsMetricsBusy = false
+  private metricsChild: ReturnType<typeof spawn> | null = null
+  private metricsTimeout: ReturnType<typeof setTimeout> | null = null
 
   private sampleWindowsMetrics(processIds: number[]): void {
     const now = Date.now()
@@ -104,14 +111,22 @@ export class PerformanceMonitor {
     const child = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
       windowsHide: true
     })
+    this.metricsChild = child
+    this.metricsTimeout = setTimeout(() => child.kill(), 8000)
+    child.stderr.resume()
     let out = ''
-    child.stdout.on('data', (d) => (out += String(d)))
+    child.stdout.on('data', (d) => { out = (out + String(d)).slice(-4096) })
     child.on('error', () => {
+      if (this.metricsChild !== child) return
       this.windowsMemoryAvailable = false
       this.gpuUnavailable = true
       this.windowsMetricsBusy = false
     })
     child.on('close', () => {
+      if (this.metricsChild !== child) return
+      if (this.metricsTimeout) clearTimeout(this.metricsTimeout)
+      this.metricsTimeout = null
+      this.metricsChild = null
       const [memoryText = '', gpuText = ''] = out.trim().split('|')
       const memoryMb = parseFloat(memoryText)
       const gpu = parseFloat(gpuText)

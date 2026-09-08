@@ -44,6 +44,8 @@ export class PlaybackIpc {
     ipcMain.handle(I.appIconsList, () => listAppIcons())
 
     ipcMain.handle(I.playPlan, async (_e, request: PlayRequest): Promise<PlayPlan> => {
+      const targetId = request.mediaIds[request.index]
+      if (targetId != null) await this.deps.library.checkItemAvailability(targetId)
       const plan = this.deps.planner.plan(request)
       if (plan.ok) {
         this.deps.onPlay(plan, request)
@@ -55,13 +57,15 @@ export class PlaybackIpc {
       return plan
     })
 
-    ipcMain.handle(I.queueNav, (_e, action: 'previous' | 'next' | 'naturalEnd', mediaId: number, repeat: SessionState['repeatMode']): PlayPlan | null => {
+    ipcMain.handle(I.queueNav, async (_e, action: 'previous' | 'next' | 'naturalEnd', mediaId: number, repeat: SessionState['repeatMode']): Promise<PlayPlan | null> => {
       const ids = queue.mediaIds
       const idx = queue.indexOf(mediaId)
       if (idx < 0) return null
       const target = action === 'previous' ? this.deps.coordinator.previous(idx, ids.length, repeat) : this.deps.coordinator.next(idx, ids.length, repeat)
       if (target === null) return null
       const request: PlayRequest = { mediaIds: ids, index: target, action: action === 'naturalEnd' ? 'play' : 'play' }
+      const targetId = request.mediaIds[request.index]
+      if (targetId != null) await this.deps.library.checkItemAvailability(targetId)
       const plan = this.deps.planner.plan(request)
       if (plan.ok) {
         this.deps.onPlay(plan, request)

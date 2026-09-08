@@ -338,10 +338,10 @@ export function VideoPlayerPage() {
       <div className="cinematic-window-drag" aria-hidden="true" />
 
       <div className="cinematic-window-controls" aria-label={t('windowControls')}>
-        <button type="button" className="cinematic-window-control" title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
+        <button type="button" className="cinematic-window-control minimize" title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
         </button>
-        <button type="button" className="cinematic-window-control" title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        <button type="button" className="cinematic-window-control maximize" title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
         </button>
         <button type="button" className="cinematic-window-control close" title={t('close')} aria-label={t('close')} onClick={windowClose}>

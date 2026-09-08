@@ -1,3 +1,4 @@
+import { mediaAvailable } from './library/availability'
 import { app, BrowserWindow, ipcMain, nativeImage } from 'electron'
 import type { MpvMain } from 'electron-mpv-video/main'
 import fs from 'fs'
@@ -29,7 +30,7 @@ import { LocalMediaServer } from './media/localMediaServer'
 import type { AppSettingsData } from './system/settings-types'
 import { initializeAppDataPaths, type AppDataPaths } from './system/dataPaths'
 import { NotificationHistoryStore } from './system/notifications'
-import { colorThemeAt } from '../shared/colorThemes'
+import { TAHOE_WINDOW_BACKGROUND, colorThemeAt } from '../shared/colorThemes'
 import { applyNetworkProxy, installProxyAuthentication } from './system/networkProxy'
 import electronMpvPackage from 'electron-mpv-video/package.json'
 
@@ -74,7 +75,7 @@ const broadcast = (channel: string, payload: unknown) => {
 }
 
 function createWindow(): void {
-  const colorTheme = colorThemeAt(settingsStore.get('accentIndex'))
+  const colorTheme = colorThemeAt(1)
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -82,7 +83,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     frame: false,
-    backgroundColor: colorTheme.windowBackground,
+    backgroundColor: settingsStore.get('themeStyle') === 'tahoe' ? TAHOE_WINDOW_BACKGROUND : colorTheme.windowBackground,
     icon: nativeImage.createFromBuffer(makeAppIcon(256, settingsStore.get('appIcon'))),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -243,7 +244,7 @@ async function bootstrap(): Promise<void> {
   }, (item) => {
     probe.forgetMedia(item.id)
     probe.request(item.id)
-  })
+  }, (item) => mediaAvailable(item, remote))
   library.init()
   queueCtrl = new QueueController(repo, logger, broadcast)
   queueCtrl.init()
@@ -269,12 +270,16 @@ async function bootstrap(): Promise<void> {
       const result = await remote.openStream(sourceId, remotePath, 0, 256 * 1024)
       if (!result || !result.stream) return null
       try {
-        return await new Promise<Buffer | null>((resolve, reject) => {
-          const chunks: Buffer[] = []
-          result.stream.on('data', (c: Buffer) => chunks.push(c))
-          result.stream.on('end', () => resolve(Buffer.concat(chunks)))
-          result.stream.on('error', reject)
-        })
+        const limit = 256 * 1024
+        const chunks: Buffer[] = []
+        let size = 0
+        for await (const chunk of result.stream as AsyncIterable<Buffer>) {
+          const bytes = chunk.subarray(0, limit - size)
+          chunks.push(bytes)
+          size += bytes.length
+          if (size >= limit) break
+        }
+        return Buffer.concat(chunks, size)
       } catch {
         return null
       }

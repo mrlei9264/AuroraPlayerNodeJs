@@ -1,8 +1,7 @@
 diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_modules/electron-mpv-video/dist/main/mpv-service.js
-index 7b27f7f..f1d3b11 100644
 --- a/node_modules/electron-mpv-video/dist/main/mpv-service.js
 +++ b/node_modules/electron-mpv-video/dist/main/mpv-service.js
-@@ -12,6 +12,7 @@ const IPC_CHANNELS = [
+@@ -12,6 +12,7 @@
      'player:stop',
      'player:seek',
      'player:set-volume',
@@ -10,11 +9,12 @@ index 7b27f7f..f1d3b11 100644
      'player:set-render-size',
      'player:set-render-pipeline',
      'player:destroy',
-@@ -59,6 +60,16 @@ function normalizeSource(value) {
+@@ -58,6 +59,16 @@
+         throw new TypeError('source must be a non-empty string');
      }
      return value;
- }
-+const SETTABLE_PROPERTIES = new Set(['speed', 'mute', 'vid', 'aid', 'sid']);
++}
++const SETTABLE_PROPERTIES = new Set(['speed', 'mute', 'vid', 'aid', 'sid', 'cache-pause']);
 +function normalizeProperty(name, value) {
 +    if (typeof name !== 'string' || !SETTABLE_PROPERTIES.has(name)) {
 +        throw new TypeError(`Unsupported player property: ${String(name)}`);
@@ -23,24 +23,36 @@ index 7b27f7f..f1d3b11 100644
 +        throw new TypeError('Player property value must be a short string');
 +    }
 +    return { name, value };
-+}
+ }
  class PlayerSession {
      window;
-     ownerWebContentsId;
-@@ -134,6 +145,12 @@ class PlayerSession {
+@@ -98,6 +109,12 @@
+     }
+     open(source) {
+         this.assertAlive();
++        if (typeof this.player.setProperty === 'function') {
++            const remote = /^https?:\/\//i.test(source);
++            this.player.setProperty('demuxer-max-bytes', remote ? '67108864' : '16777216');
++            this.player.setProperty('demuxer-max-back-bytes', remote ? '8388608' : '4194304');
++            this.player.setProperty('demuxer-readahead-secs', remote ? '15' : '3');
++        }
+         this.player.open(source);
+         this.source = source;
+         this.currentTime = 0;
+@@ -133,6 +150,12 @@
+         const nextVolume = Math.max(0, Math.min(100, finiteNumber(value, 'volume')));
          this.player.setVolume(nextVolume);
          this.volume = nextVolume;
-     }
++    }
 +    setProperty(name, value) {
 +        this.assertAlive();
 +        if (typeof this.player.setProperty !== 'function')
 +            return;
 +        this.player.setProperty(name, value);
-+    }
+     }
      setRenderSize(size) {
          this.assertAlive();
-         this.renderSize = size;
-@@ -259,6 +276,13 @@ class PlayerSession {
+@@ -259,6 +282,13 @@
                  return;
              this.sharedTextureFrameInFlight = true;
              let imported;
@@ -54,7 +66,7 @@ index 7b27f7f..f1d3b11 100644
              try {
                  const textureInfo = this.player.renderSharedTexture(this.renderSize.width, this.renderSize.height);
                  const referencesReleased = new Promise((resolve) => {
-@@ -274,12 +298,12 @@ class PlayerSession {
+@@ -274,12 +304,12 @@
                      frame: this.window.webContents.mainFrame,
                      importedSharedTexture: imported,
                  }, this.id);
@@ -69,7 +81,7 @@ index 7b27f7f..f1d3b11 100644
                  throw error;
              }
          }
-@@ -463,6 +487,10 @@ class MpvMainService {
+@@ -463,6 +493,10 @@
          electron.ipcMain.handle(channel('player:stop'), async (event, id) => this.getOwnedSession(event, id).stop());
          electron.ipcMain.handle(channel('player:seek'), async (event, id, seconds) => this.getOwnedSession(event, id).seek(finiteNumber(seconds, 'seconds')));
          electron.ipcMain.handle(channel('player:set-volume'), async (event, id, value) => this.getOwnedSession(event, id).setVolume(finiteNumber(value, 'volume')));
@@ -80,11 +92,17 @@ index 7b27f7f..f1d3b11 100644
          electron.ipcMain.handle(channel('player:set-render-size'), async (event, id, size) => this.getOwnedSession(event, id).setRenderSize(normalizeRenderSize(size)));
          electron.ipcMain.handle(channel('player:set-render-pipeline'), async (event, id, pipeline) => this.getOwnedSession(event, id).setRenderPipeline(normalizePipeline(pipeline)));
          electron.ipcMain.handle(channel('player:destroy'), async (event, id) => this.getOwnedSession(event, id).destroy());
+@@ -475,4 +509,4 @@
+     activeService = new MpvMainService(options);
+     return activeService;
+ }
+-//# sourceMappingURL=mpv-service.js.map
+\ No newline at end of file
++//# sourceMappingURL=mpv-service.js.map
 diff --git a/node_modules/electron-mpv-video/dist/preload/index.cjs b/node_modules/electron-mpv-video/dist/preload/index.cjs
-index d1d823b..6051885 100644
 --- a/node_modules/electron-mpv-video/dist/preload/index.cjs
 +++ b/node_modules/electron-mpv-video/dist/preload/index.cjs
-@@ -84,6 +84,7 @@ function createPlayerSession(id) {
+@@ -84,6 +84,7 @@
          stop: () => electron.ipcRenderer.invoke(channel('player:stop'), id),
          seek: (seconds) => electron.ipcRenderer.invoke(channel('player:seek'), id, seconds),
          setVolume: (value) => electron.ipcRenderer.invoke(channel('player:set-volume'), id, value),
@@ -92,23 +110,78 @@ index d1d823b..6051885 100644
          setRenderSize: (width, height) => electron.ipcRenderer.invoke(channel('player:set-render-size'), id, { width, height }),
          setRenderMode: (mode) => electron.ipcRenderer.invoke(channel('player:set-render-pipeline'), id, pipelineForRenderMode(mode)),
          destroy: async () => {
+@@ -164,4 +165,4 @@
+     electron.contextBridge.exposeInMainWorld('_electronMpvVideo', mpvApi);
+     apiExposed = true;
+ }
+-//# sourceMappingURL=index.cjs.map
+\ No newline at end of file
++//# sourceMappingURL=index.cjs.map
 diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts b/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts
-index 6dc9221..0938d60 100644
 --- a/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts
 +++ b/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts
-@@ -41,6 +41,7 @@ export declare class MpvVideoElement extends HTMLElement {
+@@ -41,6 +41,7 @@
      stop(): Promise<void>;
      seek(seconds: number): Promise<void>;
      setVolume(value: number): Promise<void>;
-+    setProperty(name: 'speed' | 'mute' | 'vid' | 'aid' | 'sid', value: string): Promise<void>;
++    setProperty(name: 'speed' | 'mute' | 'vid' | 'aid' | 'sid' | 'cache-pause', value: string): Promise<void>;
      setRenderMode(mode: RenderMode): Promise<void>;
      destroy(): Promise<void>;
      private destroyInternal;
+@@ -60,4 +61,4 @@
+         'mpv-video': MpvVideoElement;
+     }
+ }
+-//# sourceMappingURL=mpv-video.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=mpv-video.d.ts.map
 diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_modules/electron-mpv-video/dist/renderer/mpv-video.js
-index 355f95b..1319297 100644
 --- a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js
 +++ b/node_modules/electron-mpv-video/dist/renderer/mpv-video.js
-@@ -409,6 +409,10 @@ export class MpvVideoElement extends HTMLElement {
+@@ -28,6 +28,8 @@
+     texture;
+     vao;
+     samplerLocation;
++    program;
++    buffer;
+     constructor(canvas) {
+         this.canvas = canvas;
+         const gl = canvas.getContext('webgl2', {
+@@ -87,9 +89,18 @@
+         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+         gl.uniform1i(samplerLocation, 0);
++        this.program = program;
++        this.buffer = buffer;
+         this.texture = texture;
+         this.vao = vao;
+         this.samplerLocation = samplerLocation;
++    }
++    destroy() {
++        this.gl.deleteTexture(this.texture);
++        this.gl.deleteVertexArray(this.vao);
++        this.gl.deleteBuffer(this.buffer);
++        this.gl.deleteProgram(this.program);
++        this.canvas.width = this.canvas.height = 1;
+     }
+     resize(width, height) {
+         if (this.canvas.width !== width || this.canvas.height !== height) {
+@@ -152,6 +163,14 @@
+     constructor(canvas) {
+         this.canvas = canvas;
+         this.ready = this.init();
++    }
++    async destroy() {
++        await this.ready.catch(() => {});
++        try { await this.device?.queue.onSubmittedWorkDone(); } catch {}
++        this.context?.unconfigure();
++        this.device?.destroy();
++        this.context = this.device = this.pipeline = this.sampler = null;
++        this.canvas.width = this.canvas.height = 1;
+     }
+     resize(width, height) {
+         if (this.canvas.width !== width || this.canvas.height !== height) {
+@@ -409,6 +428,10 @@
          }
          await this.player?.setVolume(volume);
      }
@@ -119,23 +192,92 @@ index 355f95b..1319297 100644
      async setRenderMode(mode) {
          await this.ensureReady();
          const nextMode = this.resolveRenderMode(mode);
+@@ -438,16 +461,30 @@
+         }
+     }
+     async destroyInternal() {
++        // Initialization can still be awaiting a GPU device or native IPC.
++        // Drain it before disposing so it cannot resurrect an orphan session.
++        await this.ready?.catch(() => {});
+         this.resizeObserver?.disconnect();
+         this.resizeObserver = null;
+         for (const dispose of this.disposers) {
+             dispose();
+         }
+         this.disposers = [];
+-        if (this.player) {
+-            const player = this.player;
+-            this.player = null;
+-            await player.destroy();
++        const player = this.player;
++        this.player = null;
++        try {
++            // Drain submitted GPU work before the native shared texture is freed.
++            await this.sharedRenderer?.destroy();
++        } finally {
++            try { await player?.destroy(); }
++            finally {
++                this.webglRenderer?.destroy();
++                for (const canvas of [this.canvas2d, this.webglCanvas, this.sharedCanvas])
++                    canvas.width = canvas.height = 1;
++                this.canvasRenderer = this.webglRenderer = this.sharedRenderer = null;
++                this.activeRenderer = this.activeSharedRenderer = null;
++                this.ready = null;
++            }
+         }
+         this.ready = null;
+         this.openedSource = '';
+@@ -545,6 +582,8 @@
+         this.surfaceRoot.append(style, this.canvas2d, this.webglCanvas, this.sharedCanvas);
+     }
+     async ensureReady() {
++        if (this.destroying) await this.destroying;
++        if (!this.isConnected) throw new Error('Player is disconnected');
+         if (!this.ready) {
+             this.ready = this.initialize();
+         }
+@@ -569,9 +608,9 @@
+         const ratio = window.devicePixelRatio || 1;
+         const width = Math.max(160, Math.floor(rect.width * ratio));
+         const height = Math.max(90, Math.floor(rect.height * ratio));
+-        this.canvasRenderer?.resize(width, height);
+-        this.webglRenderer?.resize(width, height);
+-        this.sharedRenderer?.resize(width, height);
++        // Hidden fallback canvases must not allocate full-window backing stores.
++        if (this.renderMode === 'shared-texture') this.activeSharedRenderer?.resize(width, height);
++        else this.activeRenderer?.resize(width, height);
+         this.player?.setRenderSize(width, height).catch((error) => this.emitError(error));
+     }
+     handlePlayerEvent(event) {
+@@ -632,4 +671,4 @@
+         }));
+     }
+ }
+-//# sourceMappingURL=mpv-video.js.map
+\ No newline at end of file
++//# sourceMappingURL=mpv-video.js.map
 diff --git a/node_modules/electron-mpv-video/dist/shared/types.d.ts b/node_modules/electron-mpv-video/dist/shared/types.d.ts
-index 1da1aa4..700c474 100644
 --- a/node_modules/electron-mpv-video/dist/shared/types.d.ts
 +++ b/node_modules/electron-mpv-video/dist/shared/types.d.ts
-@@ -27,6 +27,7 @@ export type MpvPlayerSession = {
+@@ -27,6 +27,7 @@
      stop(): Promise<void>;
      seek(seconds: number): Promise<void>;
      setVolume(value: number): Promise<void>;
-+    setProperty(name: 'speed' | 'mute' | 'vid' | 'aid' | 'sid', value: string): Promise<void>;
++    setProperty(name: 'speed' | 'mute' | 'vid' | 'aid' | 'sid' | 'cache-pause', value: string): Promise<void>;
      setRenderSize(width: number, height: number): Promise<void>;
      setRenderMode(mode: RenderMode): Promise<void>;
      destroy(): Promise<void>;
+@@ -56,4 +57,4 @@
+         _electronMpvVideo: ElectronMpvVideoApi;
+     }
+ }
+-//# sourceMappingURL=types.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=types.d.ts.map
 diff --git a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc b/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc
-index 46deaa6..90a5d58 100644
 --- a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc
 +++ b/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc
-@@ -132,6 +132,7 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
+@@ -132,6 +132,7 @@
        InstanceMethod("stop", &MpvPlayer::Stop),
        InstanceMethod("seek", &MpvPlayer::Seek),
        InstanceMethod("setVolume", &MpvPlayer::SetVolume),
@@ -143,15 +285,15 @@ index 46deaa6..90a5d58 100644
        InstanceMethod("setUpdateCallback", &MpvPlayer::SetUpdateCallback),
        InstanceMethod("setEventCallback", &MpvPlayer::SetEventCallback),
        InstanceMethod("renderFrame", &MpvPlayer::RenderFrame),
-@@ -165,12 +166,16 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
+@@ -165,12 +166,16 @@
      set_option("audio-display", "no");
      set_option("pause", "yes");
      set_option("keep-open", "yes");
 +    set_option("cache", "yes");
-+    set_option("demuxer-readahead-secs", "60");
-+    set_option("demuxer-max-bytes", "268435456");
-+    set_option("demuxer-max-back-bytes", "67108864");
-+    set_option("stream-buffer-size", "4194304");
++    set_option("demuxer-readahead-secs", "15");
++    set_option("demuxer-max-bytes", "67108864");
++    set_option("demuxer-max-back-bytes", "8388608");
++    set_option("stream-buffer-size", "1048576");
 +    set_option("cache-pause", "yes");
 +    set_option("cache-pause-wait", "2");
 +    set_option("network-timeout", "30");
@@ -164,7 +306,7 @@ index 46deaa6..90a5d58 100644
      set_option("sw-fast", "yes");
      set_option("vo", "libmpv");
      set_mpv_wakeup_callback(handle_, on_mpv_wakeup, this);
-@@ -189,6 +194,15 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
+@@ -189,6 +194,15 @@
      observe("height", MPV_FORMAT_INT64);
      observe("video-codec", MPV_FORMAT_STRING);
      observe("container-fps", MPV_FORMAT_DOUBLE);
@@ -180,10 +322,13 @@ index 46deaa6..90a5d58 100644
  
      if (mode_ == "shared-texture") {
  #if defined(__APPLE__)
-@@ -359,6 +373,19 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
-     return env.Undefined();
-   }
- 
+@@ -356,6 +370,19 @@
+     double volume = std::clamp(info[0].As<Napi::Number>().DoubleValue(), 0.0, 100.0);
+     int ret = mpv_set_property(handle_, "volume", MPV_FORMAT_DOUBLE, &volume);
+     if (ret < 0) throw_mpv_error(env, "setVolume", ret);
++    return env.Undefined();
++  }
++
 +  Napi::Value SetProperty(const Napi::CallbackInfo& info) {
 +    Napi::Env env = info.Env();
 +    if (info.Length() < 2 || !info[0].IsString() || !info[1].IsString()) {
@@ -194,9 +339,6 @@ index 46deaa6..90a5d58 100644
 +    std::string value = info[1].As<Napi::String>().Utf8Value();
 +    int ret = mpv_set_property_string(handle_, name.c_str(), value.c_str());
 +    if (ret < 0) throw_mpv_error(env, "setProperty", ret);
-+    return env.Undefined();
-+  }
-+
-   Napi::Value SetUpdateCallback(const Napi::CallbackInfo& info) {
-     Napi::Env env = info.Env();
-     if (update_callback_) {
+     return env.Undefined();
+   }
+ 

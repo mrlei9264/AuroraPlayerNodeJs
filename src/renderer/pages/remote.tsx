@@ -418,6 +418,13 @@ function BrowserPage() {
   const [treeDirectories, setTreeDirectories] = useState<Map<string, RemoteEntry[]>>(new Map())
   const [treeLoading, setTreeLoading] = useState<Set<string>>(new Set())
   const requestId = useRef(0)
+  useEffect(() => {
+    const ids = new Set(sources.map((item) => item.id))
+    for (const id of browserPathMemory.keys()) {
+      if (!ids.has(id)) browserPathMemory.delete(id)
+    }
+  }, [sources])
+  useEffect(() => () => { requestId.current += 1 }, [])
   const dateFormatter = useMemo(() => new Intl.DateTimeFormat(settings?.language === 'zh' ? 'zh-CN' : 'en-US'), [settings?.language])
 
   const load = useCallback(async (targetPath: string) => {
