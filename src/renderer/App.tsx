@@ -16,6 +16,7 @@ import { applyTypographySettings } from './core/appearance'
 import { StartupAnimation } from './shell/startupAnimation'
 const MotionLabPage = lazy(() => import('./pages/motionLab').then((module) => ({ default: module.MotionLabPage })))
 import { TahoeLighting } from './shared/tahoeLighting'
+import { CinematicBackground } from './shared/cinematicBackground'
 
 function MainView() {
   const { nav, session } = useRuntime()
@@ -120,6 +121,7 @@ function ShellInner() {
 
   return (
     <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
+      {(isHome || isLibrary) && <CinematicBackground />}
       <TahoeLighting enabled={true} reducedMotion={reducedMotion} reduceTransparency={settings?.reduceTransparency ?? false} routeKey={routeKey} />
       {settings == null
         ? <div className="startup-animation" aria-hidden="true" />
@@ -131,7 +133,7 @@ function ShellInner() {
       </AnimatePresence>
       <motion.div
         layout={reducedMotion ? false : 'position'}
-        className={`shell ${isCinema ? 'home-shell' : ''} ${isLibrary ? 'library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}
+        className={`shell ${isCinema ? 'home-shell' : ''} ${isHome ? 'cinema-home-shell' : ''} ${isLibrary ? 'library-shell cinema-library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}
         transition={routeTransition}
       >
         <AnimatePresence initial={false}>

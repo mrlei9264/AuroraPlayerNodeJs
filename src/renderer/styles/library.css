@@ -125,6 +125,10 @@
 :root .library-workspace .library-collection-art { width: 100%; border-radius: 10px; border: 1px solid var(--border); box-shadow: none; }
 :root .library-workspace .library-card-glint { display: none; }
 :root .library-workspace .library-collection-items { grid-template-columns: repeat(var(--library-columns), minmax(0, 1fr)); gap: 22px 17px; }
+:root .library-workspace .library-collection-items > .library-file-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
 :root .library-workspace .library-collection.expanded { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: none; }
 :root .library-workspace .library-collection.expanded > .library-collection-summary { display: flex; align-items: center; gap: 15px; min-height: 64px; padding: 0; }
 :root .library-workspace .library-collection.expanded > .library-collection-summary > .library-collection-art { width: 94px; height: 62px; flex-shrink: 0; }
@@ -489,4 +493,136 @@
   :root .library-workspace .library-category-nav button { flex: 1; padding-inline: 10px; }
   :root .library-workspace .list-view .library-file-details { gap: 8px; }
   .library-locate-fab { right: 26px; bottom: 20px; }
+}
+
+/* Cinematic library treatment. The existing toolbar controls and navigation remain intact. */
+#root .cinema-library-shell .library-page.library-workspace {
+  --library-bg: transparent;
+  --library-panel: rgb(8 28 48 / .68);
+  --library-raised: rgb(17 55 84 / .76);
+  --library-edge: rgb(133 207 255 / .28);
+  --library-edge-hover: rgb(154 220 255 / .56);
+  --library-selection-edge: rgb(244 211 138 / .82);
+  --library-focus: rgb(169 226 255 / .95);
+  color: #f2f7ff;
+  background: transparent;
+}
+#root .cinema-library-shell .library-topline h1 { color: #f5f8ff; font-size: calc(34px * var(--font-scale, 1)); }
+#root .cinema-library-shell .library-topline p { color: rgb(195 222 242 / .82); }
+#root .cinema-library-shell .library-files-head.library-toolbar {
+  margin-bottom: 12px;
+  border-bottom: 0;
+  background: transparent;
+}
+#root .cinema-library-shell .library-browse-row { padding: 8px 0 15px; }
+#root .cinema-library-shell .library-category-nav {
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgb(128 205 255 / .26);
+  border-radius: 20px;
+  background: rgb(7 25 43 / .62);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .09), 0 12px 30px rgb(0 0 0 / .22);
+  backdrop-filter: blur(18px) saturate(125%);
+}
+#root .cinema-library-shell .library-category-nav button {
+  min-height: 43px;
+  padding: 0 22px;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  color: rgb(208 230 246 / .86);
+  font-size: calc(15px * var(--font-scale, 1));
+  font-weight: 560;
+  letter-spacing: .01em;
+  background: transparent;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+#root .cinema-library-shell .library-category-nav button > svg { color: currentColor; opacity: .9; }
+#root .cinema-library-shell .library-category-nav button > .library-category-label { font-size: inherit; opacity: 1; }
+#root .cinema-library-shell .library-category-nav button:hover,
+#root .cinema-library-shell .library-category-nav button:focus-visible {
+  color: #f4f8ff;
+  background: rgb(120 190 255 / .10);
+}
+#root .cinema-library-shell .library-category-nav button.active {
+  color: #fff;
+  background: linear-gradient(110deg, #176ee7, #1eb7fb 70%, #53d5ff);
+  border-color: rgb(190 239 255 / .32);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .30), 0 5px 16px rgb(21 145 255 / .28);
+  transform: translateY(-1px);
+}
+#root .cinema-library-shell .library-category-nav button.active > svg { color: #fff; }
+#root .cinema-library-shell .library-query-field {
+  min-height: 43px;
+  max-width: 390px;
+  border-color: rgb(128 205 255 / .24);
+  border-radius: 14px;
+  background: rgb(7 25 43 / .62);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .06);
+  backdrop-filter: blur(16px);
+}
+#root .cinema-library-shell .library-query-field input { color: #f2f7ff; }
+#root .cinema-library-shell .library-organize-row { border-bottom: 1px solid rgb(128 205 255 / .17); padding-bottom: 14px; }
+#root .cinema-library-shell .library-content-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 42px;
+  padding: 2px 2px 12px;
+}
+#root .cinema-library-shell .library-content-heading-title { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+#root .cinema-library-shell .library-content-heading-title > svg { color: #8ed7ff; filter: drop-shadow(0 0 8px rgb(60 174 255 / .30)); }
+#root .cinema-library-shell .library-content-heading h2 { margin: 0; color: #f2f7ff; font-size: calc(19px * var(--font-scale, 1)); font-weight: 650; letter-spacing: .01em; }
+#root .cinema-library-shell .library-content-heading-title > span { color: #9ed9f8; font-size: 14px; font-variant-numeric: tabular-nums; }
+#root .cinema-library-shell .library-content-heading-hint { color: rgb(175 204 224 / .72); font-size: 12px; }
+#root .cinema-library-shell .library-file-viewport { padding-top: 2px; }
+#root .cinema-library-shell .library-file-card {
+  position: relative;
+  overflow: visible;
+  padding-bottom: 12px;
+  border: 1px solid rgb(122 200 247 / .20);
+  border-radius: 20px;
+  background: rgb(7 27 46 / .58);
+  box-shadow: 0 12px 28px rgb(0 0 0 / .18), inset 0 1px 0 rgb(255 255 255 / .06);
+  transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease, background 170ms ease;
+}
+#root .cinema-library-shell .library-file-card:hover,
+#root .cinema-library-shell .library-file-card:focus-within {
+  transform: translateY(-3px);
+  border-color: rgb(151 218 255 / .58);
+  background: rgb(9 34 57 / .72);
+  box-shadow: 0 15px 30px rgb(0 0 0 / .25), 0 0 0 1px rgb(131 213 255 / .12), inset 0 1px 0 rgb(255 255 255 / .10);
+}
+#root .cinema-library-shell .library-file-open { border-radius: 19px; }
+#root .cinema-library-shell .library-file-art,
+#root .cinema-library-shell .library-file-art.audio-art {
+  aspect-ratio: 16 / 9;
+  border-color: rgb(141 211 255 / .34);
+  border-radius: 18px 18px 13px 13px;
+  background: rgb(5 19 34 / .74);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .10);
+}
+#root .cinema-library-shell .library-file-card:hover .library-file-art { border-color: rgb(164 224 255 / .72); box-shadow: inset 0 0 0 1px rgb(164 224 255 / .16), 0 7px 18px rgb(0 0 0 / .18); }
+#root .cinema-library-shell .library-file-card.selected,
+#root .cinema-library-shell .library-file-card.is-current { border-color: rgb(244 211 138 / .76); box-shadow: 0 14px 34px rgb(0 0 0 / .22), 0 0 22px rgb(244 211 138 / .16), inset 0 1px 0 rgb(255 246 208 / .18); }
+#root .cinema-library-shell .library-file-card.selected .library-file-art,
+#root .cinema-library-shell .library-file-card.is-current .library-file-art { border-color: #f4d38a; box-shadow: inset 0 0 0 1px #f4d38a, 0 0 19px rgb(244 211 138 / .23); }
+#root .cinema-library-shell .library-file-card .library-file-copy { padding: 12px 58px 0 13px; gap: 4px; }
+#root .cinema-library-shell .library-file-title { color: #f2f7ff; font-size: calc(16px * var(--font-scale, 1)); font-weight: 600; }
+#root .cinema-library-shell .library-file-meta { color: rgb(170 204 226 / .83); font-size: calc(13px * var(--font-scale, 1)); }
+#root .cinema-library-shell .library-file-duration { right: 10px; bottom: 10px; padding: 3px 7px; border: 1px solid rgb(255 255 255 / .14); border-radius: 6px; background: rgb(4 13 23 / .72); font-size: 12px; }
+#root .cinema-library-shell .library-source-bookmark { right: 12px; color: #ecf6ff; }
+#root .cinema-library-shell .library-card-actions { right: 11px; bottom: 14px; gap: 2px; }
+#root .cinema-library-shell .library-card-actions > button { width: 26px; height: 26px; color: rgb(197 224 242 / .76); opacity: .86; border-radius: 7px; }
+#root .cinema-library-shell .library-card-actions > button:hover { color: #fff; background: rgb(120 190 255 / .14); }
+#root .cinema-library-shell .library-card-actions > button.is-favorite { color: #f4d38a; }
+#root .cinema-library-shell .library-file-card.audio .library-file-art { background: linear-gradient(145deg, rgb(9 39 63 / .90), rgb(6 20 38 / .85)); }
+#root .cinema-library-shell .library-collection { border-color: rgb(122 200 247 / .24); background: rgb(7 27 46 / .55); }
+#root .cinema-library-shell .library-empty-state { color: #f2f7ff; }
+
+@media (max-width: 820px) {
+  #root .cinema-library-shell .library-category-nav { width: 100%; justify-content: space-between; }
+  #root .cinema-library-shell .library-category-nav button { flex: 1; padding-inline: 10px; }
+  #root .cinema-library-shell .library-content-heading-hint { display: none; }
 }

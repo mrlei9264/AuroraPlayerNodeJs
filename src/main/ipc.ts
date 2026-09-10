@@ -51,7 +51,7 @@ export class PlaybackIpc {
         this.deps.onPlay(plan, request)
         if (plan.item) {
           repo.touchPlayed(plan.item.id)
-          this.deps.broadcast(E.libraryChanged, repo.loadAll())
+          this.deps.probe.request(plan.item.id)
         }
       }
       return plan
@@ -71,7 +71,7 @@ export class PlaybackIpc {
         this.deps.onPlay(plan, request)
         if (plan.item) {
           repo.touchPlayed(plan.item.id)
-          this.deps.broadcast(E.libraryChanged, repo.loadAll())
+          this.deps.probe.request(plan.item.id)
         }
       }
       return plan
@@ -95,20 +95,14 @@ export class PlaybackIpc {
       const win = BrowserWindow.fromWebContents(e.sender)
       const { pickMediaFiles } = await import('./system/settings')
       const paths = await pickMediaFiles(win!)
-      if (!paths) return []
-      const added = this.deps.library.addPaths(paths)
-      void added
-      return paths
+      return paths ?? []
     })
 
     ipcMain.handle(I.dialogsOpenFolder, async (e) => {
       const win = BrowserWindow.fromWebContents(e.sender)
       const { pickFolder } = await import('./system/settings')
       const dir = await pickFolder(win!)
-      if (!dir) return null
-      const added = this.deps.library.addPaths([dir])
-      void added
-      return dir
+      return dir ?? null
     })
 
     ipcMain.handle(I.dialogsRelocate, async (e, mediaId: number) => {

@@ -4,7 +4,7 @@ import { ipcMain } from 'electron'
 import { I, E } from '../../shared/channels'
 import { isMediaExt } from '../../shared/types'
 import type { MediaItem } from '../../shared/types'
-import { LibraryRepository } from './repository'
+import { LibraryRepository, type MediaRowInput } from './repository'
 import { Logger } from '../system/diagnostics'
 import { pickFolder } from '../system/settings'
 
@@ -55,48 +55,31 @@ export class ManagedFolderController {
     this.broadcast(E.foldersChanged, this.list())
   }
 
-  private scanFolder(folderPath: string): Promise<void> {
+  private async scanFolder(folderPath: string): Promise<void> {
     if (this.scanning.has(folderPath)) return Promise.resolve()
     this.scanning.add(folderPath)
     this.emitChanged()
-    return new Promise((resolve) => {
-      setImmediate(() => {
-        let found = 0
-        try {
-          const added = this.walk(folderPath, (fileName, full) => {
-            found++
-            if (this.repo.findByUrl(full)) return
-            const kind = this.mediaKind(fileName)
-            this.repo.insert({
-              url: full,
-              fileName,
-              isAudio: kind === 'audio',
-              isImage: false,
-              sourceId: null,
-              remotePath: null,
-              protocol: 'local',
-              sourceName: '',
-              sourceAvailable: true
-            })
-          })
-          this.repo.markFolderScanned(folderPath)
-          this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'done', found })
-          this.logger.info('managed-folder', `scan ${folderPath}: found=${found} added=${added}`)
-          this.broadcast(E.libraryChanged, this.snapshot())
-        } catch (error) {
-          this.logger.warn('managed-folder', `scan failed: ${folderPath}`, error as Error)
-          this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'error', found })
-        } finally {
-          this.scanning.delete(folderPath)
-          try { this.emitChanged() } catch { void 0 }
-          resolve()
-        }
-      })
-    })
+    let found = 0
+    try {
+      const result = await this.walk(folderPath)
+      found = result.found
+      this.repo.markFolderScanned(folderPath)
+      this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'done', found })
+      this.logger.info('managed-folder', `scan ${folderPath}: found=${found} added=${result.added}`)
+      if (result.added > 0) this.broadcast(E.libraryChanged, this.snapshot())
+    } catch (error) {
+      this.logger.warn('managed-folder', `scan failed: ${folderPath}`, error as Error)
+      this.broadcast(E.folderScanProgress, { folder: folderPath, phase: 'error', found })
+    } finally {
+      this.scanning.delete(folderPath)
+      try { this.emitChanged() } catch { void 0 }
+    }
   }
 
-  private walk(root: string, onFile: (fileName: string, full: string) => void): number {
+  private async walk(root: string): Promise<{ found: number; added: number }> {
+    const knownUrls = this.repo.loadUrlSet()
     let added = 0
+    let found = 0
     const stack = [root]
     let guard = 0
     while (stack.length && guard < 60000) {
@@ -104,21 +87,38 @@ export class ManagedFolderController {
       const cur = stack.pop()!
       let entries: fs.Dirent[]
       try {
-        entries = fs.readdirSync(cur, { withFileTypes: true })
+        entries = await fs.promises.readdir(cur, { withFileTypes: true })
       } catch {
         continue
       }
+      const additions: MediaRowInput[] = []
       for (const ent of entries) {
         const full = path.join(cur, ent.name)
         if (ent.isDirectory()) {
           if (!ent.name.startsWith('.') && !ent.name.startsWith('$')) stack.push(full)
         } else if (ent.isFile() && isMediaExt(ent.name)) {
-          onFile(ent.name, full)
-          added++
+          found++
+          if (knownUrls.has(full)) continue
+          knownUrls.add(full)
+          additions.push({
+            url: full,
+            fileName: ent.name,
+            isAudio: this.mediaKind(ent.name) === 'audio',
+            isImage: false,
+            sourceId: null,
+            remotePath: null,
+            protocol: 'local',
+            sourceName: '',
+            sourceAvailable: true
+          })
         }
       }
+      for (let offset = 0; offset < additions.length; offset += 256) {
+        added += this.repo.insertMany(additions.slice(offset, offset + 256))
+      }
+      if (guard % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
     }
-    return added
+    return { found, added }
   }
 
   private mediaKind(fileName: string): 'audio' | 'video' {

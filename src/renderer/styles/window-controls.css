@@ -1,0 +1,8 @@
+/* Shared invariant for every minimize/maximize/close button. Layout and icon
+   colors remain local to each surface, but no theme may paint a button tile. */
+.window-control-button {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}

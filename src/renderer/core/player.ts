@@ -57,6 +57,7 @@ export class PlayerEngine {
   private knownDuration = 0
   private pendingResume = 0
   private loadedMpvSource = ''
+  private mpvLoadTask: { epoch: number; playerId: string } | null = null
   private seekTarget: number | null = null
   private seekWasPlaying = false
   private seekingGesture = false
@@ -136,7 +137,7 @@ export class PlayerEngine {
     this.muted = muted
     this.volume = Math.max(0, Math.min(100, Math.round(volume)))
     this.speed = speed
-    if (this.session.kind !== 'video' || !this.plan) return
+    if (this.session.kind !== 'video' || !this.plan || this.session.phase === 'error') return
     const player = this.ensureMpvElement()
     if (player.parentElement !== container) container.appendChild(player)
     void this.applyMpvControls()
@@ -152,7 +153,7 @@ export class PlayerEngine {
   load(plan: PlayPlan, volume: number, muted: boolean, speed: number): void {
     if (this.disposed) return
     const epoch = ++this.loadEpoch
-    this.stopBackends()
+    this.stopBackends('replace')
     this.plan = plan
     this.volume = Math.max(0, Math.min(100, Math.round(volume)))
     this.muted = muted
@@ -278,7 +279,7 @@ export class PlayerEngine {
     const player = this.mpvElement
     const plan = this.plan
     const epoch = this.loadEpoch
-    if (!player || !plan || plan.kind !== 'video' || this.loadedMpvSource === plan.url) return
+    if (!player || !plan || plan.kind !== 'video' || this.session.phase === 'error' || this.loadedMpvSource === plan.url) return
     this.loadedMpvSource = plan.url
     try {
       await player.open(plan.url)
@@ -292,6 +293,7 @@ export class PlayerEngine {
   private onMpvState = (event: CustomEvent<MpvVideoState>): void => {
     if (event.currentTarget !== this.mpvElement || this.session.kind !== 'video') return
     const state = event.detail
+    if (state.playerId !== this.mpvElement?.playerId) return
     if (!this.seekingGesture && !this.seekCommandPending && performance.now() >= this.seekAcceptAfter && Number.isFinite(state.time) && state.time >= 0) {
       const rawTime = state.time
       let acceptTime = this.seekTarget === null
@@ -334,7 +336,12 @@ export class PlayerEngine {
   private onMpvEvent = (event: CustomEvent<MpvEvent>): void => {
     if (event.currentTarget !== this.mpvElement || this.session.kind !== 'video') return
     const detail = event.detail
+    if (detail.playerId !== this.mpvElement?.playerId) return
     if (detail.error) { this.failPlayback(detail.error); return }
+    if (detail.type === 'start-file' || detail.type === 'end-file') {
+      this.mpvLoadTask = null
+      return
+    }
     if (detail.type === 'file-loaded') { void this.finishMpvLoad(); return }
     if (detail.type !== 'property-change') return
     switch (detail.name) {
@@ -358,20 +365,33 @@ export class PlayerEngine {
   private async finishMpvLoad(): Promise<void> {
     const player = this.mpvElement
     const epoch = this.loadEpoch
-    if (!player || this.session.kind !== 'video') return
+    if (!player || this.session.kind !== 'video' || this.session.loaded) return
+    const playerId = player.playerId
+    if (this.mpvLoadTask?.epoch === epoch && this.mpvLoadTask.playerId === playerId) return
+    const task = { epoch, playerId }
+    this.mpvLoadTask = task
+    // A DOM element may reconnect with a different native player. Each awaited
+    // IPC call must still belong to this file and this native session.
+    const isCurrent = () => epoch === this.loadEpoch && player === this.mpvElement
+      && player.playerId === playerId && this.mpvLoadTask === task
     try {
       await this.applyMpvControls()
+      if (!isCurrent()) return
       await this.applySelectedTracks()
-      if (this.pendingResume > 0.5) {
+      if (!isCurrent()) return
+      const resumePosition = this.pendingResume
+      this.pendingResume = 0
+      if (resumePosition > 0.5) {
         this.session.seeking = true
-        this.seekTarget = this.pendingResume
-        await player.seek(this.pendingResume)
+        this.seekTarget = resumePosition
+        await player.seek(resumePosition)
+        if (!isCurrent()) return
       }
       await this.requestVideoPaused(false)
-      if (epoch !== this.loadEpoch) return
+      if (!isCurrent()) return
       this.markLoaded()
     } catch (error) {
-      if (epoch === this.loadEpoch) this.failPlayback(error instanceof Error ? error.message : String(error))
+      if (isCurrent()) this.failPlayback(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -501,6 +521,7 @@ export class PlayerEngine {
   }
 
   seekTo(value: number): void {
+    if (!this.session.loaded || !Number.isFinite(value)) return
     const duration = this.knownDuration || this.session.duration
     if (!(duration > 0)) return
     const target = Math.max(0, Math.min(value, duration))
@@ -525,7 +546,7 @@ export class PlayerEngine {
   }
 
   commitSeek(): void {
-    if (this.seekTarget === null) return
+    if (!this.session.loaded || this.seekTarget === null) return
     const target = this.seekTarget
     const resume = this.seekWasPlaying
     this.seekWasPlaying = false
@@ -799,16 +820,43 @@ export class PlayerEngine {
   }
 
   private failPlayback(message: string): void {
+    const playbackError = message || 'Playback error'
     this.clearLoadTimeout()
+    // A failed open/decode can already own a native mpv session, GPU resources
+    // and network cache. Invalidate every in-flight continuation before
+    // releasing the backends so none of them can resurrect the failed player.
+    this.loadEpoch += 1
+    this.trackEpoch += 1
+    this.seekRequestEpoch += 1
     this.playbackRequestEpoch += 1
     this.desiredPaused = null
     this.playbackConfirmUntil = 0
+    this.loadedMpvSource = ''
+    this.pendingResume = 0
+    this.seekTarget = null
+    this.seekWasPlaying = false
+    this.seekingGesture = false
+    this.seekCommandPending = false
+    this.seekAcceptAfter = 0
+    this.seekDisplayFloor = null
+    this.seekDisplayFloorUntil = 0
+    this.networkMedia = false
+    this.backendBuffering = false
+    this.clockStalled = false
+    this.clockWatchPosition = 0
+    this.clockAdvancedAt = 0
+    this.resetNetworkStats()
+    this.stopBackends('failure')
+    this.detectedTracks = { ...EMPTY_TRACKS }
     this.session.phase = 'error'
-    this.session.error = message || 'Playback error'
+    this.session.error = playbackError
     this.session.loaded = false
     this.session.paused = true
     this.session.buffering = false
+    this.session.bufferedSeconds = 0
+    this.session.networkSpeed = 0
     this.session.seeking = false
+    this.ev.onTracks?.({ ...EMPTY_TRACKS })
     this.emitSession()
     this.ev.onBuffering?.(false)
     this.ev.onPlaybackError?.(this.session.error)
@@ -855,7 +903,8 @@ export class PlayerEngine {
     this.cacheDuration = 0
   }
 
-  private stopBackends(): void {
+  private stopBackends(reason: 'replace' | 'failure' | 'stop'): void {
+    this.mpvLoadTask = null
     this.audioEvents?.abort()
     this.audioEvents = null
     this.destroyAudioGraph()
@@ -872,7 +921,9 @@ export class PlayerEngine {
       player.removeEventListener('mpv-state', this.onMpvState as EventListener)
       player.removeEventListener('mpv-event', this.onMpvEvent as EventListener)
       player.removeEventListener('mpv-error', this.onMpvError as EventListener)
-      void player.destroy().catch(() => void 0)
+      void player.destroy().catch((error) => {
+        console.error('[PlayerEngine] Failed to destroy mpv backend', { reason, error })
+      })
       player.remove()
     }
   }
@@ -882,7 +933,7 @@ export class PlayerEngine {
     this.loadEpoch += 1
     this.trackEpoch += 1
     this.clearLoadTimeout()
-    this.stopBackends()
+    this.stopBackends('stop')
     this.container = null
     this.plan = null
     this.knownDuration = 0

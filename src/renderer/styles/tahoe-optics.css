@@ -40,7 +40,7 @@
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(
   .nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section,
   .network-config-form-v2, .network-protocol-rail, .network-source-card,
-  .media-details-panel, .theme-choice, .cinematic-console
+  .media-details-panel, .theme-choice
 )::before {
   content: '';
   display: block;
@@ -59,7 +59,7 @@
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(
   .settings-category-panel, .settings-detail-panel, .network-source-section,
   .network-config-form-v2, .network-protocol-rail, .media-details-panel,
-  .cinematic-console, .audio-transport-controls
+  .audio-transport-controls
 ) { box-shadow: var(--tahoe-edge-light), var(--tahoe-grounding) !important; }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-choice, .network-source-card) {
   background: var(--tahoe-glass-control);
@@ -70,10 +70,9 @@
 /* The lighting controller supplies local coordinates and eases energy. It
    changes only the nearest panel and control, never the whole DOM tree. */
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) [data-glass-lit] { --glass-resting-surface: var(--tahoe-glass); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-choice, .nav-item, .network-source-card, .home-playback-toggle, .cinematic-play, .audio-play-control)[data-glass-lit] { --glass-resting-surface: var(--tahoe-glass-control); }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-choice, .nav-item, .network-source-card, .home-playback-toggle, .audio-play-control)[data-glass-lit] { --glass-resting-surface: var(--tahoe-glass-control); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-settings-popover, .dialog)[data-glass-lit] { --glass-resting-surface: var(--tahoe-glass-raised); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console[data-glass-lit] { --glass-resting-surface: var(--tahoe-glass-media); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) [data-glass-lit]:not(.library-file-art):not(.cinema-card-image) {
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) [data-glass-lit]:not(.library-file-art):not(.cinema-card-image):not(.cinematic-console):not(.cinematic-play) {
   background:
     radial-gradient(ellipse 240px 170px at var(--glass-x, 50%) var(--glass-y, 15%), rgb(255 255 255 / calc(var(--glass-energy, 0) * var(--glass-highlight, .3))), transparent 76%),
     linear-gradient(118deg, transparent 32%, rgb(255 255 255 / calc(var(--glass-energy, 0) * .16)) 48%, transparent 65%),
@@ -98,11 +97,11 @@
   border-color: #ffffffeb;
   box-shadow: inset 0 1px 0 #fff, var(--glass-shadow-x, 0px) 6px 15px #5586ab24 !important;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-play, .audio-play-control) { box-shadow: var(--tahoe-edge-light), 0 3px 7px #557b9e14 !important; }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-play-control { box-shadow: var(--tahoe-edge-light), 0 3px 7px #557b9e14 !important; }
 @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   :root:is([data-color-theme='classic'], [data-color-theme='tahoe']):not(.reduce-motion) .theme-choice:active .theme-choice-swatch,
   :root:is([data-color-theme='classic'], [data-color-theme='tahoe']):not(.reduce-motion) .network-source-card:active .network-source-symbol,
-  :root:is([data-color-theme='classic'], [data-color-theme='tahoe']):not(.reduce-motion) :is(.cinematic-play, .audio-play-control):active { translate: 0 1px; }
+  :root:is([data-color-theme='classic'], [data-color-theme='tahoe']):not(.reduce-motion) .audio-play-control:active { translate: 0 1px; }
 }
 
 /* Solid-material and motion preferences still take precedence over optics. */
@@ -119,7 +118,7 @@
   .tahoe-light-scene { opacity: .2; }
 }
 @supports not (mask-composite: exclude) {
-  :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-source-card, .media-details-panel, .theme-choice, .cinematic-console)::before { display: none; }
+  :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-source-card, .media-details-panel, .theme-choice)::before { display: none; }
 }
 @supports not (backdrop-filter: blur(1px)) {
   :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) { --tahoe-glass: #f5f9fe; --tahoe-glass-control: #f1f6fc; }
@@ -153,7 +152,7 @@
   --glass-highlight: .1;
 }
 :root[data-color-theme='classic'] .tahoe-light-scene { opacity: .12; }
-:root[data-color-theme='classic'] :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-source-card, .media-details-panel, .theme-choice, .cinematic-console)::before { opacity: .28; }
+:root[data-color-theme='classic'] :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-source-card, .media-details-panel, .theme-choice)::before { opacity: .28; }
 :root[data-color-theme='classic'] .settings-switch { background: #52677e; }
 :root[data-color-theme='classic'] .settings-switch.on { background: #247bd2; }
 :root[data-color-theme='classic'] .settings-segmented { background: #10213399; }

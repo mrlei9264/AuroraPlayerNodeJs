@@ -114,8 +114,16 @@ export class QueueController {
   }
 
   removeMediaId(mediaId: number): void {
-    this.ids = this.ids.filter((id) => id !== mediaId)
-    this.persist()
+    this.removeMediaIds([mediaId])
+  }
+
+  removeMediaIds(mediaIds: number[], persist = true): void {
+    const removed = new Set(mediaIds)
+    const next = this.ids.filter((id) => !removed.has(id))
+    if (next.length === this.ids.length) return
+    this.ids = next
+    if (persist) this.persist()
+    else this.broadcast(E.queueChanged, this.snapshot())
   }
 
   positionsOfMediaId(mediaId: number): number[] {
@@ -210,6 +218,10 @@ export class PlaylistController {
         this.repo.removePlaylistEntry(p.id, mediaId)
       }
     }
+    this.emit()
+  }
+
+  mediaRemovedFromLibrary(): void {
     this.emit()
   }
 

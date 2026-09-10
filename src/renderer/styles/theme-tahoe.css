@@ -107,18 +107,20 @@
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.settings-category.active svg, .library-type-tabs button.active) { color: var(--accent); }
 
 /* Transparent controls use a fine rim; selected/primary actions retain contrast. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .titlebar .tb-btn,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions button,
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions > button:not(.window-control-button),
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-settings-button, .btn, .settings-button, .network-secondary-action, .network-toolbar-button) {
   color: var(--fg1);
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge-soft);
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .titlebar .tb-btn:hover,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions button:hover,
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.titlebar .tb-btn, .cinematic-window-control) {
+  color: var(--fg1);
+}
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .titlebar .tb-btn:hover { color: var(--accent); }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions > button:not(.window-control-button):hover,
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-settings-button:hover, .settings-button:hover, .network-secondary-action:hover, .network-toolbar-button:hover) { color: var(--accent); background: var(--tahoe-control-fill); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .titlebar .tb-btn.close:hover,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions .audio-window-close:hover { color: #fff; background: #d73530; }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions .audio-window-close:hover { color: var(--danger); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace .library-action:not(.primary):not(.subtle):not(.play):not(.locate),
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace :is(.library-source-filter, .library-sort-select, .library-view-toggle, .library-query-field),
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinema-search, .library-search, .network-browser-search, .settings-select, .settings-input, .settings-font-select-trigger, .network-password-input-v2),
@@ -173,11 +175,10 @@
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .startup-atmosphere { background: radial-gradient(ellipse at 50% 48%, #bedbff38, transparent 65%); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .startup-wordmark span { color: var(--fg2); }
 
-/* On dark video, raise only the glass fill for legibility. Do not stack a
-   black vignette behind it or alter the video, artwork and subtitle pixels. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console,
+/* On dark video, use glass only for compact labels and the mini player. Do
+   not stack a panel behind the transport controls or alter media pixels. */
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .home-shell .cinema-mini-player,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-window-control, .cinematic-back, .cinematic-quality-badge, .cinematic-chapter-label) {
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-back, .cinematic-quality-badge, .cinematic-chapter-label) {
   color: var(--fg1);
   background: var(--tahoe-glass-media);
   border-color: var(--tahoe-edge);
@@ -185,10 +186,18 @@
   backdrop-filter: var(--tahoe-blur);
   text-shadow: none;
 }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console {
+  color: var(--fg1);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  text-shadow: none;
+}
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console { border-radius: var(--r-xl); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-vignette { background: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-bottom-shade { background: linear-gradient(0deg, #1423370d, transparent 35%); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-window-control.close:hover { color: #fff; background: #d73530; }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-bottom-shade { background: none; }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-window-control.close:hover { color: var(--danger); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-time, .cinematic-buffered, .cinematic-network-speed, .cinematic-speed-menu button) { color: var(--fg1); text-shadow: none; }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-speed-menu button:hover,
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-speed-menu button.active { color: var(--accent); background: var(--accent-soft); }
@@ -198,8 +207,9 @@
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer .vd-item:hover { color: var(--accent); background: var(--tahoe-control-fill); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer .vd-item.active { color: var(--accent); background: var(--accent-soft); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten) { color: var(--fg1); text-shadow: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten):hover { color: var(--accent); background: var(--tahoe-control-fill); border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-play, .audio-play-control, .audio-play-control:hover) { color: var(--accent); background: var(--tahoe-glass-control); }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten):hover { color: var(--accent); background: transparent; border-color: transparent; box-shadow: none !important; }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-play { color: var(--accent); background: transparent; box-shadow: none !important; }
+:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.audio-play-control, .audio-play-control:hover) { color: var(--accent); background: var(--tahoe-glass-control); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-title-row h1 { color: #fff; text-shadow: 0 1px 4px #0006; }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-quality-badge.active { color: var(--accent); border-color: var(--tahoe-edge-active); }
 :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-player .vp-error { --fg0: #fff; --fg1: #ddd; }

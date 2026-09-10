@@ -10,7 +10,7 @@ export function AudioArtwork({ artwork, variant = 'card', className = '' }: {
 }) {
   return (
     <span className={`library-audio-artwork ${variant === 'hero' ? 'hero' : ''} ${className}`.trim()} aria-hidden="true">
-      {artwork && <img className="library-audio-artwork-backdrop" src={artwork} alt="" loading={variant === 'hero' ? 'eager' : 'lazy'} />}
+      {artwork && <img className="library-audio-artwork-backdrop" src={artwork} alt="" loading={variant === 'hero' ? 'eager' : 'lazy'} decoding="async" fetchPriority={variant === 'hero' ? 'high' : 'low'} />}
       <span className="library-audio-mark"><Icon name="music" size={variant === 'hero' ? 44 : 30} /></span>
       <span className="library-audio-wave">
         {AUDIO_WAVE_BARS.map((height, index) => <i key={`${height}-${index}`} style={{ height: `${height}%` }} />)}

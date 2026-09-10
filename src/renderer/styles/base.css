@@ -201,12 +201,10 @@ h1, h2, h3, h4 {
   transition: background var(--m-fast), color var(--m-fast);
 }
 .titlebar .tb-btn:hover {
-  background: var(--bg3);
   color: var(--fg0);
 }
 .titlebar .tb-btn.close:hover {
-  background: #e81123;
-  color: #fff;
+  color: #e81123;
 }
 
 /* ============ shell ============ */
@@ -1247,7 +1245,6 @@ body.library-mode .ctx-menu .ctx-item {
 }
 .home-mode .titlebar .tb-btn:hover {
   color: #fff8ed;
-  background: rgba(255, 255, 255, 0.08);
 }
 .settings-mode .titlebar {
   z-index: 120;
@@ -1927,7 +1924,7 @@ body.library-mode .ctx-menu .ctx-item {
    overrides intentionally cover the original black-and-gold art direction
    without changing its geometry. Accent skins are loaded after this file. */
 .home-mode .titlebar .tb-btn { color: var(--fg2); }
-.home-mode .titlebar .tb-btn:hover { color: var(--fg0); background: color-mix(in srgb, var(--fg0) 8%, transparent); }
+.home-mode .titlebar .tb-btn:hover { color: var(--fg0); }
 .home-shell,
 .home-shell.settings-shell,
 .home-shell .main,

@@ -398,13 +398,13 @@ export class MediaProbeService {
   request(mediaId: number): boolean {
     const item = this.repo.findById(mediaId)
     if (!item || item.isImage) return false
-    // Automatic probing is a one-shot operation. A failed cover must not turn
-    // libraryChanged into an endless retry loop; requestAll(true) is the
-    // explicit retry path exposed by Settings.
+    // Playback-triggered probing is a one-shot operation. Manual cover
+    // regeneration resets this flag explicitly.
     if (item.metaProbed) return false
     if (this.pending.has(mediaId) || this.running === mediaId) return false
     this.pending.set(mediaId, { mediaId, url: item.url, remote: item.protocol !== 'local' })
-    this.drain()
+    // Do not let synchronous tag parsing delay the playback planning IPC.
+    setImmediate(() => void this.drain())
     return true
   }
 

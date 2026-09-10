@@ -55,6 +55,40 @@ export class LibraryRepository {
     return this.findById(id)!
   }
 
+  insertMany(items: MediaRowInput[]): number {
+    if (!items.length) return 0
+    const statement = this.db.prepare(
+      `INSERT OR IGNORE INTO media (url, file_name, is_audio, is_image, source_id, remote_path, protocol, source_name,
+       source_available, title, artist, album, added_at, duration, file_size, cover_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    const now = Date.now()
+    let inserted = 0
+    this.withTransaction(() => {
+      for (const item of items) {
+        inserted += Number(statement.run(
+          item.url,
+          item.fileName,
+          item.isAudio ? 1 : 0,
+          item.isImage ? 1 : 0,
+          item.sourceId,
+          item.remotePath,
+          item.protocol,
+          item.sourceName,
+          item.sourceAvailable ? 1 : 0,
+          cleanMediaText(item.title),
+          cleanMediaText(item.artist),
+          cleanMediaText(item.album),
+          now,
+          item.duration ?? 0,
+          item.fileSize ?? 0,
+          item.coverPath ?? null
+        ).changes)
+      }
+    })
+    return inserted
+  }
+
   upsertByUrl(item: MediaRowInput): MediaItem {
     const existing = this.findByUrl(item.url)
     if (existing) {
@@ -84,6 +118,11 @@ export class LibraryRepository {
   loadAll(): MediaItem[] {
     const rows = this.db.prepare('SELECT * FROM media ORDER BY added_at DESC, id DESC').all() as Record<string, unknown>[]
     return rows.map((r) => rowToMedia(r)!).filter(Boolean)
+  }
+
+  loadUrlSet(): Set<string> {
+    const rows = this.db.prepare('SELECT url FROM media').all() as { url: string }[]
+    return new Set(rows.map((row) => row.url))
   }
 
   updateFields(
@@ -137,6 +176,32 @@ export class LibraryRepository {
     this.db.prepare(`UPDATE media SET ${sets.join(', ')} WHERE id = ?`).run(...vals)
   }
 
+  setFavorites(ids: number[], favorite: boolean): number {
+    if (!ids.length) return 0
+    const statement = this.db.prepare('UPDATE media SET favorite = ? WHERE id = ? AND favorite <> ?')
+    let changed = 0
+    this.withTransaction(() => {
+      for (const id of ids) {
+        const value = favorite ? 1 : 0
+        changed += Number(statement.run(value, id, value).changes)
+      }
+    })
+    return changed
+  }
+
+  updateAvailability(updates: Array<{ id: number; url: string; available: boolean }>): number {
+    if (!updates.length) return 0
+    const statement = this.db.prepare('UPDATE media SET source_available = ? WHERE id = ? AND url = ? AND source_available <> ?')
+    let changed = 0
+    this.withTransaction(() => {
+      for (const update of updates) {
+        const value = update.available ? 1 : 0
+        changed += Number(statement.run(value, update.id, update.url, value).changes)
+      }
+    })
+    return changed
+  }
+
   updatePlaybackState(mediaId: number, position: number, duration: number): void {
     this.db
       .prepare('UPDATE media SET last_position = ?, duration = ?, last_played_at = ? WHERE id = ?')
@@ -152,13 +217,21 @@ export class LibraryRepository {
   }
 
   remove(ids: number[]): void {
-    for (const id of ids) {
-      this.db.prepare('DELETE FROM queue WHERE media_id = ?').run(id)
-      this.db.prepare('DELETE FROM playlist_entries WHERE media_id = ?').run(id)
-      this.db.prepare('DELETE FROM media WHERE id = ?').run(id)
-    }
-    const queueIds = this.loadQueueIds()
-    this.saveQueueIds(queueIds)
+    if (!ids.length) return
+    const deleteQueue = this.db.prepare('DELETE FROM queue WHERE media_id = ?')
+    const deletePlaylistEntries = this.db.prepare('DELETE FROM playlist_entries WHERE media_id = ?')
+    const deleteMedia = this.db.prepare('DELETE FROM media WHERE id = ?')
+    this.withTransaction(() => {
+      for (const id of ids) {
+        deleteQueue.run(id)
+        deletePlaylistEntries.run(id)
+        deleteMedia.run(id)
+      }
+      const queueIds = this.loadQueueIds()
+      this.db.prepare('DELETE FROM queue').run()
+      const insertQueue = this.db.prepare('INSERT INTO queue (position, media_id) VALUES (?, ?)')
+      queueIds.forEach((id, index) => insertQueue.run(index, id))
+    })
   }
 
   count(): number {
@@ -284,6 +357,17 @@ export class LibraryRepository {
       return added
     } catch {
       return 0
+    }
+  }
+
+  private withTransaction(action: () => void): void {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      action()
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
     }
   }
 }

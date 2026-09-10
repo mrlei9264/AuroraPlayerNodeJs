@@ -22,6 +22,7 @@ export const I = {
   libraryRemove: 'library:remove',
   libraryUndoRemove: 'library:undoRemove',
   libraryFavorite: 'library:favorite',
+  libraryFavoriteMany: 'library:favoriteMany',
   libraryRelocate: 'library:relocate',
   libraryAutoMatch: 'library:autoMatch',
   libraryUpdateMeta: 'library:updateMeta',

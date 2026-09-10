@@ -146,9 +146,9 @@ export function MusicPlayerPage() {
       <div className="audio-window-actions">
         <button type="button" onClick={leavePlayer} aria-label={t('back')} title={t('back')}><Icon name="chevronLeft" size={21} /></button>
         <div className="audio-window-spacer" />
-        <button type="button" className="audio-window-minimize" onClick={windowMinimize} aria-label={t('minimize')} title={t('minimize')}><Icon name="minimize" size={15} /></button>
-        <button type="button" className="audio-window-maximize" onClick={() => void windowMaximizeToggle()} aria-label={win.maximized ? t('restore') : t('maximize')} title={win.maximized ? t('restore') : t('maximize')}><Icon name={win.maximized ? 'restore' : 'maximize'} size={14} /></button>
-        <button type="button" className="audio-window-close" onClick={windowClose} aria-label={t('close')} title={t('close')}><Icon name="close" size={16} /></button>
+        <button type="button" className="audio-window-minimize window-control-button" onClick={windowMinimize} aria-label={t('minimize')} title={t('minimize')}><Icon name="minimize" size={15} /></button>
+        <button type="button" className="audio-window-maximize window-control-button" onClick={() => void windowMaximizeToggle()} aria-label={win.maximized ? t('restore') : t('maximize')} title={win.maximized ? t('restore') : t('maximize')}><Icon name={win.maximized ? 'restore' : 'maximize'} size={14} /></button>
+        <button type="button" className="audio-window-close window-control-button" onClick={windowClose} aria-label={t('close')} title={t('close')}><Icon name="close" size={16} /></button>
       </div>
 
       <div className="audio-visualizer-shell" aria-hidden="true">

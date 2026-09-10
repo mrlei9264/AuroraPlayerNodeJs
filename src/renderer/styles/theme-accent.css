@@ -171,11 +171,11 @@
 :root[data-accent-theme] .cinematic-buffered,
 :root[data-accent-theme] .cinematic-network-speed { color: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); }
 :root[data-accent-theme] .cinematic-transport::before { display: none; }
-:root[data-accent-theme] .cinematic-control-btn.active { color: var(--accent-end); background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent) 48%, transparent); }
+:root[data-accent-theme] .cinematic-control-btn.active { color: var(--accent-end); background: transparent; border-color: transparent; }
 :root[data-accent-theme] .cinematic-speed-control:hover { color: var(--accent-end); }
-:root[data-accent-theme] .cinematic-speed-control.active { color: var(--accent-end); background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent) 42%, transparent); }
+:root[data-accent-theme] .cinematic-speed-control.active { color: var(--accent-end); background: transparent; border-color: transparent; }
 :root[data-accent-theme] .seek-ten:hover { color: var(--accent-end); }
-:root[data-accent-theme] .cinematic-play { color: var(--fg0); background: radial-gradient(circle, color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--surface) 70%, transparent) 69%); box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 32%, transparent), inset 0 0 13px color-mix(in srgb, var(--accent-end) 14%, transparent); }
+:root[data-accent-theme] .cinematic-play { color: var(--fg0); background: transparent; box-shadow: none; }
 :root[data-accent-theme] input[type='range'].cinematic-volume { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 86%, transparent) 0%, color-mix(in srgb, var(--accent-end) 86%, transparent) var(--vp-volume), color-mix(in srgb, var(--fg0) 15%, transparent) var(--vp-volume), color-mix(in srgb, var(--fg0) 15%, transparent) 100%); }
 :root[data-accent-theme] input.cinematic-volume::-webkit-slider-thumb { background: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 44%, transparent); }
 :root[data-accent-theme] .cinematic-player .vp-big-buffer .ring { border-top-color: var(--accent-end); }

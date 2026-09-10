@@ -1,0 +1,156 @@
+/* Shared cinema chrome. Keep palette local: page themes still own their content.
+   Explicit !important shadows override the older theme-wide shadow reset. */
+:root {
+  --cinema-navy: #081321;
+  --cinema-deep: #06101c;
+  --cinema-ice: #7bcbff;
+  --cinema-cyan: #4ccbff;
+  --cinema-champagne: #f4d38a;
+  --cinema-white: #f5f8ff;
+  --cinema-edge: rgb(157 211 248 / .46);
+  --cinema-glass: linear-gradient(155deg, rgb(37 71 100 / .54), rgb(7 22 38 / .64) 55%, rgb(25 48 69 / .5));
+  --cinema-rim: inset 0 1px 0 #ffffff2b, inset 1px 0 0 #b4e6ff24, inset 0 -1px 0 #b4d8f51a;
+}
+
+/* Geometry comes from the existing responsive navigation in base.css. */
+#root .shell.home-shell .sidebar .nav-list {
+  isolation: isolate;
+  background: var(--cinema-glass);
+  border: 1px solid var(--cinema-edge);
+  backdrop-filter: blur(10px) saturate(120%);
+  box-shadow: var(--cinema-rim), 0 0 24px #32aaff16 !important;
+}
+#root .shell.home-shell .sidebar .nav-list::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(162deg, #c7ecffaa, #7bcbff12 24%, transparent 56%, #f4d38a70 79%, #8ccfff22);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+#root .shell.home-shell .sidebar .nav-mark {
+  background: transparent;
+  border: 0;
+}
+#root .shell.home-shell .sidebar .nav-mark .app-mark {
+  object-fit: contain;
+}
+#root .shell.home-shell .sidebar .nav-items .nav-item {
+  color: #ecf4ff;
+  border: 1px solid transparent;
+  background: transparent !important;
+  box-shadow: none !important;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+#root .shell.home-shell .sidebar .nav-items .nav-item:not(.active):hover {
+  color: #ecf4ff;
+  border-color: transparent;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#root .shell.home-shell .sidebar .nav-items .nav-item.active {
+  color: #86e6ff;
+  border-color: rgb(150 220 255 / .3);
+  background: rgb(120 190 255 / .15) !important;
+  box-shadow: inset 0 0 18px #5abeff14, inset 0 1px 0 #dbf2ff40 !important;
+}
+#root .shell.home-shell .sidebar .nav-active-motion { background: transparent; border: 0; }
+#root .shell.home-shell .sidebar .home-playback-status {
+  background: linear-gradient(145deg, #43749b70, #122a4099) !important;
+  border: 1px solid #a8daff85;
+  backdrop-filter: none;
+  box-shadow: var(--cinema-rim), 0 4px 14px #0002 !important;
+}
+#root .shell.home-shell .sidebar .home-playback-toggle {
+  background: transparent !important;
+  color: #82ddff;
+  box-shadow: none !important;
+}
+#root .shell.home-shell .sidebar .home-playback-toggle:hover:not(:disabled) { background: transparent !important; color: inherit; }
+#root .shell.home-shell .sidebar .home-playback-toggle:disabled { opacity: .45; }
+#root .shell.home-shell .sidebar .home-playback-label { color: inherit; }
+#root .shell.home-shell .sidebar .home-playback-icon { color: inherit; }
+
+/* Same native window controls and hit targets, with crisp line icons. */
+#root .window-control-button {
+  color: #eef5ff;
+  border-radius: 6px;
+  transition: color 180ms ease, background 180ms ease;
+}
+#root .window-control-button svg { filter: drop-shadow(0 1px 2px #06101ca6); }
+#root .window-control-button:hover { color: #9ce4ff; background: #7bbfff12; }
+#root .window-control-button:is(.close, .audio-window-close):hover { color: #ffaaa8; background: #e45c5c18; }
+#root .titlebar .tb-btn svg { width: 18px; height: 18px; }
+:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button { color: #244766; }
+:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button svg { filter: none; }
+:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button:hover { color: #0871bb; }
+:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button:is(.close, .audio-window-close):hover { color: #c34848; }
+
+#root .hud {
+  top: 12px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+#root .hud .hud-panel {
+  min-height: 40px;
+  gap: 0;
+  padding: 0 17px;
+  color: var(--cinema-white);
+  background: rgb(8 25 43 / .7);
+  border: 1px solid rgb(120 205 255 / .55);
+  border-radius: 24px;
+  backdrop-filter: blur(18px);
+  box-shadow: var(--cinema-rim), 0 0 22px #50beff19 !important;
+  font-size: var(--hud-font-size, 12px);
+}
+#root .hud .hud-panel::before { width: 6px; height: 6px; background: #66daff; box-shadow: 0 0 8px #66daff44 !important; }
+#root .hud .hud-row { gap: 5px; padding: 0 10px; }
+#root .hud .hud-row + .hud-row::before { display: none; }
+#root .hud .hud-row .k { color: #9cdfff; font-size: .96em; font-weight: 400; letter-spacing: 0; }
+#root .hud .hud-row .v { color: #f5f8ff; font-weight: 600; }
+
+#root .notification-center-toggle {
+  color: #f0f6ff;
+  border: 1px solid #acdcffa6;
+  background: linear-gradient(145deg, #315e828c, #091d32bd);
+  box-shadow: var(--cinema-rim), 0 8px 20px #0003 !important;
+  backdrop-filter: blur(18px);
+}
+#root .notification-center-toggle:hover {
+  color: #f0f6ff;
+  border-color: #acdcffa6;
+  background: linear-gradient(145deg, #315e828c, #091d32bd);
+}
+#root .notification-center-toggle.active { color: #a3e9ff; border-color: #bbecff; }
+#root .notification-center-toggle > span { background: #94dfff; color: #082039; border-color: #b8ecff; }
+#root .notification-center-panel {
+  --fg0: #f5f8ff;
+  --fg1: #d7e7f5;
+  --fg2: #adbdce;
+  --fg3: #90a8bb;
+  --accent: #7bcbff;
+  --accent-end: #9de4ff;
+  --accent-soft: #7bcbff14;
+  --border: #91d2ff26;
+  color: var(--fg0);
+  border-color: #91d2ff66;
+  background: #0c2035f0;
+  box-shadow: var(--cinema-rim), 0 18px 42px #0005 !important;
+}
+#root :is(.sidebar button, .notification-center button, .window-control-button):focus-visible {
+  outline: 2px solid #a3e8ff !important;
+  outline-offset: 4px !important;
+}
+
+@media (max-width: 900px) {
+  #root .hud .hud-panel { min-height: 34px; padding: 0 9px; font-size: 10px; }
+  #root .hud .hud-row { padding: 0 6px; }
+}
+html.reduce-transparency #root :is(.sidebar .nav-list, .sidebar .home-playback-status, .hud-panel, .notification-center-toggle, .notification-center-panel) { backdrop-filter: none !important; background: #112a40 !important; }
+@media (prefers-reduced-transparency: reduce) {
+  #root :is(.sidebar .nav-list, .sidebar .home-playback-status, .hud-panel, .notification-center-toggle, .notification-center-panel) { backdrop-filter: none !important; background: #112a40 !important; }
+}

@@ -159,6 +159,7 @@ interface RuntimeApi {
   addRemoteMedia: (sourceId: number, entries: { path: string; name: string; size: number }[], notify?: boolean) => Promise<void>
   removeMedia: (ids: number[]) => Promise<void>
   toggleFavorite: (id: number) => void
+  setFavorites: (ids: number[], favorite: boolean) => Promise<void>
   relocate: (id: number) => Promise<boolean>
   autoMatch: () => Promise<void>
   updateMeta: (id: number, fields: Partial<Pick<MediaItem, 'title' | 'artist' | 'album'>>) => void
@@ -201,6 +202,27 @@ interface RuntimeApi {
 
 const RuntimeContext = createContext<RuntimeState & RuntimeApi>(null as never)
 export const useRuntime = (): RuntimeState & RuntimeApi => useContext(RuntimeContext)
+
+type LibraryRuntimeValue = Pick<RuntimeState, 'settings' | 'library'> &
+  Pick<RuntimeApi,
+    | 't'
+    | 'play'
+    | 'addMediaDialog'
+    | 'addFolderDialog'
+    | 'enqueue'
+    | 'toggleFavorite'
+    | 'setFavorites'
+    | 'removeMedia'
+    | 'confirm'
+    | 'prompt'
+    | 'openPath'
+    | 'openCtxMenu'
+    | 'navigate'
+    | 'toast'
+  > & { currentMediaId: number | null }
+
+const LibraryRuntimeContext = createContext<LibraryRuntimeValue>(null as never)
+export const useLibraryRuntime = (): LibraryRuntimeValue => useContext(LibraryRuntimeContext)
 
 let toastSeq = 1
 let dialogSeq = 1
@@ -631,7 +653,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     if (paths.length) {
       const added = await p<number>(I.libraryAddPaths, paths)
       toast('success', t('filesImportedNotification', { count: added }))
-      await refreshLibrary()
     }
   }, [t, toast])
 
@@ -640,7 +661,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     if (dir) {
       const added = await p<number>(I.libraryAddPaths, [dir])
       toast('success', t('filesImportedNotification', { count: added }))
-      await refreshLibrary()
     }
   }, [t, toast])
 
@@ -649,7 +669,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       const item = await p<MediaItem | null>(I.libraryAddUrl, url)
       if (item) {
         toast('success', t('networkAddressAddedNotification'))
-        await refreshLibrary()
         return true
       }
       toast('error', t('playbackInvalid'))
@@ -667,7 +686,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         entries.map((e) => ({ sourceId, sourceName: source.name, protocol: source.protocol, path: e.path, name: e.name, size: e.size }))
       )
       if (notify) toast('success', t('remoteMediaAddedNotification', { count: entries.length, source: source.name }))
-      await refreshLibrary()
     },
     [sources, t, toast]
   )
@@ -675,21 +693,23 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const removeMedia = useCallback(
     async (ids: number[]) => {
       await p(I.libraryRemove, ids)
-      toast('success', t('mediaRemovedNotification', { count: ids.length }), { label: t('undo'), onClick: () => void p(I.libraryUndoRemove).then(refreshLibrary) })
-      await refreshLibrary()
-      await refreshQueue()
+      toast('success', t('mediaRemovedNotification', { count: ids.length }), { label: t('undo'), onClick: () => void p(I.libraryUndoRemove) })
     },
     [t, toast]
   )
+
+  const setFavorites = useCallback(async (ids: number[], favorite: boolean) => {
+    if (!ids.length) return
+    await p(I.libraryFavoriteMany, ids, favorite)
+  }, [])
 
   const toggleFavorite = useCallback(
     async (id: number) => {
       const item = library.find((i) => i.id === id)
       if (!item) return
-      await p(I.libraryFavorite, id, !item.favorite)
-      setLibrary((prev) => prev.map((i) => (i.id === id ? { ...i, favorite: !item.favorite } : i)))
+      await setFavorites([id], !item.favorite)
     },
-    [library]
+    [library, setFavorites]
   )
 
   const relocate = useCallback(
@@ -697,7 +717,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       const ok = await p<boolean>(I.dialogsRelocate, id)
       if (ok) {
         toast('success', t('mediaRelocatedNotification'))
-        await refreshLibrary()
       }
       return ok
     },
@@ -707,7 +726,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const autoMatch = useCallback(async () => {
     const matched = await p<number>(I.libraryAutoMatch)
     toast(matched > 0 ? 'success' : 'info', t(matched > 0 ? 'autoMatchCompletedNotification' : 'autoMatchEmptyNotification', { count: matched }))
-    await refreshLibrary()
   }, [t, toast])
 
   const updateMeta = useCallback((id: number, fields: Partial<Pick<MediaItem, 'title' | 'artist' | 'album'>>) => {
@@ -937,10 +955,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         current.forEach((record) => records.set(record.id, record))
         return [...records.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 500)
       })
-      const unprobed = lib
-        .filter((item) => !item.isImage && item.sourceAvailable && !item.metaProbed)
-        .map((item) => item.id)
-      if (unprobed.length) void p(I.probeRequest, unprobed)
     }
     void boot()
     return () => {
@@ -1007,11 +1021,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubs: (() => void)[] = []
     unsubs.push(window.aurora.on(E.settingsChanged, (s: AppSettingsData) => setSettings(s)))
-    unsubs.push(window.aurora.on(E.libraryChanged, (items: MediaItem[]) => {
-      setLibrary(items)
-      const unprobed = items.filter((item) => !item.isImage && item.sourceAvailable && !item.metaProbed).map((item) => item.id)
-      if (unprobed.length) void p(I.probeRequest, unprobed)
-    }))
+    unsubs.push(window.aurora.on(E.libraryChanged, (items: MediaItem[]) => setLibrary(items)))
     unsubs.push(window.aurora.on(E.queueChanged, (q: QueueEntry[]) => setQueue(q)))
     unsubs.push(window.aurora.on(E.playlistsChanged, (pl: Playlist[]) => setPlaylists(pl)))
     unsubs.push(window.aurora.on(E.sourcesChanged, (src: RemoteSource[]) => setSources(src)))
@@ -1046,18 +1056,11 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     unsubs.push(window.aurora.on(E.openFiles, (paths: string[]) => {
       void p<number>(I.libraryAddPaths, paths).then((n) => {
         toast('success', t('filesImportedNotification', { count: n }))
-        void refreshLibrary()
       })
     }))
     return () => unsubs.forEach((u) => u())
   }, [toast, t, togglePlayPause, playNext, playPrevious])
 
-  const refreshLibrary = useCallback(async () => {
-    setLibrary(await p<MediaItem[]>(I.libraryGet))
-  }, [])
-  const refreshQueue = useCallback(async () => {
-    setQueue(await p<QueueEntry[]>(I.queueGet))
-  }, [])
   const refreshPlaylists = useCallback(async () => {
     setPlaylists(await p<Playlist[]>(I.playlistsGet))
   }, [])
@@ -1115,6 +1118,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     addRemoteMedia,
     removeMedia,
     toggleFavorite,
+    setFavorites,
     relocate,
     autoMatch,
     updateMeta,
@@ -1189,7 +1193,49 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, nav, session, tracks, lyrics, spectrum, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
   )
 
-  return <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>
+  const libraryValue = useMemo<LibraryRuntimeValue>(() => ({
+    settings: settings ?? (null as never),
+    library,
+    currentMediaId: session.mediaId,
+    t,
+    play,
+    addMediaDialog,
+    addFolderDialog,
+    enqueue,
+    toggleFavorite,
+    setFavorites,
+    removeMedia,
+    confirm,
+    prompt,
+    openPath,
+    openCtxMenu,
+    navigate,
+    toast
+  }), [
+    settings,
+    library,
+    session.mediaId,
+    t,
+    play,
+    addMediaDialog,
+    addFolderDialog,
+    enqueue,
+    toggleFavorite,
+    setFavorites,
+    removeMedia,
+    confirm,
+    prompt,
+    openPath,
+    openCtxMenu,
+    navigate,
+    toast
+  ])
+
+  return (
+    <RuntimeContext.Provider value={value}>
+      <LibraryRuntimeContext.Provider value={libraryValue}>{children}</LibraryRuntimeContext.Provider>
+    </RuntimeContext.Provider>
+  )
 }
 
 async function captureVideoCover(url: string, signal?: AbortSignal): Promise<string | null> {

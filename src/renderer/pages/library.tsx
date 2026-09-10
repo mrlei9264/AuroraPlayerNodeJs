@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { p, useRuntime } from '../core/runtime'
+import { p, useLibraryRuntime } from '../core/runtime'
 import { FilledIcon, Icon, type IconName } from '../core/icons'
 import { coverUrl } from '../core/player'
 import { formatBytes, type MediaItem } from '../../shared/types'
@@ -71,13 +71,17 @@ function readLibraryCollectionPreference(): LibraryCollectionPreference {
 
 function pruneCollectionPreference(current: LibraryCollectionPreference, items: MediaItem[]): LibraryCollectionPreference {
   const availableMediaIds = new Set(items.filter((item) => !item.isImage).map((item) => item.id))
-  const availableAutoCollectionIds = new Set(collectSimilarVideos(
-    items.filter((item) => !item.isAudio && !item.isImage)
-  ).map((collection) => collection.id))
   const manual = current.manual
     .map((collection) => ({ ...collection, mediaIds: collection.mediaIds.filter((id) => availableMediaIds.has(id)) }))
     .filter((collection) => collection.mediaIds.length >= 2)
-  const excludedAutoIds = current.excludedAutoIds.filter((id) => availableAutoCollectionIds.has(id))
+  const excludedAutoIds = current.excludedAutoIds.length === 0
+    ? current.excludedAutoIds
+    : (() => {
+        const availableAutoCollectionIds = new Set(collectSimilarVideos(
+          items.filter((item) => !item.isAudio && !item.isImage)
+        ).map((collection) => collection.id))
+        return current.excludedAutoIds.filter((id) => availableAutoCollectionIds.has(id))
+      })()
   const manualUnchanged = manual.length === current.manual.length && manual.every((collection, index) => {
     const previous = current.manual[index]
     return collection.id === previous.id && collection.title === previous.title &&
@@ -327,17 +331,19 @@ function LibrarySourceSelect({ value, options, label, onChange }: {
 function readBrowsePreference(): { kind: LibraryTab; query: string; source: SourceFilter; grouped: boolean } {
   try {
     const value = JSON.parse(window.sessionStorage.getItem('aurora.library.browse.v1') || '{}')
+    const storedKind = ['all', 'video', 'audio', 'favorite'].includes(value.kind) ? value.kind as LibraryTab : 'video'
     return {
-      kind: ['all', 'video', 'audio', 'favorite'].includes(value.kind) ? value.kind : 'all',
+      // “All files” remains an internal filter for locating the current item, but is no longer a visible tab.
+      kind: storedKind === 'all' ? 'video' : storedKind,
       query: typeof value.query === 'string' ? value.query : '',
       source: ['all', 'local', 'remote', 'unavailable'].includes(value.source) ? value.source : 'all',
       grouped: value.grouped === true
     }
-  } catch { return { kind: 'all', query: '', source: 'all', grouped: false } }
+  } catch { return { kind: 'video', query: '', source: 'all', grouped: false } }
 }
 
-export function LibraryPage() {
-  const { t, settings, library, session, play, addMediaDialog, enqueue, toggleFavorite, removeMedia, confirm, prompt, openPath, openCtxMenu, navigate, addFolderDialog, toast } = useRuntime()
+function LibraryPageView() {
+  const { t, settings, library, currentMediaId, play, addMediaDialog, enqueue, toggleFavorite, setFavorites, removeMedia, confirm, prompt, openPath, openCtxMenu, navigate, addFolderDialog, toast } = useLibraryRuntime()
   const locale = settings?.language === 'zh' ? 'zh-CN' : 'en-US'
   const [availabilityRefreshing, setAvailabilityRefreshing] = useState(false)
   const refreshAvailability = useCallback(async (includeRemote = true) => {
@@ -346,23 +352,6 @@ export function LibraryPage() {
     catch { toast('error', settings.language === 'zh' ? '无法检查文件状态，请重试' : 'Unable to check file availability') }
     finally { setAvailabilityRefreshing(false) }
   }, [settings.language, toast])
-  useEffect(() => {
-    const refresh = () => {
-      if (!document.hidden) void refreshAvailability()
-    }
-    refresh()
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', refresh)
-    // Poll local paths only; remote checks run on entry, focus and explicit refresh.
-    const timer = window.setInterval(() => {
-      if (!document.hidden) void refreshAvailability(false)
-    }, 30_000)
-    return () => {
-      window.clearInterval(timer)
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', refresh)
-    }
-  }, [refreshAvailability])
   const systemReducedMotion = useReducedMotion()
   const reduceMotion = settings.reducedMotion || systemReducedMotion
   const [initialBrowse] = useState(readBrowsePreference)
@@ -398,7 +387,6 @@ export function LibraryPage() {
   const viewAnimationTimerRef = useRef(0)
   const viewAnchorMediaIdRef = useRef<number | null>(null)
   const locatedMediaIdRef = useRef<number | null>(null)
-  const collectionCleanupReadyRef = useRef(false)
   const [gridWidth, setGridWidth] = useState(0)
   const [gridScrollMargin, setGridScrollMargin] = useState(0)
   const { sortBy, sortDirection } = sortPreference
@@ -417,8 +405,13 @@ export function LibraryPage() {
   useEffect(() => {
     const page = scrollRef.current
     if (!page) return
-    const saveScroll = () => {
+    let saveTimer = 0
+    const persistScroll = () => {
       try { window.sessionStorage.setItem('aurora.library.scroll.v1', String(page.scrollTop)) } catch { /* optional preferences */ }
+    }
+    const saveScroll = () => {
+      window.clearTimeout(saveTimer)
+      saveTimer = window.setTimeout(persistScroll, 300)
     }
     const focusSearch = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('[role="dialog"], [role="alertdialog"]')) return
@@ -428,7 +421,12 @@ export function LibraryPage() {
     }
     page.addEventListener('scroll', saveScroll, { passive: true })
     window.addEventListener('keydown', focusSearch)
-    return () => { page.removeEventListener('scroll', saveScroll); window.removeEventListener('keydown', focusSearch) }
+    return () => {
+      window.clearTimeout(saveTimer)
+      persistScroll()
+      page.removeEventListener('scroll', saveScroll)
+      window.removeEventListener('keydown', focusSearch)
+    }
   }, [])
 
   useEffect(() => {
@@ -445,69 +443,55 @@ export function LibraryPage() {
 
   useEffect(() => {
     const available = new Set(library.map((item) => item.id))
-    setSelectedMediaIds((current) => new Set([...current].filter((id) => available.has(id))))
-    if (collectionCleanupReadyRef.current) {
-      setCollectionPreference((current) => pruneCollectionPreference(current, library))
-    }
+    setSelectedMediaIds((current) => {
+      const next = new Set([...current].filter((id) => available.has(id)))
+      return next.size === current.size ? current : next
+    })
+    setCollectionPreference((current) => pruneCollectionPreference(current, library))
   }, [library])
 
-  useEffect(() => {
-    let active = true
-    void p<MediaItem[]>(I.libraryGet).then((items) => {
-      if (!active) return
-      setCollectionPreference((current) => pruneCollectionPreference(current, items))
-      collectionCleanupReadyRef.current = true
-    }).catch(() => {
-      if (active) collectionCleanupReadyRef.current = true
-    })
-    return () => { active = false }
-  }, [])
-
-  const cards = useMemo<LibraryCardData[]>(() => {
-    const videos = library.filter((item) => !item.isAudio && !item.isImage)
-    const audios = library.filter((item) => item.isAudio && !item.isImage)
-    const toCard = (item: MediaItem, mediaKind: MediaKind): LibraryCardData => ({
-      kind: mediaKind,
-      item,
-      title: titleFor(item),
-      artwork: item.coverPath ? coverUrl(item.coverPath) : null,
-      overlayDuration: formatOverlayDuration(item.duration),
-      metadata: metadataFor(item, t('unknownArtist'), t('video'), t('shortHour'), t('shortMinute'))
-    })
-
-    return [
-      ...videos.map((item) => toCard(item, 'video')),
-      ...audios.map((item) => toCard(item, 'audio'))
-    ]
+  const { cards, libraryStats } = useMemo(() => {
+    const cards: LibraryCardData[] = []
+    const stats = { total: 0, favorites: 0, videos: 0, audios: 0, totalDuration: 0 }
+    const unknownArtist = t('unknownArtist')
+    const videoLabel = t('video')
+    const hourLabel = t('shortHour')
+    const minuteLabel = t('shortMinute')
+    for (const item of library) {
+      if (item.isImage) continue
+      const kind: MediaKind = item.isAudio ? 'audio' : 'video'
+      stats.total++
+      stats.favorites += item.favorite ? 1 : 0
+      stats.audios += item.isAudio ? 1 : 0
+      stats.videos += item.isAudio ? 0 : 1
+      stats.totalDuration += Math.max(0, item.duration || 0)
+      cards.push({
+        kind,
+        item,
+        title: titleFor(item),
+        artwork: item.coverPath ? coverUrl(item.coverPath) : null,
+        overlayDuration: formatOverlayDuration(item.duration),
+        metadata: metadataFor(item, unknownArtist, videoLabel, hourLabel, minuteLabel)
+      })
+    }
+    return { cards, libraryStats: stats }
   }, [library, t])
 
-  const libraryStats = useMemo(() => {
-    const media = library.filter((item) => !item.isImage)
-    const videos = media.filter((item) => !item.isAudio)
-    const audios = media.filter((item) => item.isAudio)
-    const totalDuration = media.reduce((sum, item) => sum + Math.max(0, item.duration || 0), 0)
-    return {
-      total: media.length,
-      favorites: media.filter((item) => item.favorite).length,
-      videos: videos.length,
-      audios: audios.length,
-      totalDuration
-    }
-  }, [library])
+  const deferredQuery = useDeferredValue(query)
+  const collator = useMemo(() => new Intl.Collator(locale, { numeric: true, sensitivity: 'base' }), [locale])
 
   const visibleCards = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase()
+    const terms = deferredQuery.trim().toLocaleLowerCase(locale).split(/\s+/).filter(Boolean)
     const filtered = cards.filter((card) => {
       if (kind !== 'all' && (kind === 'favorite' ? !card.item.favorite : card.kind !== kind)) return false
       if (source === 'local' && card.item.protocol !== 'local') return false
       if (source === 'remote' && card.item.protocol === 'local') return false
       if (source === 'unavailable' && card.item.sourceAvailable) return false
-      if (!needle) return true
+      if (!terms.length) return true
       const itemText = `${card.item.fileName} ${card.item.artist} ${card.item.album} ${card.item.sourceName}`
-      const haystack = `${card.title} ${card.metadata} ${itemText}`.toLocaleLowerCase()
-      return needle.split(/\s+/).every((term) => haystack.includes(term))
+      const haystack = `${card.title} ${card.metadata} ${itemText}`.toLocaleLowerCase(locale)
+      return terms.every((term) => haystack.includes(term))
     })
-    const collator = new Intl.Collator(locale, { numeric: true, sensitivity: 'base' })
     const direction = sortDirection === 'asc' ? 1 : -1
     return filtered.sort((left, right) => {
       let comparison = 0
@@ -526,10 +510,10 @@ export function LibraryPage() {
       if (comparison === 0) comparison = left.item.id - right.item.id
       return comparison * direction
     })
-  }, [cards, kind, source, locale, query, sortBy, sortDirection])
+  }, [cards, kind, source, locale, deferredQuery, sortBy, sortDirection, collator])
 
   const displayEntries = useMemo<LibraryDisplayEntry[]>(() => {
-    if (!grouped || query.trim()) return visibleCards.map((card) => ({ type: 'item', card }))
+    if (!grouped || deferredQuery.trim()) return visibleCards.map((card) => ({ type: 'item', card }))
     const cardById = new Map(visibleCards.map((card) => [card.item.id, card]))
     const manualCollections = collectionPreference.manual.map((collection) => ({
       ...collection,
@@ -560,7 +544,7 @@ export function LibraryPage() {
       }
     }
     return entries
-  }, [collectionPreference, visibleCards, grouped, query])
+  }, [collectionPreference, visibleCards, grouped, deferredQuery])
 
   const gridColumnGap = selectionMode ? LIBRARY_GRID_SELECTION_GAP : LIBRARY_GRID_COLUMN_GAP
   const measuredGridWidth = gridWidth > 0
@@ -568,7 +552,7 @@ export function LibraryPage() {
     : LIBRARY_GRID_CARD_WIDTH * DEFAULT_LIBRARY_GRID_COLUMNS + gridColumnGap * (DEFAULT_LIBRARY_GRID_COLUMNS - 1)
   const columnCount = view === 'list'
     ? 1
-    : Math.max(1, Math.floor((measuredGridWidth + gridColumnGap) / (LIBRARY_GRID_CARD_WIDTH + gridColumnGap)))
+    : Math.min(DEFAULT_LIBRARY_GRID_COLUMNS, Math.max(1, Math.floor((measuredGridWidth + gridColumnGap) / (LIBRARY_GRID_CARD_WIDTH + gridColumnGap))))
   const virtualRows = useMemo(
     () => buildVirtualRows(displayEntries, columnCount, expandedCollections),
     [columnCount, displayEntries, expandedCollections]
@@ -582,7 +566,7 @@ export function LibraryPage() {
       return 98 + itemCount * 100
     }
     const rowGap = 22
-    const cardHeight = ((measuredGridWidth - gridColumnGap * (columnCount - 1)) / columnCount) * (166 / 252) + 60
+    const cardHeight = ((measuredGridWidth - gridColumnGap * (columnCount - 1)) / columnCount) * (9 / 16) + 78
     if (!row?.expanded) return cardHeight + rowGap
     const collection = row.entries[0]?.entry
     const itemCount = collection?.type === 'collection' ? collection.cards.length : 0
@@ -630,7 +614,6 @@ export function LibraryPage() {
     if (rowIndex >= 0) rowVirtualizer.scrollToIndex(rowIndex, { align: 'center' })
   }, [rowVirtualizer, view, virtualRows])
 
-  const currentMediaId = session.mediaId
   const currentMedia = currentMediaId == null ? null : library.find((item) => item.id === currentMediaId) ?? null
   const currentMediaKind: MediaKind | null = currentMedia && !currentMedia.isImage ? (currentMedia.isAudio ? 'audio' : 'video') : null
   const currentMediaRowIndex = useMemo(() => {
@@ -645,12 +628,12 @@ export function LibraryPage() {
     locatedMediaIdRef.current = null
     setQuery('')
     setSource('all')
-    setKind('all')
+    setKind(currentMediaKind ?? 'video')
     setLocateRequested(true)
   }
 
   useEffect(() => {
-    if (!locateRequested || currentMediaId == null || locatedMediaIdRef.current === currentMediaId || kind !== 'all' || source !== 'all' || query) return
+    if (!locateRequested || currentMediaId == null || locatedMediaIdRef.current === currentMediaId || source !== 'all' || query) return
     const collection = displayEntries.find((entry) => entry.type === 'collection' && entry.cards.some((card) => card.item.id === currentMediaId))
     if (collection?.type === 'collection' && !expandedCollections.has(collection.id)) {
       setExpandedCollections((current) => new Set(current).add(collection.id))
@@ -865,11 +848,11 @@ export function LibraryPage() {
     ])
   }
 
-  const playableIds = visibleCards.filter((card) => card.item.sourceAvailable).map((card) => card.item.id)
-  const selectedCards = visibleCards.filter((card) => selectedMediaIds.has(card.item.id))
-  const selectedPlayableIds = selectedCards.filter((card) => card.item.sourceAvailable).map((card) => card.item.id)
+  const playableIds = useMemo(() => visibleCards.filter((card) => card.item.sourceAvailable).map((card) => card.item.id), [visibleCards])
+  const selectedCards = useMemo(() => visibleCards.filter((card) => selectedMediaIds.has(card.item.id)), [selectedMediaIds, visibleCards])
+  const selectedPlayableIds = useMemo(() => selectedCards.filter((card) => card.item.sourceAvailable).map((card) => card.item.id), [selectedCards])
   const allSelectedFavorite = selectedCards.length > 0 && selectedCards.every((card) => card.item.favorite)
-  const resetFilters = () => { setKind('all'); setQuery(''); setSource('all') }
+  const resetFilters = () => { setKind('video'); setQuery(''); setSource('all') }
   const removeSelected = async () => {
     const ids = selectedCards.map((card) => card.item.id)
     if (!ids.length || busy) return
@@ -912,13 +895,13 @@ export function LibraryPage() {
           <div className="library-browse-row">
             <div className="library-category-nav" role="group" aria-label={t('mediaType')}>
               {([
-                ['all', t('allFiles')],
-                ['video', t('videos')],
-                ['audio', t('audios')],
-                ['favorite', t('favorites')]
-              ] as const).map(([value, label]) => (
+                ['video', t('videos'), 'video'],
+                ['audio', t('audios'), 'music'],
+                ['favorite', t('favorites'), 'heart']
+              ] as const).map(([value, label, icon]) => (
                 <button type="button" key={value} aria-pressed={kind === value} className={kind === value ? 'active' : ''} onClick={() => setKind(value)}>
-                  {label}
+                  <Icon name={icon} size={17} />
+                  <span className="library-category-label">{label}</span>
                 </button>
               ))}
             </div>
@@ -958,11 +941,19 @@ export function LibraryPage() {
               <span aria-live="polite">{t('selectedCount', { count: selectedCards.length })}</span>
               <button type="button" className="library-action" disabled={!selectedPlayableIds.length} onClick={() => void play(selectedPlayableIds, 0)}><Icon name="play" size={16} />{t('play')}</button>
               <button type="button" className="library-action" disabled={!selectedPlayableIds.length} onClick={() => void enqueue(selectedPlayableIds)}><Icon name="playlist" size={16} />{t('addToQueue')}</button>
-              <button type="button" className="library-action" disabled={!selectedCards.length} onClick={() => selectedCards.filter((card) => card.item.favorite === allSelectedFavorite).forEach((card) => toggleFavorite(card.item.id))}><Icon name="heart" size={16} />{allSelectedFavorite ? t('unfavorite') : t('favorite')}</button>
+              <button type="button" className="library-action" disabled={!selectedCards.length} onClick={() => void setFavorites(selectedCards.map((card) => card.item.id), !allSelectedFavorite).catch(() => toast('error', t('libraryActionFailed')))}><Icon name="heart" size={16} />{allSelectedFavorite ? t('unfavorite') : t('favorite')}</button>
               <button type="button" className="library-action" disabled={selectedCards.length < 2} onClick={() => void createCollection()}><Icon name="library" size={16} />{t('combineAsCollection')}</button>
               <button type="button" className="library-action danger" disabled={!selectedCards.length || busy} onClick={() => void removeSelected()}><Icon name="trash" size={16} />{t('removeFromLibrary')}</button>
             </div>
           ) : null}
+        </div>
+        <div className="library-content-heading" aria-live="polite">
+          <div className="library-content-heading-title">
+            <Icon name={kind === 'audio' ? 'music' : kind === 'favorite' ? 'heart' : kind === 'video' ? 'video' : 'library'} size={20} />
+            <h2>{filesTitle}</h2>
+            <span>{visibleCards.length.toLocaleString(locale)}</span>
+          </div>
+          <span className="library-content-heading-hint">{query || source !== 'all' ? t('libraryResults', { count: visibleCards.length.toLocaleString(locale) }) : t('libraryBrowseHint')}</span>
         </div>
         <div ref={scrollRef} className="library-file-viewport" tabIndex={0} role="region" aria-label={filesTitle} onScroll={revealScrollbar} onWheel={revealScrollbar} onPointerMove={revealScrollbar} onFocusCapture={revealScrollbar}>
         {visibleCards.length > 0 ? (
@@ -1050,6 +1041,8 @@ export function LibraryPage() {
   )
 }
 
+export const LibraryPage = React.memo(LibraryPageView)
+
 function LibraryCollectionCard({
   collection,
   expanded,
@@ -1102,7 +1095,7 @@ function LibraryCollectionCard({
         <span className="library-collection-art">
           {previewCards.map((card, index) => (
             <span className="library-collection-preview" key={card.item.id} style={{ '--preview-index': index } as React.CSSProperties}>
-              {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={30} /></span>}
+              {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" decoding="async" fetchPriority="low" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={30} /></span>}
             </span>
           ))}
           {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
@@ -1140,7 +1133,7 @@ function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly,
   onOpen: (event: React.MouseEvent<HTMLButtonElement>) => void
   onContextMenu: (event: React.MouseEvent) => void
 }) {
-  const { t } = useRuntime()
+  const { t } = useLibraryRuntime()
   const favoriteLabel = card.item.favorite ? t('unfavorite') : t('favorite')
   const progress = card.item.duration > 0 ? Math.min(100, Math.max(0, card.item.lastPosition / card.item.duration * 100)) : 0
   const extension = card.item.fileName.split('.').at(-1)?.toUpperCase() || (card.kind === 'audio' ? 'AUDIO' : 'VIDEO')
@@ -1149,7 +1142,7 @@ function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly,
     <div className={`library-file-card ${card.kind} ${selected ? 'selected' : ''} ${current ? 'is-current' : ''} ${!card.item.sourceAvailable ? 'is-unavailable' : ''}`} data-media-id={card.item.id} onContextMenu={onContextMenu}>
       <button type="button" className="library-file-open" onClick={onOpen} aria-label={`${selectionMode ? t('selectItem') : card.item.sourceAvailable ? t('play') : t('mediaInfo')}: ${card.title}`} aria-current={current ? 'true' : undefined} aria-pressed={selectionMode ? selected : undefined}>
         <span className={`library-file-art ${card.kind === 'audio' ? 'audio-art' : ''}`}>
-          {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>}
+          {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" decoding="async" fetchPriority="low" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>}
           {!selectionMode && card.item.sourceAvailable && <span className="library-card-play"><Icon name="play" size={23} /></span>}
           {card.overlayDuration && <span className="library-file-duration">{card.overlayDuration}</span>}
           {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}

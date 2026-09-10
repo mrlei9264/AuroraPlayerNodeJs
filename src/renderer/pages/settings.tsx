@@ -1024,7 +1024,7 @@ function SettingRow({ label, description, children }: { label: string; descripti
 function SettingsHelp({ label, description }: { label: string; description: string }) {
   return (
     <span className="settings-help">
-      <button type="button" className="settings-help-trigger" aria-label={`${label}: ${description}`} title={description}>
+      <button type="button" className="settings-help-trigger" aria-label={`${label}: ${description}`}>
         <Icon name="help" size={16} strokeWidth={1.8} />
       </button>
       <span className="settings-help-tooltip" role="tooltip">{description}</span>

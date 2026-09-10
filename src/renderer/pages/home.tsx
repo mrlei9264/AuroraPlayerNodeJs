@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react'
-import { useRuntime } from '../core/runtime'
+import React, { useEffect, useMemo, useState } from 'react'
+import { p, useRuntime } from '../core/runtime'
 import { Icon } from '../core/icons'
 import { coverUrl } from '../core/player'
-import type { MediaItem } from '../../shared/types'
+import type { MediaItem, MediaTrackCatalog } from '../../shared/types'
+import { I } from '../../shared/channels'
 import { AudioArtwork } from './mediaArtwork'
 
 export function HomePage() {
@@ -43,41 +44,9 @@ export function HomePage() {
     )
   }
 
-  const featuredTitle = featured.title || featured.fileName
-  const featuredSubtitle = featured.artist || featured.album || featured.sourceName || ''
-  const featuredDuration = formatHomeDuration(featured.duration, t('shortHour'), t('shortMinute'))
-
   return (
     <div className="home-page">
-      <section key={featured.id} className={`cinema-hero ${featured.isAudio ? 'audio-artwork' : featured.coverPath ? '' : 'no-artwork'}`} aria-label={featuredTitle}>
-        {featured.isAudio
-          ? <AudioArtwork artwork={featured.coverPath ? coverUrl(featured.coverPath) : null} variant="hero" className="cinema-audio-artwork" />
-          : featured.coverPath
-            ? <img className="cinema-hero-image" src={coverUrl(featured.coverPath)} alt="" />
-            : <MediaArtworkFallback kind="video" />}
-        <div className="cinema-ambient-light" aria-hidden="true" />
-        <div className="cinema-hero-shade" />
-        <div className="cinema-film-reveal" aria-hidden="true" />
-        <div className="cinema-copy">
-          <div className="cinema-title-block">
-            <h1>{featuredTitle}</h1>
-            <span className="cinema-title-rule" aria-hidden="true" />
-          </div>
-          {(featuredSubtitle || featuredDuration) && (
-            <div className="cinema-meta">
-              {featuredSubtitle && <span>{featuredSubtitle}</span>}
-              {featuredSubtitle && featuredDuration && <i />}
-              {featuredDuration && <span>{featuredDuration}</span>}
-            </div>
-          )}
-          <div className="cinema-actions">
-            <button className="cinema-resume" onClick={() => void play([featured.id], 0)}>
-              <Icon name="play" size={19} />
-              {featured.lastPosition > 5 ? t('resume') : t('play')}
-            </button>
-          </div>
-        </div>
-      </section>
+      <HeroMediaPanel key={featured.id} item={featured} onPlay={() => void play([featured.id], 0)} />
 
       <section className="cinema-rail" aria-labelledby="continue-watching-title">
         <div className="cinema-section-head">
@@ -86,7 +55,7 @@ export function HomePage() {
         {railItems.length ? (
           <div className="cinema-card-grid">
             {railItems.map((item) => (
-              <CinemaCard key={item.id} item={item} onPlay={() => void play([item.id], 0)} />
+              <CinemaCard key={item.id} item={item} featured={item.id === featured.id} onPlay={() => void play([item.id], 0)} />
             ))}
           </div>
         ) : (
@@ -96,6 +65,67 @@ export function HomePage() {
           </button>
         )}
       </section>
+    </div>
+  )
+}
+
+function HeroMediaPanel({ item, onPlay }: { item: MediaItem; onPlay: () => void }) {
+  const { t } = useRuntime()
+  const title = item.title || item.fileName
+  return (
+    <section className="cinema-hero" aria-label={title}>
+      <div className="cinema-copy">
+        <div className="cinema-title-block">
+          <h1 title={title}>{title}</h1>
+          <span className="cinema-title-rule" aria-hidden="true" />
+        </div>
+        <MediaMetadata item={item} />
+        <div className="cinema-actions">
+          <button className="cinema-resume" onClick={onPlay}>
+            <Icon name="play" size={24} />
+            {item.lastPosition > 5 ? t('resume') : t('play')}
+          </button>
+        </div>
+      </div>
+      <div className="cinema-motto" aria-hidden="true">
+        <span>GOOD</span><span>MOVIES</span><span>BETTER</span><span>MOMENTS</span>
+        <i />
+      </div>
+    </section>
+  )
+}
+
+function MediaMetadata({ item }: { item: MediaItem }) {
+  const { t } = useRuntime()
+  const [catalog, setCatalog] = useState<MediaTrackCatalog | null>(null)
+  useEffect(() => {
+    let active = true
+    setCatalog(null)
+    // Reuse the existing catalogue; never infer technical labels from a title.
+    void p<MediaTrackCatalog>(I.mediaTracks, item.id)
+      .then((result) => { if (active) setCatalog(result) })
+      .catch(() => { if (active) setCatalog(null) })
+    return () => { active = false }
+  }, [item.id])
+
+  const duration = formatHomeDuration(item.duration, t('shortHour'), t('shortMinute'))
+  const subtitle = item.artist || item.album || item.sourceName
+  const extension = /\.([a-z0-9]{1,8})$/i.exec(item.fileName)?.[1].toUpperCase()
+  const resolution = catalog && !item.isAudio
+    ? catalog.width >= 7680 ? '8K' : catalog.width >= 3840 ? '4K' : catalog.height >= 1080 ? '1080p' : catalog.height >= 720 ? '720p' : null
+    : null
+  const hdr = !item.isAudio && catalog?.hdrType && catalog.hdrType.toUpperCase() !== 'SDR' ? catalog.hdrType : null
+  const atmos = catalog?.audio.some((track) => track.atmos)
+  return (
+    <div className="cinema-meta">
+      {duration && <span className="cinema-duration">{duration}</span>}
+      {subtitle && <span className="cinema-subtitle" title={subtitle}>{subtitle}</span>}
+      {(resolution || hdr || atmos || extension) && <div className="cinema-tags">
+        {resolution && <span className="cinema-tag">{resolution}</span>}
+        {hdr && <span className="cinema-tag">{hdr}</span>}
+        {atmos && <span className="cinema-tag cinema-tag-atmos">Dolby Atmos</span>}
+        {extension && <span className="cinema-tag">{extension}</span>}
+      </div>}
     </div>
   )
 }
@@ -112,10 +142,10 @@ export function CinemaTopbar({ query, onQueryChange, results }: { query: string;
   )
 }
 
-function CinemaCard({ item, onPlay }: { item: MediaItem; onPlay: () => void }) {
+function CinemaCard({ item, onPlay, featured }: { item: MediaItem; onPlay: () => void; featured: boolean }) {
   const progress = item.duration > 0 ? Math.min(100, Math.max(0, item.lastPosition / item.duration * 100)) : 0
   return (
-    <button className="cinema-card" onClick={onPlay} title={item.title || item.fileName}>
+    <button className={`cinema-card ${featured ? 'is-featured' : ''}`} onClick={onPlay} title={item.title || item.fileName} aria-current={featured ? 'true' : undefined}>
       <div className={`cinema-card-image ${item.isAudio ? 'audio-art' : ''}`}>
         {item.isAudio
           ? <AudioArtwork artwork={item.coverPath ? coverUrl(item.coverPath) : null} className="cinema-audio-artwork" />
@@ -123,7 +153,7 @@ function CinemaCard({ item, onPlay }: { item: MediaItem; onPlay: () => void }) {
             ? <img src={coverUrl(item.coverPath)} alt="" />
             : <MediaArtworkFallback kind="video" compact />}
         <div className="cinema-card-play"><Icon name="play" size={20} /></div>
-        {progress > 0 && <div className="cinema-card-track"><i style={{ width: `${progress}%` }} /></div>}
+        <div className="cinema-card-track" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
       </div>
       <span className="cinema-card-title">{item.title || item.fileName}</span>
     </button>

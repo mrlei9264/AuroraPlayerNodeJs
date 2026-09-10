@@ -53,13 +53,13 @@ export function WindowChrome() {
         )}
       </AnimatePresence>
       <div className="tb-controls">
-        <motion.button className="tb-btn minimize" whileTap={{ scale: 0.92 }} title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
+        <motion.button className="tb-btn minimize window-control-button" whileTap={{ scale: 0.92 }} title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
         </motion.button>
-        <motion.button className="tb-btn maximize" whileTap={{ scale: 0.92 }} title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        <motion.button className="tb-btn maximize window-control-button" whileTap={{ scale: 0.92 }} title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
         </motion.button>
-        <motion.button className="tb-btn close" whileTap={{ scale: 0.92 }} title={t('close')} aria-label={t('close')} onClick={windowClose}>
+        <motion.button className="tb-btn close window-control-button" whileTap={{ scale: 0.92 }} title={t('close')} aria-label={t('close')} onClick={windowClose}>
           <Icon name="close" size={16} />
         </motion.button>
       </div>
@@ -595,26 +595,42 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
 
 export function GlobalShortcuts() {
   const { togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav } = useRuntime()
+  const shortcutVolumeRef = useRef(session.volume)
+  shortcutVolumeRef.current = session.volume
+
   useEffect(() => {
+    const textEntryTarget = (target: EventTarget | null) => {
+      const element = target instanceof Element ? target : null
+      const input = element?.closest('input') as HTMLInputElement | null
+      if (input && input.type !== 'range') return true
+      return Boolean(element?.closest('textarea, select, [contenteditable="true"]'))
+    }
     const onKey = (e: KeyboardEvent) => {
       // The video player has richer, page-specific keyboard handling.
       // Avoid processing the same repeated keydown in both shortcut layers.
       if (nav.section === 'player' && session.kind === 'video') return
       if (e.defaultPrevented) return
-      const target = e.target as HTMLElement
-      const tag = target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (textEntryTarget(e.target)) return
+      if (e.altKey || e.ctrlKey || e.metaKey) return
       if (e.key === ' ') {
         e.preventDefault()
         togglePlayPause()
       } else if (e.key === 'ArrowRight' && session.mediaId != null) {
-        engine.seekTo(session.position + 5)
+        e.preventDefault()
+        engine.seekTo(engine.position() + 10)
       } else if (e.key === 'ArrowLeft' && session.mediaId != null) {
-        engine.seekTo(session.position - 5)
+        e.preventDefault()
+        engine.seekTo(engine.position() - 10)
       } else if (e.key === 'ArrowUp' && session.mediaId != null) {
-        setVolume(session.volume + 5)
+        e.preventDefault()
+        const nextVolume = Math.min(100, shortcutVolumeRef.current + 5)
+        shortcutVolumeRef.current = nextVolume
+        setVolume(nextVolume)
       } else if (e.key === 'ArrowDown' && session.mediaId != null) {
-        setVolume(session.volume - 5)
+        e.preventDefault()
+        const nextVolume = Math.max(0, shortcutVolumeRef.current - 5)
+        shortcutVolumeRef.current = nextVolume
+        setVolume(nextVolume)
       } else if (e.key === 'f' || e.key === 'F') {
         void setFullscreen(!win.fullscreen)
       }

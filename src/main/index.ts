@@ -236,14 +236,13 @@ async function bootstrap(): Promise<void> {
     for (const item of items) {
       probe.forgetMedia(item.id)
       probe.removeTemporaryCover(item.coverPath)
-      queueCtrl?.removeMediaId(item.id)
-      playlistsCtrl?.removeMediaIdFromAll(item.id)
     }
-  }, (items) => {
-    for (const item of items) probe.request(item.id)
+    queueCtrl?.removeMediaIds(items.map((item) => item.id), false)
+    playlistsCtrl?.mediaRemovedFromLibrary()
+  }, () => {
+    // Restored items are probed when first played or explicitly regenerated.
   }, (item) => {
     probe.forgetMedia(item.id)
-    probe.request(item.id)
   }, (item) => mediaAvailable(item, remote))
   library.init()
   queueCtrl = new QueueController(repo, logger, broadcast)

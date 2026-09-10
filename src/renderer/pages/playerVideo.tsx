@@ -55,12 +55,11 @@ export function VideoPlayerPage() {
   const [chapterRailExpanded, setChapterRailExpanded] = useState(false)
   const tracksOpen = openMenu === 'tracks'
   const speedOpen = openMenu === 'speed'
-  const keyboardStateRef = useRef({ position: 0, speed: 1, volume: 80, muted: false, fullscreen: false, phase: session.phase, tracksOpen: false, speedOpen: false })
+  const keyboardStateRef = useRef({ volume: 80, muted: false, fullscreen: false, phase: session.phase, tracksOpen: false, speedOpen: false })
   const keyboardActionsRef = useRef<{
     togglePlayback: () => void
     jump: (seconds: number) => void
     setVolume: (volume: number) => void
-    setSpeed: (speed: number) => void
     setFullscreen: (fullscreen: boolean) => Promise<void>
     toggleMute: () => void
     stopPlayback: () => void
@@ -69,7 +68,6 @@ export function VideoPlayerPage() {
     togglePlayback: () => void 0,
     jump: (_seconds: number) => void 0,
     setVolume: (_volume: number) => void 0,
-    setSpeed: (_speed: number) => void 0,
     setFullscreen: (_fullscreen: boolean) => Promise.resolve(),
     toggleMute: () => void 0,
     stopPlayback: () => void 0,
@@ -156,9 +154,11 @@ export function VideoPlayerPage() {
   }, [togglePlayPause, session.paused, showHint])
 
   const jump = useCallback((seconds: number) => {
-    seek(session.position + seconds)
+    // Read from the engine so rapid key repeats build on the latest seek target,
+    // even before React has rendered the updated session position.
+    seek(engine.position() + seconds)
     showHint(seconds > 0 ? 'forward10' : 'rewind10')
-  }, [seek, session.position, showHint])
+  }, [engine, seek, showHint])
 
   const toggleMutedWithHint = useCallback(() => {
     const nextMuted = !session.muted
@@ -167,8 +167,6 @@ export function VideoPlayerPage() {
   }, [session.muted, session.volume, showHint, toggleMute])
 
   keyboardStateRef.current = {
-    position: session.position,
-    speed: session.speed,
     volume: session.volume,
     muted: session.muted,
     fullscreen: win.fullscreen,
@@ -180,7 +178,6 @@ export function VideoPlayerPage() {
     togglePlayback,
     jump,
     setVolume,
-    setSpeed,
     setFullscreen,
     toggleMute: toggleMutedWithHint,
     stopPlayback,
@@ -210,36 +207,21 @@ export function VideoPlayerPage() {
   }, [win.fullscreen])
 
   useEffect(() => {
-    type DirectionHold = { key: 'ArrowLeft' | 'ArrowRight'; timer: number; long: boolean; originalSpeed: number }
-    let directionHold: DirectionHold | null = null
     const textEntryTarget = (target: EventTarget | null) => {
-      const element = target as HTMLElement | null
-      return Boolean(element?.closest('input, textarea, select, [contenteditable="true"]'))
-    }
-    const activateDirectionHold = (hold: DirectionHold) => {
-      if (hold.long || directionHold !== hold) return
-      hold.long = true
-      const temporarySpeed = hold.key === 'ArrowRight'
-        ? Math.max(2, Math.min(4, hold.originalSpeed * 2))
-        : Math.min(.5, Math.max(.25, hold.originalSpeed / 2))
-      const actions = keyboardActionsRef.current
-      actions.setSpeed(temporarySpeed)
-      actions.showHint('speed')
+      const element = target instanceof Element ? target : null
+      const input = element?.closest('input') as HTMLInputElement | null
+      if (input && input.type !== 'range') return true
+      return Boolean(element?.closest('textarea, select, [contenteditable="true"]'))
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (textEntryTarget(event.target)) return
+      if (event.altKey || event.ctrlKey || event.metaKey) return
       const state = keyboardStateRef.current
       const actions = keyboardActionsRef.current
       const key = event.key
       if (key === 'ArrowLeft' || key === 'ArrowRight') {
         event.preventDefault()
-        if (directionHold) {
-          if (event.repeat && directionHold.key === key) activateDirectionHold(directionHold)
-          return
-        }
-        const hold: DirectionHold = { key, timer: 0, long: false, originalSpeed: state.speed }
-        hold.timer = window.setTimeout(() => activateDirectionHold(hold), 420)
-        directionHold = hold
+        actions.jump(key === 'ArrowRight' ? 10 : -10)
         return
       }
       if (key === 'ArrowUp' || key === 'ArrowDown' || key === '+' || key === '-' || key === '=') {
@@ -270,33 +252,8 @@ export function VideoPlayerPage() {
         else if (state.phase === 'error') actions.stopPlayback()
       }
     }
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (!directionHold || event.key !== directionHold.key) return
-      event.preventDefault()
-      window.clearTimeout(directionHold.timer)
-      const actions = keyboardActionsRef.current
-      if (directionHold.long) actions.setSpeed(directionHold.originalSpeed)
-      else actions.jump(directionHold.key === 'ArrowRight' ? 10 : -10)
-      directionHold = null
-    }
-    const onWindowBlur = () => {
-      if (!directionHold) return
-      window.clearTimeout(directionHold.timer)
-      if (directionHold.long) keyboardActionsRef.current.setSpeed(directionHold.originalSpeed)
-      directionHold = null
-    }
     window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    window.addEventListener('blur', onWindowBlur)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-      window.removeEventListener('blur', onWindowBlur)
-      if (directionHold) {
-        window.clearTimeout(directionHold.timer)
-        if (directionHold.long) keyboardActionsRef.current.setSpeed(directionHold.originalSpeed)
-      }
-    }
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
   const buffering = session.phase !== 'error' && (session.buffering || session.phase === 'loading' || session.phase === 'buffering')
@@ -338,13 +295,13 @@ export function VideoPlayerPage() {
       <div className="cinematic-window-drag" aria-hidden="true" />
 
       <div className="cinematic-window-controls" aria-label={t('windowControls')}>
-        <button type="button" className="cinematic-window-control minimize" title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
+        <button type="button" className="cinematic-window-control minimize window-control-button" title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
         </button>
-        <button type="button" className="cinematic-window-control maximize" title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        <button type="button" className="cinematic-window-control maximize window-control-button" title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
         </button>
-        <button type="button" className="cinematic-window-control close" title={t('close')} aria-label={t('close')} onClick={windowClose}>
+        <button type="button" className="cinematic-window-control close window-control-button" title={t('close')} aria-label={t('close')} onClick={windowClose}>
           <Icon name="close" size={16} />
         </button>
       </div>

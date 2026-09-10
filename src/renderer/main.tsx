@@ -12,6 +12,9 @@ import './styles/theme-accent.css'
 import './styles/library.css'
 import './styles/theme-tahoe.css'
 import './styles/tahoe-optics.css'
+import './styles/window-controls.css'
+import './styles/cinema-chrome.css'
+import './styles/cinema-home.css'
 
 defineMpvVideoElement()
 

@@ -4,12 +4,12 @@ import { ipcMain } from 'electron'
 import { E, I } from '../../shared/channels'
 import { classifyFile, isMediaExt } from '../../shared/types'
 import type { MediaItem } from '../../shared/types'
-import { LibraryRepository } from './repository'
+import { LibraryRepository, type MediaRowInput } from './repository'
 import { Logger } from '../system/diagnostics'
 
 export class LibraryController {
   private undoStack: { ids: number[]; items: MediaItem[]; expiresAt: number }[] = []
-  private localSizesRefreshed = false
+  private undoCleanupTimer: ReturnType<typeof setTimeout> | null = null
   private availabilityTask: Promise<void> | null = null
   private availabilityIncludesRemote = false
 
@@ -17,7 +17,7 @@ export class LibraryController {
     private repo: LibraryRepository,
     private logger: Logger,
     private broadcast: (channel: string, payload: unknown) => void,
-    private beforeRemove: (items: MediaItem[]) => void = () => undefined,
+    private afterRemove: (items: MediaItem[]) => void = () => undefined,
     private afterRestore: (items: MediaItem[]) => void = () => undefined,
     private afterRelocate: (item: MediaItem) => void = () => undefined,
     private checkAvailable: (item: MediaItem) => Promise<boolean> = async (item) => fs.existsSync(item.url)
@@ -36,6 +36,7 @@ export class LibraryController {
     ipcMain.handle(I.libraryRemove, (_e, ids: number[]) => this.remove(ids))
     ipcMain.handle(I.libraryUndoRemove, () => this.undo())
     ipcMain.handle(I.libraryFavorite, (_e, id: number, fav: boolean) => this.setFavorite(id, fav))
+    ipcMain.handle(I.libraryFavoriteMany, (_e, ids: number[], favorite: boolean) => this.setFavorites(ids, favorite))
     ipcMain.handle(I.libraryRelocate, (_e, id: number, newUrl: string) => this.relocate(id, newUrl))
     ipcMain.handle(I.libraryAutoMatch, () => this.autoMatchMissing())
     ipcMain.handle(I.libraryUpdateMeta, (_e, id: number, fields: Partial<Pick<MediaItem, 'title' | 'artist' | 'album'>>) => {
@@ -44,13 +45,18 @@ export class LibraryController {
     })
   }
 
-  addPaths(paths: string[]): number {
+  async addPaths(paths: string[]): Promise<number> {
     let added = 0
+    const knownUrls = this.repo.loadUrlSet()
     for (const p of paths) {
       try {
-        const st = fs.statSync(p)
-        if (st.isDirectory()) added += this.scanDirectory(p)
-        else if (st.isFile() && isMediaExt(path.extname(p))) added += this.addFile(p) ? 1 : 0
+        const st = await fs.promises.stat(p)
+        if (st.isDirectory()) added += await this.scanDirectory(p, knownUrls)
+        else if (st.isFile() && isMediaExt(path.extname(p))) {
+          const existed = knownUrls.has(p)
+          if (this.addFile(p, st.size) && !existed) added++
+          knownUrls.add(p)
+        }
       } catch (err) {
         this.logger.warn('library', `add path failed: ${p}`, err as Error)
       }
@@ -113,10 +119,10 @@ export class LibraryController {
     return added
   }
 
-  addFile(p: string): MediaItem | null {
+  addFile(p: string, knownFileSize?: number): MediaItem | null {
     const kind = classifyFile(path.basename(p))
     if (!kind) return null
-    const fileSize = this.localFileSize(p)
+    const fileSize = knownFileSize ?? this.localFileSize(p)
     const existing = this.repo.findByUrl(p)
     if (existing) {
       if (fileSize !== existing.fileSize || !existing.sourceAvailable) this.repo.updateFields(existing.id, { fileSize, sourceAvailable: fileSize > 0 })
@@ -137,32 +143,40 @@ export class LibraryController {
     return item
   }
 
-  scanDirectory(dir: string): number {
+  async scanDirectory(dir: string, knownUrls = this.repo.loadUrlSet()): Promise<number> {
     let added = 0
     const stack = [dir]
     const visited = new Set<string>()
     while (stack.length) {
       const cur = stack.pop()!
-      if (visited.has(cur) || stack.length > 4000) continue
+      if (visited.has(cur) || visited.size > 60_000) continue
       visited.add(cur)
       let entries: fs.Dirent[]
       try {
-        entries = fs.readdirSync(cur, { withFileTypes: true })
+        entries = await fs.promises.readdir(cur, { withFileTypes: true })
       } catch {
         continue
       }
+      const mediaFiles: Array<{ full: string; name: string }> = []
       for (const ent of entries) {
         const full = path.join(cur, ent.name)
         if (ent.isDirectory()) {
           if (!ent.name.startsWith('.') && ent.name !== 'node_modules') stack.push(full)
-        } else if (ent.isFile() && isMediaExt(ent.name)) {
-          const kind = classifyFile(ent.name)
-          if (!kind) continue
-          if (!this.repo.findByUrl(full)) {
-            const fileSize = this.localFileSize(full)
-            this.repo.insert({
+        } else if (ent.isFile() && isMediaExt(ent.name) && !knownUrls.has(full)) {
+          mediaFiles.push({ full, name: ent.name })
+          knownUrls.add(full)
+        }
+      }
+      for (let offset = 0; offset < mediaFiles.length; offset += 32) {
+        const batch = await Promise.all(mediaFiles.slice(offset, offset + 32).map(async ({ full, name }): Promise<MediaRowInput | null> => {
+          const kind = classifyFile(name)
+          if (!kind) return null
+          try {
+            const stats = await fs.promises.stat(full)
+            if (!stats.isFile()) return null
+            return {
               url: full,
-              fileName: ent.name,
+              fileName: name,
               isAudio: kind === 'audio',
               isImage: false,
               sourceId: null,
@@ -170,34 +184,45 @@ export class LibraryController {
               protocol: 'local',
               sourceName: '',
               sourceAvailable: true,
-              fileSize
-            })
-            added++
+              fileSize: stats.size
+            }
+          } catch {
+            return null
           }
-        }
+        }))
+        added += this.repo.insertMany(batch.filter((item): item is MediaRowInput => item !== null))
+        await new Promise<void>((resolve) => setImmediate(resolve))
       }
     }
     return added
   }
 
   setFavorite(id: number, fav: boolean): void {
-    this.repo.updateFields(id, { favorite: fav })
-    this.changed()
+    if (this.repo.setFavorites([id], fav) > 0) this.changed()
+  }
+
+  setFavorites(ids: number[], favorite: boolean): void {
+    const uniqueIds = [...new Set(ids)]
+    if (uniqueIds.length && this.repo.setFavorites(uniqueIds, favorite) > 0) this.changed()
   }
 
   remove(ids: number[]): void {
+    this.pruneUndoStack()
     const items = ids.map((id) => this.repo.findById(id)).filter((x): x is MediaItem => !!x)
     if (!items.length) return
-    this.beforeRemove(items)
     this.undoStack.push({ ids, items: items.map((item) => ({ ...item, coverPath: null, metaProbed: false })), expiresAt: Date.now() + 15_000 })
     while (this.undoStack.length > 5) this.undoStack.shift()
+    this.scheduleUndoCleanup()
     this.repo.remove(ids)
+    this.afterRemove(items)
     this.changed()
   }
 
   undo(): boolean {
+    this.pruneUndoStack()
     const top = this.undoStack.pop()
-    if (!top || top.expiresAt < Date.now()) return false
+    this.scheduleUndoCleanup()
+    if (!top) return false
     const restored: MediaItem[] = []
     for (const item of top.items) {
       restored.push(this.repo.upsertByUrl({
@@ -280,19 +305,17 @@ export class LibraryController {
   private async refreshAvailabilityBatch(includeRemote: boolean): Promise<void> {
     const items = this.repo.loadAll().filter((item) => includeRemote || item.protocol === 'local')
     let index = 0
-    let dirty = false
-    // Limit disk/network work and publish one snapshot per batch, not per file.
+    const updates: Array<{ id: number; url: string; available: boolean }> = []
+    // Explicit refreshes may touch many files. Limit I/O concurrency, then commit
+    // all changed flags in one SQLite transaction and publish one snapshot.
     await Promise.all(Array.from({ length: Math.min(4, items.length) }, async () => {
       while (index < items.length) {
         const item = items[index++]
         const available = await this.checkAvailable(item)
-        const current = this.repo.findById(item.id)
-        if (!current || current.url !== item.url || current.sourceAvailable === available) continue
-        this.repo.updateFields(item.id, { sourceAvailable: available })
-        dirty = true
+        if (item.sourceAvailable !== available) updates.push({ id: item.id, url: item.url, available })
       }
     }))
-    if (dirty) this.changed()
+    if (this.repo.updateAvailability(updates) > 0) this.changed()
   }
 
   private changed(): void {
@@ -301,15 +324,24 @@ export class LibraryController {
   }
 
   snapshot(): MediaItem[] {
-    if (!this.localSizesRefreshed) {
-      this.localSizesRefreshed = true
-      for (const item of this.repo.loadAll()) {
-        if (item.protocol !== 'local' || !item.sourceAvailable) continue
-        const fileSize = this.localFileSize(item.url)
-        if (fileSize !== item.fileSize) this.repo.updateFields(item.id, { fileSize })
-      }
-    }
     return this.repo.loadAll().filter((item) => !item.isImage)
+  }
+
+  private pruneUndoStack(): void {
+    const now = Date.now()
+    this.undoStack = this.undoStack.filter((entry) => entry.expiresAt > now)
+  }
+
+  private scheduleUndoCleanup(): void {
+    if (this.undoCleanupTimer) clearTimeout(this.undoCleanupTimer)
+    this.undoCleanupTimer = null
+    if (!this.undoStack.length) return
+    const nextExpiry = Math.min(...this.undoStack.map((entry) => entry.expiresAt))
+    this.undoCleanupTimer = setTimeout(() => {
+      this.undoCleanupTimer = null
+      this.pruneUndoStack()
+      this.scheduleUndoCleanup()
+    }, Math.max(0, nextExpiry - Date.now()))
   }
 
   private localFileSize(filePath: string): number {
