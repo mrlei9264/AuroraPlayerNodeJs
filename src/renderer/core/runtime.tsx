@@ -132,6 +132,7 @@ interface RuntimeApi {
   closeDialog: (v: boolean | string | null) => void
   play: (mediaIds: number[], index: number) => Promise<void>
   playQueueEntry: (position: number) => Promise<void>
+  retryPlayback: () => Promise<void>
   playNext: () => Promise<void>
   playPrevious: () => Promise<void>
   togglePlayPause: () => void
@@ -281,6 +282,9 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const toastTimersRef = useRef<Map<number, ToastTimer>>(new Map())
   const libraryProgressRef = useRef({ mediaId: null as number | null, paused: true })
+const playRequestEpochRef = useRef(0)
+  const sessionRef = useRef(session)
+  sessionRef.current = session
 
   const engineRef = useRef<PlayerEngine | null>(null)
   if (!engineRef.current) {
@@ -431,9 +435,19 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     return updated
   }, [])
 
-  const playRequest = useCallback(
+const playRequest = useCallback(
     async (request: PlayRequest, navigateToPlayer = true): Promise<PlayPlan> => {
-      const plan = await p<PlayPlan>(I.playPlan, request)
+      const requestEpoch = ++playRequestEpochRef.current
+      let plan: PlayPlan
+      try {
+        plan = await p<PlayPlan>(I.playPlan, request)
+      } catch (error) {
+        if (requestEpoch === playRequestEpochRef.current) toast('error', t(playbackErrorKey(error instanceof Error ? error.message : String(error))))
+        return { ok: false, result: 'invalidRequest', item: null, url: '', kind: 'video', resumePosition: 0 }
+      }
+      // A slower availability check must not reopen media after a later play
+      // request has already won.
+      if (requestEpoch !== playRequestEpochRef.current) return plan
       if (!plan.ok) {
         if (plan.result === 'localFileMissing') {
           toast('error', t('playbackMissing'))
@@ -444,11 +458,11 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         }
         return plan
       }
-      engine.load(plan, session.volume, session.muted, 1)
+      engine.load(plan, sessionRef.current.volume, sessionRef.current.muted, sessionRef.current.speed)
       if (navigateToPlayer) navigate({ section: 'player' })
       return plan
     },
-    [engine, navigate, settings, t, toast, session.volume, session.muted]
+    [engine, navigate, t, toast]
   )
 
   const play = useCallback(
@@ -465,6 +479,15 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
       await playRequest({ mediaIds: ids, index: position, action: 'play' })
     },
     [queue, playRequest]
+  )
+
+  const retryPlayback = useCallback(
+    async () => {
+      const mediaId = session.mediaId
+      if (mediaId == null) return
+      await playRequest({ mediaIds: [mediaId], index: 0, action: 'restart' }, false)
+    },
+    [playRequest, session.mediaId]
   )
 
   const navQueue = useCallback(
@@ -492,7 +515,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
           targetIndex = (currentIndex + 1) % ids.length
         } else {
           const nextIndex = currentIndex + 1
-          targetIndex = nextIndex < ids.length ? nextIndex : 0
+          targetIndex = nextIndex < ids.length ? nextIndex : session.repeatMode === 'all' ? 0 : null
         }
 
         if (targetIndex == null) return
@@ -513,13 +536,21 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         await playRequest({ mediaIds: ids, index: ids.indexOf(pick), action: 'play' })
         return
       }
-      const plan = await p<PlayPlan | null>(I.queueNav, action, current, session.repeatMode)
+      const requestEpoch = ++playRequestEpochRef.current
+      let plan: PlayPlan | null
+      try {
+        plan = await p<PlayPlan | null>(I.queueNav, action, current, session.repeatMode)
+      } catch (error) {
+        if (requestEpoch === playRequestEpochRef.current) toast('error', t(playbackErrorKey(error instanceof Error ? error.message : String(error))))
+        return
+      }
+      if (requestEpoch !== playRequestEpochRef.current) return
       if (plan && plan.ok) {
-        engine.load(plan, session.volume, session.muted, 1)
+        engine.load(plan, session.volume, session.muted, session.speed)
         setNav((prev) => ({ ...prev, section: 'player' }))
       }
     },
-    [engine, session, library, queue, playRequest]
+    [engine, session, library, queue, playRequest, t, toast]
   )
 
   const playNext = useCallback(() => navQueue('next'), [navQueue])
@@ -962,16 +993,18 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  // ---- engine wiring ----
+// ---- engine wiring ----
   useEffect(() => {
     const persist = () => engine.persistPlaybackProgress()
     window.addEventListener('pagehide', persist)
     return () => window.removeEventListener('pagehide', persist)
   }, [engine])
 
+  // Core callbacks that must always be active (session, tracks, errors, ended)
   useEffect(() => {
     const e = engineRef.current!
     e.ev = {
+      ...e.ev,
       onSession: (s) => {
         setSession(s)
         if (s.mediaId != null) {
@@ -1001,21 +1034,30 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
         }
       },
       onTracks: setTracks,
-      onSpectrum: nav.section === 'player' ? setSpectrum : () => void 0,
       onFps: () => void 0,
       onEnded: () => {
-        if (settings?.autoplayNextMedia !== false) void navQueue('naturalEnd')
+        if (session.repeatMode === 'one' || settings?.autoplayNextMedia !== false) void navQueue('naturalEnd')
       },
       onPlaybackError: (msg) => {
+        console.error('[Runtime] playback error', msg)
         toast('error', t(playbackErrorKey(msg)))
       },
       onLoaded: () => void 0,
       onBuffering: () => void 0
     }
     return () => {
-      e.ev = {}
+      e.ev = { ...e.ev, onSession: undefined, onTracks: undefined, onFps: undefined, onEnded: undefined, onPlaybackError: undefined, onLoaded: undefined, onBuffering: undefined }
     }
-  }, [nav.section, navQueue, toast])
+  }, [navQueue, session.repeatMode, settings?.autoplayNextMedia, t, toast])
+
+  // Spectrum callback only when on player page
+  useEffect(() => {
+    const e = engineRef.current!
+    e.ev = { ...e.ev, onSpectrum: nav.section === 'player' ? setSpectrum : () => void 0 }
+    return () => {
+      e.ev = { ...e.ev, onSpectrum: () => void 0 }
+    }
+  }, [nav.section])
 
   // ---- subscriptions ----
   useEffect(() => {
@@ -1091,6 +1133,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
     closeDialog,
     play,
     playQueueEntry,
+    retryPlayback,
     playNext,
     playPrevious,
     togglePlayPause,

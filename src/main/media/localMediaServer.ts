@@ -29,6 +29,11 @@ export class LocalMediaServer {
   get port(): number { return this._port }
 
   private handle(request: http.IncomingMessage, response: http.ServerResponse): void {
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.writeHead(405, { Allow: 'GET, HEAD' })
+      response.end()
+      return
+    }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     if (url.pathname !== '/media' || url.searchParams.get('t') !== this.token) {
       response.writeHead(403)

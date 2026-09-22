@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, lazy, Suspense } from 'react'
-import { AnimatePresence, MotionConfig, motion } from 'motion/react'
+import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react'
 import { RuntimeProvider, useRuntime } from './core/runtime'
 import { WindowChrome, Sidebar, ToastHost, DialogHost, CtxMenuHost, HudHost, MiniPlayer, GlobalShortcuts, DragDropImporter } from './shell/shell'
 const HomePage = lazy(() => import('./pages/home').then((module) => ({ default: module.HomePage })))
@@ -93,6 +93,8 @@ function ShellInner() {
   const isSettings = nav.section === 'settings'
   const isCinema = !isPlayer
   const reducedMotion = settings?.reducedMotion ?? true
+  const systemReducedMotion = useReducedMotion() ?? false
+  const motionReduced = reducedMotion || systemReducedMotion
   const routeKey = nav.section === 'library' && nav.mediaId != null
     ? `library:${nav.mediaId}`
     : nav.section === 'playlists' && nav.playlistId != null
@@ -120,7 +122,7 @@ function ShellInner() {
   }, [isCinema, isLibrary, isNetwork, isSettings])
 
   return (
-    <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
+    <MotionConfig reducedMotion={motionReduced ? 'always' : 'never'}>
       {(isHome || isLibrary) && <CinematicBackground />}
       <TahoeLighting enabled={true} reducedMotion={reducedMotion} reduceTransparency={settings?.reduceTransparency ?? false} routeKey={routeKey} />
       {settings == null

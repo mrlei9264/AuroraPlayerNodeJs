@@ -58,6 +58,12 @@ export class PlaybackSessionController {
     return { ...this.state }
   }
 
+  /** Replace the renderer-authoritative session after IPC validation. */
+  replace(state: SessionState): void {
+    this.state = { ...state }
+    for (const listener of this.listeners) listener(this.snapshot())
+  }
+
   dispatch(ev: SessionEvent): void {
     switch (ev.type) {
       case 'loadStart':

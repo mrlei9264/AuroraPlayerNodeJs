@@ -29,6 +29,7 @@ export function VideoPlayerPage() {
     selectVideoTrack,
     selectAudioTrack,
     selectSubtitleTrack,
+    retryPlayback,
     stopPlayback,
     leavePlayer,
     setFullscreen,
@@ -184,11 +185,15 @@ export function VideoPlayerPage() {
     showHint
   }
 
+  // Keep the stage bound without tearing it down on volume/mute/speed changes:
+  // detach() nulls container and can drop an in-flight mpv open.
   useEffect(() => {
     const stage = stageRef.current
     if (stage && isVideo) engine.attach(stage, session.muted, session.volume, session.speed)
-    return () => engine.detach()
-  }, [engine, isVideo]) // the engine preserves the active video element across attaches
+    else if (!isVideo) engine.detach()
+  }, [engine, isVideo, session.muted, session.volume, session.speed])
+
+  useEffect(() => () => engine.detach(), [engine])
 
   useEffect(() => {
     if (openMenu === null) return
@@ -241,7 +246,10 @@ export function VideoPlayerPage() {
         actions.togglePlayback()
       } else if ((key === 'Enter' || key.toLowerCase() === 'f') && !event.repeat) {
         event.preventDefault()
-        void actions.setFullscreen(!state.fullscreen)
+        void (async () => {
+          await actions.setFullscreen(!state.fullscreen)
+          state.fullscreen = !state.fullscreen
+        })()
       } else if (key.toLowerCase() === 'm' && !event.repeat) {
         event.preventDefault()
         actions.toggleMute()
@@ -411,6 +419,10 @@ export function VideoPlayerPage() {
           <Icon name="alert" size={42} />
           <div className="vp-error-title">{t('playbackError')}</div>
           <div className="vp-error-message">{t(playbackErrorKey(session.error))}</div>
+          {session.error && session.error !== 'Playback error' && (
+            <div className="vp-error-detail">{session.error}</div>
+          )}
+          <button type="button" onClick={() => void retryPlayback()}>{t('retry')}</button>
         </div>
       )}
 
@@ -452,6 +464,7 @@ export function VideoPlayerPage() {
             onPointerDown={() => { beginSeek(); setDragging(true) }}
             onPointerUp={() => { commitSeek(); setDragging(false) }}
             onPointerCancel={() => { commitSeek(); setDragging(false) }}
+            onBlur={() => { commitSeek(); setDragging(false) }}
             onChange={(event) => seek(Number(event.currentTarget.value))}
           />
           <span className="cinematic-time total">{formatTime(duration)}</span>

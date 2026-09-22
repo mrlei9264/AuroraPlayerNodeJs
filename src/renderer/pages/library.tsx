@@ -576,6 +576,10 @@ function LibraryPageView() {
   const rowVirtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
     count: virtualRows.length,
     initialOffset: initialScroll,
+    // React 19 warns when TanStack's synchronous range update runs from a
+    // ref/layout-effect commit. A normal scheduled render is sufficient here
+    // because row positions are already calculated from the virtualizer state.
+    useFlushSync: false,
     getScrollElement: () => scrollRef.current,
     estimateSize: estimateRowSize,
     getItemKey: getVirtualRowKey,

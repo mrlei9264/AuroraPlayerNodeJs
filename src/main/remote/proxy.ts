@@ -69,6 +69,11 @@ export class RemoteStreamProxy {
   }
 
   private handle(req: http.IncomingMessage, res: http.ServerResponse): void {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { Allow: 'GET, HEAD' })
+      res.end()
+      return
+    }
     if (!req.url) {
       res.writeHead(400)
       res.end()
@@ -89,26 +94,28 @@ export class RemoteStreamProxy {
   }
 
   private async serve(req: http.IncomingMessage, res: http.ServerResponse, parsed: { sourceId: number; path: string }): Promise<void> {
-    const fileName = safeBaseName(decodeURIComponent(parsed.path))
+    // URLSearchParams has already decoded this value. Decoding it again can
+    // throw for a literal percent in a valid remote filename and leaves the
+    // request promise rejected outside the HTTP handler.
+    const fileName = safeBaseName(parsed.path)
     const mime = mimeOf(fileName)
     let size: number | null = null
     try {
       const stat = await this.manager.stat(parsed.sourceId, parsed.path)
-      size = stat?.size ?? null
+      size = typeof stat?.size === 'number' && Number.isSafeInteger(stat.size) && stat.size >= 0 ? stat.size : null
     } catch {
       size = null
     }
 
-    const rangeHeader = req.headers.range
-    let start = 0
-    let end: number | undefined
-    if (rangeHeader) {
-      const m = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
-      if (m) {
-        start = m[1] ? parseInt(m[1], 10) : 0
-        if (m[2]) end = parseInt(m[2], 10)
-      }
+    if (req.destroyed || res.destroyed) return
+    const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : undefined
+    const requestedRange = parseByteRange(rangeHeader, size)
+    if (requestedRange === 'invalid') {
+      this.rangeNotSatisfiable(res, size)
+      return
     }
+    const start = requestedRange?.start ?? 0
+    const end = requestedRange?.end
 
     const headers: Record<string, string> = {
       'Content-Type': mime,
@@ -118,32 +125,59 @@ export class RemoteStreamProxy {
       'Access-Control-Allow-Origin': '*'
     }
     if (req.method === 'HEAD') {
-      if (size !== null) headers['Content-Length'] = String(end !== undefined ? Math.max(0, Math.min(end, size - 1) - start + 1) : size - start)
-      res.writeHead(200, headers)
+      if (size !== null) {
+        const resolvedRange = parseByteRange(rangeHeader, size)
+        if (resolvedRange === 'invalid') {
+          this.rangeNotSatisfiable(res, size)
+          return
+        }
+        const responseStart = resolvedRange?.start ?? 0
+        const responseEnd = resolvedRange?.end ?? size - 1
+        headers['Content-Length'] = String(Math.max(0, responseEnd - responseStart + 1))
+        if (resolvedRange) headers['Content-Range'] = `bytes ${responseStart}-${responseEnd}/${size}`
+        res.writeHead(resolvedRange ? 206 : 200, headers)
+      } else {
+        res.writeHead(200, headers)
+      }
       res.end()
       return
     }
 
-    try {
-      const result = await this.manager.openStream(parsed.sourceId, parsed.path, start, end)
+try {
+      const result = await Promise.race([
+        this.manager.openStream(parsed.sourceId, parsed.path, start, end),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('stream open timeout')), 15000))
+      ])
+      if (req.destroyed || res.destroyed) {
+        ;(result?.stream as { destroy?: () => void } | undefined)?.destroy?.()
+        return
+      }
       if (!result) {
         res.writeHead(404)
         res.end()
         return
       }
       const total = result.size ?? size
-      const responseLength = result.contentLength ?? (end !== undefined
-        ? Math.max(0, Math.min(end, (total ?? end) - 1) - start + 1)
-        : total !== null ? Math.max(0, total - start) : null)
+      const resolvedRange = parseByteRange(rangeHeader, total)
+      if (resolvedRange === 'invalid') {
+        ;(result.stream as { destroy?: () => void }).destroy?.()
+        this.rangeNotSatisfiable(res, total)
+        return
+      }
+      const responseStart = resolvedRange?.start ?? 0
+      const responseEnd = resolvedRange?.end
+      const responseLength = result.contentLength ?? (responseEnd !== undefined
+        ? responseEnd - responseStart + 1
+        : total !== null ? Math.max(0, total - responseStart) : null)
       if (responseLength !== null) headers['Content-Length'] = String(responseLength)
       if (total !== null && total > 0) {
-        if (rangeHeader) {
+        if (resolvedRange) {
           const actualEnd = responseLength !== null
-            ? Math.min(total - 1, start + responseLength - 1)
-            : (end ?? total - 1)
+            ? Math.min(total - 1, responseStart + responseLength - 1)
+            : (responseEnd ?? total - 1)
           res.writeHead(206, {
             ...headers,
-            'Content-Range': `bytes ${start}-${actualEnd}/${total}`
+            'Content-Range': `bytes ${responseStart}-${actualEnd}/${total}`
           })
         } else {
           res.writeHead(200, headers)
@@ -159,6 +193,11 @@ export class RemoteStreamProxy {
         this.bytesServed += chunk.length
       }
       const stream = result.stream as NodeJS.ReadableStream
+      if (!stream || typeof stream.pipe !== 'function') {
+        res.writeHead(502)
+        res.end()
+        return
+      }
       stream.on('data', counter)
       stream.on('error', (err) => {
         this.logger.warn('proxy', `stream error: ${String(err)}`)
@@ -177,9 +216,38 @@ export class RemoteStreamProxy {
     } catch (err) {
       this.logger.warn('proxy', `serve failed for ${parsed.path}: ${String(err)}`)
       if (!res.headersSent) {
-        res.writeHead(500)
+        res.writeHead(502)
         res.end()
       }
     }
   }
+
+  private rangeNotSatisfiable(res: http.ServerResponse, total: number | null): void {
+    res.writeHead(416, {
+      'Accept-Ranges': 'bytes',
+      ...(total !== null ? { 'Content-Range': `bytes */${total}` } : {})
+    })
+    res.end()
+  }
+}
+
+type ParsedByteRange = { start: number; end?: number } | null | 'invalid'
+
+function parseByteRange(header: string | undefined, total: number | null): ParsedByteRange {
+  if (!header) return null
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim())
+  if (!match || (!match[1] && !match[2])) return 'invalid'
+  const first = match[1] ? Number(match[1]) : null
+  const last = match[2] ? Number(match[2]) : null
+  if ((first !== null && !Number.isSafeInteger(first)) || (last !== null && !Number.isSafeInteger(last))) return 'invalid'
+  if (first === null) {
+    if (last === null || last <= 0 || total === null || total === 0) return 'invalid'
+    return { start: Math.max(0, total - last), end: total - 1 }
+  }
+  if (first < 0 || (last !== null && last < first)) return 'invalid'
+  if (total !== null) {
+    if (first >= total) return 'invalid'
+    return { start: first, end: last === null ? total - 1 : Math.min(last, total - 1) }
+  }
+  return { start: first, ...(last !== null ? { end: last } : {}) }
 }

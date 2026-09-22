@@ -298,7 +298,7 @@ export class LibraryRepository {
 
   movePlaylistEntry(playlistId: number, fromIndex: number, toIndex: number): void {
     const rows = this.db.prepare('SELECT media_id FROM playlist_entries WHERE playlist_id = ? ORDER BY position').all(playlistId) as { media_id: number }[]
-    if (toIndex < 0 || toIndex >= rows.length) return
+    if (!Number.isSafeInteger(fromIndex) || !Number.isSafeInteger(toIndex) || fromIndex < 0 || fromIndex >= rows.length || toIndex < 0 || toIndex >= rows.length || fromIndex === toIndex) return
     const [moved] = rows.splice(fromIndex, 1)
     rows.splice(toIndex, 0, moved)
     this.db.prepare('DELETE FROM playlist_entries WHERE playlist_id = ?').run(playlistId)

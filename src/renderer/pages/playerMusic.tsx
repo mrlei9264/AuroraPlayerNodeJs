@@ -8,6 +8,7 @@ import { audioVisualizerPaletteForColorTheme } from './audioVisualizerThemes'
 import { NetworkMediaLoader } from './networkMediaLoader'
 import { AudioLyrics } from './audioLyrics'
 import { fontFamilyStack } from '../core/appearance'
+import { playbackErrorKey } from '../core/i18n'
 import {
   activeAudioTitleGlyphIndex,
   audioTitleScaleTargets,
@@ -21,11 +22,13 @@ const visualizerUrl = new URL('./sonic-topography/index.html', window.location.h
 export function MusicPlayerPage() {
   const {
     t, session, library, lyrics, spectrum, theme, settings, engine, appIconUrl,
-    togglePlayPause, playPrevious, playNext, setVolume, toggleMute,
-    setRepeat, setShuffle, loadLyrics, leavePlayer, windowMinimize, windowMaximizeToggle, windowClose, win
+    togglePlayPause, playPrevious, playNext, setVolume, toggleMute, seek,
+    setRepeat, setShuffle, loadLyrics, leavePlayer, retryPlayback, beginSeek, commitSeek,
+    windowMinimize, windowMaximizeToggle, windowClose, win
   } = useRuntime()
   const visualizerRef = useRef<HTMLIFrameElement>(null)
   const previousVisualizerSpectrumRef = useRef<number[]>([])
+  const pendingSpectrumRef = useRef<Float32Array | null>(null)
   const [visualizerReady, setVisualizerReady] = useState(false)
   const [audioFeatures, setAudioFeatures] = useState<MediaAudioFeatures | null>(null)
 
@@ -95,7 +98,14 @@ export function MusicPlayerPage() {
 
   useEffect(() => {
     const frame = visualizerRef.current?.contentWindow
-    if (!frame || !visualizerReady) return
+    if (!frame || !visualizerReady) {
+      if (!visualizerReady) pendingSpectrumRef.current = spectrum
+      return
+    }
+    if (pendingSpectrumRef.current) {
+      frame.postMessage({ type: 'aurora-audio-spectrum', samples: pendingSpectrumRef.current }, '*')
+      pendingSpectrumRef.current = null
+    }
     const samples = shapeAudioVisualizerSpectrum(spectrum, playing, previousVisualizerSpectrumRef.current)
     previousVisualizerSpectrumRef.current = playing
       ? Array.from(spectrum, (value) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)))
@@ -160,6 +170,18 @@ export function MusicPlayerPage() {
         <NetworkMediaLoader label={t('loadingNetworkMedia')} bytesPerSecond={session.networkSpeed ?? 0} iconUrl={appIconUrl} />
       )}
 
+      {session.phase === 'error' && (
+        <div className="vp-error audio-playback-error" role="alert">
+          <Icon name="alert" size={36} />
+          <div className="vp-error-title">{t('playbackError')}</div>
+          <div className="vp-error-message">{t(playbackErrorKey(session.error))}</div>
+          {session.error && session.error !== 'Playback error' && (
+            <div className="vp-error-detail">{session.error}</div>
+          )}
+          <button type="button" onClick={() => void retryPlayback()}>{t('retry')}</button>
+        </div>
+      )}
+
       <main className="audio-content">
         <section className="audio-track-info" aria-label={fileTitle}>
           <ProgressiveTitleOutline
@@ -192,11 +214,15 @@ export function MusicPlayerPage() {
       </main>
 
       <section className="audio-control-console" aria-label="Playback controls">
-        <div className="audio-progress-row">
+<div className="audio-progress-row">
           <span>{formatTime(session.position)}</span>
           <input className="audio-progress-input" type="range" min={0} max={Math.max(duration, 0.01)} step={0.05}
             value={Math.min(session.position, Math.max(duration, 0.01))} aria-label="Playback progress"
-            onChange={(event) => engine.seekTo(Number(event.target.value))} />
+            onPointerDown={beginSeek}
+            onPointerUp={commitSeek}
+            onPointerCancel={commitSeek}
+            onBlur={commitSeek}
+            onChange={(event) => seek(Number(event.target.value))} />
           <span>{formatTime(duration)}</span>
         </div>
 

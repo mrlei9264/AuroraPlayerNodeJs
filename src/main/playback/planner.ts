@@ -41,6 +41,12 @@ export class PlaybackLaunchPlanner {
 
     if (!item.sourceAvailable) return { ok: false, result: 'remoteSourceMissing', item, url: '', kind, resumePosition: 0 }
     const url = this.deps.urlFor(item)
+    // Accept both URLs (http/https) and local file paths
+    const isValidUrl = /^https?:\/\//.test(url)
+    const isLocalPath = !isValidUrl && url.length > 0 && !url.startsWith('data:')
+    if (!isValidUrl && !isLocalPath) {
+      return { ok: false, result: 'invalidRequest', item, url: '', kind, resumePosition: 0 }
+    }
     if (request.action === 'restart' || request.action === 'playNext' || request.action === 'playPrevious') {
       return { ok: true, result: 'ready', item, url, kind, resumePosition: 0 }
     }

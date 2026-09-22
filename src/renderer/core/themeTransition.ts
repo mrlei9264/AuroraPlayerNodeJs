@@ -1,5 +1,3 @@
-import { flushSync } from 'react-dom'
-
 interface ThemeViewTransition {
   ready: Promise<void>
   finished: Promise<void>
@@ -40,7 +38,10 @@ export function transitionTheme(update: () => void, reducedMotion: boolean): Pro
     }
     stopThemeTransition()
     const root = document.documentElement
-    const commit = () => flushSync(update)
+    // React 19 warns when flushSync is called from a view-transition
+    // lifecycle callback. Returning a promise from the callback gives React
+    // one frame to commit the state update before the new snapshot is taken.
+    const commit = () => update()
     if (reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.hidden) {
       commit()
       return
@@ -51,7 +52,7 @@ export function transitionTheme(update: () => void, reducedMotion: boolean): Pro
     root.style.setProperty('--theme-origin-y', `${y}px`)
     root.style.setProperty('--theme-reveal-radius', `${Math.ceil(radius) + 2}px`)
     const transitionDocument = document as unknown as {
-      startViewTransition?: (callback: () => void) => ThemeViewTransition
+      startViewTransition?: (callback: () => void | Promise<void>) => ThemeViewTransition
     }
     if (!transitionDocument.startViewTransition) {
       root.classList.add('theme-transition-fallback')
@@ -70,7 +71,10 @@ export function transitionTheme(update: () => void, reducedMotion: boolean): Pro
     }
     root.classList.add('theme-transition')
     try {
-      const transition = transitionDocument.startViewTransition(commitOnce)
+      const transition = transitionDocument.startViewTransition(async () => {
+        commitOnce()
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+      })
       activeTransition = transition
       // Snapshot capture can be skipped (hidden windows, a newer transition).
       // The preference still applies and no rejected animation promise escapes.

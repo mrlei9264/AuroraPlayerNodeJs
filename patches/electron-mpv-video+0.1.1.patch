@@ -1,7 +1,8 @@
 diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_modules/electron-mpv-video/dist/main/mpv-service.js
+index 7b27f7f..83567c5 100644
 --- a/node_modules/electron-mpv-video/dist/main/mpv-service.js
 +++ b/node_modules/electron-mpv-video/dist/main/mpv-service.js
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,7 @@ const IPC_CHANNELS = [
      'player:stop',
      'player:seek',
      'player:set-volume',
@@ -9,11 +10,10 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
      'player:set-render-size',
      'player:set-render-pipeline',
      'player:destroy',
-@@ -58,6 +59,16 @@
-         throw new TypeError('source must be a non-empty string');
+@@ -59,6 +60,16 @@ function normalizeSource(value) {
      }
      return value;
-+}
+ }
 +const SETTABLE_PROPERTIES = new Set(['speed', 'mute', 'vid', 'aid', 'sid', 'cache-pause']);
 +function normalizeProperty(name, value) {
 +    if (typeof name !== 'string' || !SETTABLE_PROPERTIES.has(name)) {
@@ -23,10 +23,11 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
 +        throw new TypeError('Player property value must be a short string');
 +    }
 +    return { name, value };
- }
++}
  class PlayerSession {
      window;
-@@ -98,6 +109,12 @@
+     ownerWebContentsId;
+@@ -98,6 +109,12 @@ class PlayerSession {
      }
      open(source) {
          this.assertAlive();
@@ -39,10 +40,15 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
          this.player.open(source);
          this.source = source;
          this.currentTime = 0;
-@@ -133,6 +150,12 @@
+@@ -131,8 +148,16 @@ class PlayerSession {
+     setVolume(value) {
+         this.assertAlive();
          const nextVolume = Math.max(0, Math.min(100, finiteNumber(value, 'volume')));
-         this.player.setVolume(nextVolume);
+-        this.player.setVolume(nextVolume);
          this.volume = nextVolume;
++        if (!this.player)
++            return;
++        this.player.setVolume(nextVolume);
 +    }
 +    setProperty(name, value) {
 +        this.assertAlive();
@@ -52,7 +58,7 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
      }
      setRenderSize(size) {
          this.assertAlive();
-@@ -259,6 +282,13 @@
+@@ -259,6 +284,13 @@ class PlayerSession {
                  return;
              this.sharedTextureFrameInFlight = true;
              let imported;
@@ -66,7 +72,7 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
              try {
                  const textureInfo = this.player.renderSharedTexture(this.renderSize.width, this.renderSize.height);
                  const referencesReleased = new Promise((resolve) => {
-@@ -274,12 +304,12 @@
+@@ -274,12 +306,12 @@ class PlayerSession {
                      frame: this.window.webContents.mainFrame,
                      importedSharedTexture: imported,
                  }, this.id);
@@ -81,7 +87,7 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
                  throw error;
              }
          }
-@@ -463,6 +493,10 @@
+@@ -463,6 +495,10 @@ class MpvMainService {
          electron.ipcMain.handle(channel('player:stop'), async (event, id) => this.getOwnedSession(event, id).stop());
          electron.ipcMain.handle(channel('player:seek'), async (event, id, seconds) => this.getOwnedSession(event, id).seek(finiteNumber(seconds, 'seconds')));
          electron.ipcMain.handle(channel('player:set-volume'), async (event, id, value) => this.getOwnedSession(event, id).setVolume(finiteNumber(value, 'volume')));
@@ -92,7 +98,7 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
          electron.ipcMain.handle(channel('player:set-render-size'), async (event, id, size) => this.getOwnedSession(event, id).setRenderSize(normalizeRenderSize(size)));
          electron.ipcMain.handle(channel('player:set-render-pipeline'), async (event, id, pipeline) => this.getOwnedSession(event, id).setRenderPipeline(normalizePipeline(pipeline)));
          electron.ipcMain.handle(channel('player:destroy'), async (event, id) => this.getOwnedSession(event, id).destroy());
-@@ -475,4 +509,4 @@
+@@ -475,4 +511,4 @@ export function createMpvMain(options = {}) {
      activeService = new MpvMainService(options);
      return activeService;
  }
@@ -100,9 +106,10 @@ diff --git a/node_modules/electron-mpv-video/dist/main/mpv-service.js b/node_mod
 \ No newline at end of file
 +//# sourceMappingURL=mpv-service.js.map
 diff --git a/node_modules/electron-mpv-video/dist/preload/index.cjs b/node_modules/electron-mpv-video/dist/preload/index.cjs
+index d1d823b..6051885 100644
 --- a/node_modules/electron-mpv-video/dist/preload/index.cjs
 +++ b/node_modules/electron-mpv-video/dist/preload/index.cjs
-@@ -84,6 +84,7 @@
+@@ -84,6 +84,7 @@ function createPlayerSession(id) {
          stop: () => electron.ipcRenderer.invoke(channel('player:stop'), id),
          seek: (seconds) => electron.ipcRenderer.invoke(channel('player:seek'), id, seconds),
          setVolume: (value) => electron.ipcRenderer.invoke(channel('player:set-volume'), id, value),
@@ -110,7 +117,7 @@ diff --git a/node_modules/electron-mpv-video/dist/preload/index.cjs b/node_modul
          setRenderSize: (width, height) => electron.ipcRenderer.invoke(channel('player:set-render-size'), id, { width, height }),
          setRenderMode: (mode) => electron.ipcRenderer.invoke(channel('player:set-render-pipeline'), id, pipelineForRenderMode(mode)),
          destroy: async () => {
-@@ -164,4 +165,4 @@
+@@ -164,4 +165,4 @@ function exposeMpvApi() {
      electron.contextBridge.exposeInMainWorld('_electronMpvVideo', mpvApi);
      apiExposed = true;
  }
@@ -118,9 +125,10 @@ diff --git a/node_modules/electron-mpv-video/dist/preload/index.cjs b/node_modul
 \ No newline at end of file
 +//# sourceMappingURL=index.cjs.map
 diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts b/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts
+index 6dc9221..85a2993 100644
 --- a/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts
 +++ b/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts
-@@ -41,6 +41,7 @@
+@@ -41,6 +41,7 @@ export declare class MpvVideoElement extends HTMLElement {
      stop(): Promise<void>;
      seek(seconds: number): Promise<void>;
      setVolume(value: number): Promise<void>;
@@ -128,7 +136,7 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts b/node
      setRenderMode(mode: RenderMode): Promise<void>;
      destroy(): Promise<void>;
      private destroyInternal;
-@@ -60,4 +61,4 @@
+@@ -60,4 +61,4 @@ declare global {
          'mpv-video': MpvVideoElement;
      }
  }
@@ -136,9 +144,10 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.d.ts b/node
 \ No newline at end of file
 +//# sourceMappingURL=mpv-video.d.ts.map
 diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_modules/electron-mpv-video/dist/renderer/mpv-video.js
+index 355f95b..8deadd1 100644
 --- a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js
 +++ b/node_modules/electron-mpv-video/dist/renderer/mpv-video.js
-@@ -28,6 +28,8 @@
+@@ -28,6 +28,8 @@ class WebGLUploadRenderer {
      texture;
      vao;
      samplerLocation;
@@ -147,7 +156,7 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
      constructor(canvas) {
          this.canvas = canvas;
          const gl = canvas.getContext('webgl2', {
-@@ -87,9 +89,18 @@
+@@ -87,10 +89,19 @@ class WebGLUploadRenderer {
          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
          gl.uniform1i(samplerLocation, 0);
@@ -156,21 +165,21 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
          this.texture = texture;
          this.vao = vao;
          this.samplerLocation = samplerLocation;
-+    }
+     }
 +    destroy() {
 +        this.gl.deleteTexture(this.texture);
 +        this.gl.deleteVertexArray(this.vao);
 +        this.gl.deleteBuffer(this.buffer);
 +        this.gl.deleteProgram(this.program);
 +        this.canvas.width = this.canvas.height = 1;
-     }
++    }
      resize(width, height) {
          if (this.canvas.width !== width || this.canvas.height !== height) {
-@@ -152,6 +163,14 @@
-     constructor(canvas) {
+             this.canvas.width = width;
+@@ -153,6 +164,14 @@ class SharedTextureWebGpuRenderer {
          this.canvas = canvas;
          this.ready = this.init();
-+    }
+     }
 +    async destroy() {
 +        await this.ready.catch(() => {});
 +        try { await this.device?.queue.onSubmittedWorkDone(); } catch {}
@@ -178,10 +187,27 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
 +        this.device?.destroy();
 +        this.context = this.device = this.pipeline = this.sampler = null;
 +        this.canvas.width = this.canvas.height = 1;
-     }
++    }
      resize(width, height) {
          if (this.canvas.width !== width || this.canvas.height !== height) {
-@@ -409,6 +428,10 @@
+             this.canvas.width = width;
+@@ -374,11 +393,13 @@ export class MpvVideoElement extends HTMLElement {
+     async open(filePath) {
+         await this.ensureReady();
+         if (!this.player)
+-            return;
++            throw new Error('Player was destroyed during open');
+         this.status = 'Opening';
+         this.dispatchState();
+         await this.player.open(filePath);
+-        await this.player.setVolume(this.volume);
++        if (!this.player)
++            throw new Error('Player was destroyed during open');
++        await this.player?.setVolume(this.volume);
+         this.openedSource = filePath;
+         if (this.getAttribute('src') !== filePath)
+             this.setAttribute('src', filePath);
+@@ -409,6 +430,10 @@ export class MpvVideoElement extends HTMLElement {
          }
          await this.player?.setVolume(volume);
      }
@@ -192,7 +218,7 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
      async setRenderMode(mode) {
          await this.ensureReady();
          const nextMode = this.resolveRenderMode(mode);
-@@ -438,16 +461,30 @@
+@@ -438,16 +463,30 @@ export class MpvVideoElement extends HTMLElement {
          }
      }
      async destroyInternal() {
@@ -227,7 +253,21 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
          }
          this.ready = null;
          this.openedSource = '';
-@@ -545,6 +582,8 @@
+@@ -507,10 +546,10 @@ export class MpvVideoElement extends HTMLElement {
+         this.resizeObserver.observe(this);
+         this.updateVisibleSurface();
+         this.updateRenderSize();
+-        await this.player.setVolume(this.volume);
+-        if (this.src) {
++        await this.player?.setVolume(this.volume);
++        if (this.src && this.player) {
+             await this.player.open(this.src);
+-            await this.player.setVolume(this.volume);
++            await this.player?.setVolume(this.volume);
+             this.openedSource = this.src;
+             this.status = 'Loaded';
+         }
+@@ -545,6 +584,8 @@ export class MpvVideoElement extends HTMLElement {
          this.surfaceRoot.append(style, this.canvas2d, this.webglCanvas, this.sharedCanvas);
      }
      async ensureReady() {
@@ -236,7 +276,7 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
          if (!this.ready) {
              this.ready = this.initialize();
          }
-@@ -569,9 +608,9 @@
+@@ -569,9 +610,9 @@ export class MpvVideoElement extends HTMLElement {
          const ratio = window.devicePixelRatio || 1;
          const width = Math.max(160, Math.floor(rect.width * ratio));
          const height = Math.max(90, Math.floor(rect.height * ratio));
@@ -249,7 +289,7 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
          this.player?.setRenderSize(width, height).catch((error) => this.emitError(error));
      }
      handlePlayerEvent(event) {
-@@ -632,4 +671,4 @@
+@@ -632,4 +673,4 @@ export class MpvVideoElement extends HTMLElement {
          }));
      }
  }
@@ -257,9 +297,10 @@ diff --git a/node_modules/electron-mpv-video/dist/renderer/mpv-video.js b/node_m
 \ No newline at end of file
 +//# sourceMappingURL=mpv-video.js.map
 diff --git a/node_modules/electron-mpv-video/dist/shared/types.d.ts b/node_modules/electron-mpv-video/dist/shared/types.d.ts
+index 1da1aa4..0f90c2e 100644
 --- a/node_modules/electron-mpv-video/dist/shared/types.d.ts
 +++ b/node_modules/electron-mpv-video/dist/shared/types.d.ts
-@@ -27,6 +27,7 @@
+@@ -27,6 +27,7 @@ export type MpvPlayerSession = {
      stop(): Promise<void>;
      seek(seconds: number): Promise<void>;
      setVolume(value: number): Promise<void>;
@@ -267,17 +308,22 @@ diff --git a/node_modules/electron-mpv-video/dist/shared/types.d.ts b/node_modul
      setRenderSize(width: number, height: number): Promise<void>;
      setRenderMode(mode: RenderMode): Promise<void>;
      destroy(): Promise<void>;
-@@ -56,4 +57,4 @@
+@@ -56,4 +57,4 @@ declare global {
          _electronMpvVideo: ElectronMpvVideoApi;
      }
  }
 -//# sourceMappingURL=types.d.ts.map
 \ No newline at end of file
 +//# sourceMappingURL=types.d.ts.map
+diff --git a/node_modules/electron-mpv-video/native/mpv-addon/build/Release/libmpv-2.dll b/node_modules/electron-mpv-video/native/mpv-addon/build/Release/libmpv-2.dll
+new file mode 100644
+diff --git a/node_modules/electron-mpv-video/native/mpv-addon/build/Release/mpv_addon.node b/node_modules/electron-mpv-video/native/mpv-addon/build/Release/mpv_addon.node
+new file mode 100644
 diff --git a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc b/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc
+index 46deaa6..9318694 100644
 --- a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc
 +++ b/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc
-@@ -132,6 +132,7 @@
+@@ -132,6 +132,7 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
        InstanceMethod("stop", &MpvPlayer::Stop),
        InstanceMethod("seek", &MpvPlayer::Seek),
        InstanceMethod("setVolume", &MpvPlayer::SetVolume),
@@ -285,7 +331,7 @@ diff --git a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc b
        InstanceMethod("setUpdateCallback", &MpvPlayer::SetUpdateCallback),
        InstanceMethod("setEventCallback", &MpvPlayer::SetEventCallback),
        InstanceMethod("renderFrame", &MpvPlayer::RenderFrame),
-@@ -165,12 +166,16 @@
+@@ -165,12 +166,16 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
      set_option("audio-display", "no");
      set_option("pause", "yes");
      set_option("keep-open", "yes");
@@ -306,7 +352,7 @@ diff --git a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc b
      set_option("sw-fast", "yes");
      set_option("vo", "libmpv");
      set_mpv_wakeup_callback(handle_, on_mpv_wakeup, this);
-@@ -189,6 +194,15 @@
+@@ -189,6 +194,15 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
      observe("height", MPV_FORMAT_INT64);
      observe("video-codec", MPV_FORMAT_STRING);
      observe("container-fps", MPV_FORMAT_DOUBLE);
@@ -322,13 +368,10 @@ diff --git a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc b
  
      if (mode_ == "shared-texture") {
  #if defined(__APPLE__)
-@@ -356,6 +370,19 @@
-     double volume = std::clamp(info[0].As<Napi::Number>().DoubleValue(), 0.0, 100.0);
-     int ret = mpv_set_property(handle_, "volume", MPV_FORMAT_DOUBLE, &volume);
-     if (ret < 0) throw_mpv_error(env, "setVolume", ret);
-+    return env.Undefined();
-+  }
-+
+@@ -359,6 +373,19 @@ class MpvPlayer : public Napi::ObjectWrap<MpvPlayer> {
+     return env.Undefined();
+   }
+ 
 +  Napi::Value SetProperty(const Napi::CallbackInfo& info) {
 +    Napi::Env env = info.Env();
 +    if (info.Length() < 2 || !info[0].IsString() || !info[1].IsString()) {
@@ -339,6 +382,9 @@ diff --git a/node_modules/electron-mpv-video/native/mpv-addon/src/mpv_addon.cc b
 +    std::string value = info[1].As<Napi::String>().Utf8Value();
 +    int ret = mpv_set_property_string(handle_, name.c_str(), value.c_str());
 +    if (ret < 0) throw_mpv_error(env, "setProperty", ret);
-     return env.Undefined();
-   }
- 
++    return env.Undefined();
++  }
++
+   Napi::Value SetUpdateCallback(const Napi::CallbackInfo& info) {
+     Napi::Env env = info.Env();
+     if (update_callback_) {

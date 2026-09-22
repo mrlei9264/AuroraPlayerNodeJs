@@ -4,6 +4,7 @@ import type { MpvMain } from 'electron-mpv-video/main'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { pathToFileURL } from 'url'
 import { E, I } from '../shared/channels'
 import type { MediaItem, PlayPlan, PlayRequest, SessionState } from '../shared/types'
 import { openDatabase } from './library/db'
@@ -118,7 +119,7 @@ function createWindow(): void {
   mainWindow.on('close', (event) => {
     if (quitCleanupComplete || closeCleanupComplete) return
     event.preventDefault()
-    if (isQuitting || windowCleanupPromise) return
+    if (windowCleanupPromise) return
 
     windowCleanupPromise = (async () => {
       try {
@@ -147,11 +148,12 @@ function createWindow(): void {
 function sourceUrlForItem(item: MediaItem): string {
   let sourceUrl: string
   if (item.protocol === 'local') {
-    // libmpv can open local video paths directly. Audio and renderer-owned
-    // assets still use the loopback range server because Chromium cannot load
-    // arbitrary filesystem paths under context isolation.
+    // libmpv opens local video via a proper file:// URL (pathToFileURL
+    // yields file:///D:/... with correct escaping). Audio still uses the
+    // loopback range server because Chromium cannot load filesystem paths.
+    const localUrl = pathToFileURL(item.url).href
     sourceUrl = !item.isAudio
-      ? item.url
+      ? localUrl
       : `http://127.0.0.1:${mediaServer.port}/media?t=${mediaServer.token}&p=${encodeURIComponent(item.url)}`
   } else if (item.sourceId !== null && item.remotePath) {
     sourceUrl = remote.playbackUrl(item.sourceId, item.remotePath)
@@ -186,7 +188,7 @@ async function bootstrap(): Promise<void> {
   mediaServer = new LocalMediaServer()
   mediaServer.onRequest = (line) => logger.debug('protocol', `http ${line}`)
   await mediaServer.portReady
-  logger.info('protocol', `media server ready http://127.0.0.1:${mediaServer.port} token=${mediaServer.token}`)
+  logger.info('protocol', `media server ready http://127.0.0.1:${mediaServer.port}`)
   ipcMain.handle(I.mediaBase, () => `http://127.0.0.1:${mediaServer.port}/media?t=${mediaServer.token}&p=`)
 
   await app.whenReady()
