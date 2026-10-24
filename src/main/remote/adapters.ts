@@ -137,7 +137,7 @@ export class FtpAdapter implements IRemoteAdapter {
         user: this.access.username,
         password: this.access.password,
         secure: this.access.tlsMode === 'implicit' ? 'implicit' : this.secure,
-        secureOptions: this.secure ? { rejectUnauthorized: false } : undefined
+        secureOptions: this.secure ? { rejectUnauthorized: true } : undefined
       })
     } catch (err) {
       throw classifyError(err)
@@ -344,6 +344,8 @@ export class HttpAdapter implements IRemoteAdapter {
   }
 }
 
+const SMB_CHUNK_SIZE = 4 * 1024 * 1024
+
 interface SmbEntry {
   filename?: string
   name?: string
@@ -356,6 +358,8 @@ export class SmbAdapter implements IRemoteAdapter {
   private client: SMB2 | null = null
 
   constructor(private access: AdapterAccess) {}
+
+  private statCache = new Map<string, { size: number; expiresAt: number }>()
 
   private getClient(): SMB2 {
     if (this.client) return this.client
@@ -402,6 +406,8 @@ export class SmbAdapter implements IRemoteAdapter {
   }
 
   async stat(path: string): Promise<{ size: number }> {
+    const cached = this.statCache.get(path)
+    if (cached && cached.expiresAt > Date.now()) return { size: cached.size }
     const parts = path.replace(/^[\\/]+/, '').split('/')
     const name = parts.pop() ?? ''
     const parent = parts.length ? '\\' + parts.join('\\') : '\\'
@@ -412,21 +418,48 @@ export class SmbAdapter implements IRemoteAdapter {
       'smb stat'
     )
     const hit = entries.find((e) => (e.filename ?? e.name) === name)
-    return { size: hit?.size ?? 0 }
+    const size = hit?.size ?? 0
+    if (this.statCache.size > 256) this.statCache.clear()
+    this.statCache.set(path, { size, expiresAt: Date.now() + 60_000 })
+    return { size }
   }
 
   async openStream(path: string, start?: number, end?: number): Promise<OpenStreamResult> {
     const client = this.getClient()
     const { PassThrough } = await import('stream')
     const pt = new PassThrough()
-    const range = { start: start ?? 0, end: end ?? Number.MAX_SAFE_INTEGER }
-    try {
-      const data = await this.promisify<Buffer>((cb) => client.readFile(this.fullPath(path), range, cb))
-      pt.end(data)
-    } catch (err) {
-      pt.destroy(err as Error)
+    const { size } = await this.stat(path)
+    const first = Math.max(0, start ?? 0)
+    const last = end != null ? Math.min(end, size - 1) : size - 1
+    if (size <= 0 || first > last) {
+      pt.end()
+      return { stream: pt, size, contentLength: 0 }
     }
-    return { stream: pt, size: null, contentLength: null }
+    const contentLength = last - first + 1
+    void (async () => {
+      let position = first
+      try {
+        while (position <= last && !pt.destroyed) {
+          const chunkEnd = Math.min(last, position + SMB_CHUNK_SIZE - 1)
+          const expected = chunkEnd - position + 1
+          const data = await this.promisify<Buffer>((cb) => client.readFile(this.fullPath(path), { start: position, end: chunkEnd }, cb))
+          if (!data.length) break
+          position += data.length
+          if (!pt.write(data)) {
+            await new Promise<void>((resolve) => {
+              const done = () => { pt.off('drain', done); pt.off('close', done); resolve() }
+              pt.on('drain', done)
+              pt.on('close', done)
+            })
+          }
+          if (data.length < expected) break
+        }
+        pt.end()
+      } catch (err) {
+        if (!pt.destroyed) pt.destroy(err as Error)
+      }
+    })()
+    return { stream: pt, size, contentLength }
   }
 
   async close(): Promise<void> {
@@ -453,7 +486,7 @@ export class SftpAdapter implements IRemoteAdapter {
         port: this.access.port,
         username: this.access.username,
         ...(this.access.authMode === 'privateKey'
-          ? { privateKey: fs.readFileSync(this.access.privateKeyPath || ''), passphrase: this.access.password || undefined }
+          ? { privateKey: await fs.promises.readFile(this.access.privateKeyPath || ''), passphrase: this.access.password || undefined }
           : { password: this.access.password }),
         readyTimeout: 15000
       }), 18000, 'sftp connect')

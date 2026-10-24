@@ -1,35 +1,9 @@
-.theme-choices { display: grid; gap: 8px; }
-.theme-choice {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  text-align: left;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  transition: border-color 160ms ease, background 160ms ease;
-}
-.theme-choice:hover { background: var(--surface2); }
-.theme-choice.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
-.theme-choice:disabled { cursor: wait; opacity: .7; }
-.theme-choice-swatch { display: grid; place-items: center; flex: 0 0 44px; height: 44px; border-radius: 13px; }
-.theme-choice-swatch.classic { background: #121820; color: #d7bc8d; border: 1px solid #d7bc8d55; }
-.theme-choice-swatch.tahoe { color: #0066db; background: linear-gradient(140deg, #fff 8%, #e0edff 55%, #c9dffb); border: 1px solid #fff; box-shadow: inset 0 1px 0 #fff, 0 2px 6px #283c5c14; }
-.theme-choice-copy { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.theme-choice-copy strong { color: var(--fg0); font-size: calc(13px * var(--font-scale, 1)); font-weight: 600; }
-.theme-choice-copy small { color: var(--fg2); font-size: calc(11px * var(--font-scale, 1)); }
-.theme-choice-check { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 50%; }
-.theme-choice.selected .theme-choice-check { color: var(--bg0); background: var(--accent); border-color: var(--accent); }
-.settings-theme-style { padding: 12px 0; }
-.theme-choice:focus-visible,
+
 .theme-settings-button:focus-visible,
 .theme-settings-heading button:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 3px !important; }
 
 /* Both appearances share translucent surfaces over a tinted backing scene. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) {
-  --tahoe-wallpaper: radial-gradient(ellipse at 2% 34%, #d8ecff 0%, transparent 44%), radial-gradient(ellipse at 92% 8%, #e6eaff 0%, transparent 36%), radial-gradient(ellipse at 76% 94%, #ddf4f1 0%, transparent 42%), var(--bg0);
+:root[data-color-theme='classic'] {
   --tahoe-glass: linear-gradient(135deg, #ffffff66, #ffffff14 46%, #ffffff38), #ffffff24;
   --tahoe-glass-control: linear-gradient(150deg, #ffffff75, #ffffff26);
   --tahoe-glass-raised: linear-gradient(135deg, #ffffffb8, #ffffff8c), #f5faff8c;
@@ -48,13 +22,26 @@
 /* Remove inherited elevation everywhere in this skin, including hover and
    pseudo-elements. Only the explicit glass rims and floating overlays below
    opt back in. Focus is expressed with outlines instead of shadow rings. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :where(*, *::before, *::after) { box-shadow: none !important; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 3px !important; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) #root { background: var(--tahoe-wallpaper); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .main,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.home-page, .network-page.network-v2, .settings-page, .media-details-page) { background: transparent; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-page.library-workspace {
+:root[data-color-theme='classic'] :where(*, *::before, *::after) { box-shadow: none !important; }
+:root[data-color-theme='classic'] :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 3px !important; }
+:root[data-color-theme='classic'] #root { background: var(--bg0); }
+:root.custom-background[data-color-theme='classic'] #root {
+  background:
+    linear-gradient(rgb(8 16 28 / .35), rgb(8 16 28 / .55)),
+    var(--custom-background-image, none) center / cover no-repeat,
+    var(--bg0);
+}
+:root.custom-background[data-color-theme='classic'] .startup-animation,
+:root.custom-background[data-color-theme='classic'] .immersive-audio-player {
+  background:
+    linear-gradient(rgb(8 16 28 / .35), rgb(8 16 28 / .55)),
+    var(--custom-background-image, none) center / cover no-repeat,
+    var(--bg0);
+}
+:root[data-color-theme='classic'] .shell.home-shell,
+:root[data-color-theme='classic'] .shell.home-shell .main,
+:root[data-color-theme='classic'] :is(.home-page, .network-page.network-v2, .settings-page, .media-details-page) { background: transparent; }
+:root[data-color-theme='classic'] .library-page.library-workspace {
   --library-bg: transparent;
   --library-panel: var(--tahoe-panel-fill);
   --library-raised: var(--tahoe-control-fill);
@@ -63,7 +50,7 @@
   --library-selected: var(--accent-soft);
   background: transparent;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .network-page.network-v2 {
+:root[data-color-theme='classic'] .network-page.network-v2 {
   --network-v2-panel: var(--tahoe-panel-fill);
   --network-v2-panel-solid: var(--tahoe-solid);
   --network-v2-raised: var(--tahoe-control-fill);
@@ -72,9 +59,9 @@
 }
 
 /* One glass sheet per major surface. Inner rows use tint, never more blur. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .nav-list,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .home-playback-status,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-list,
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-status,
+:root[data-color-theme='classic'] :is(
   .settings-category-panel, .settings-detail-panel, .network-source-section,
   .network-protocol-rail, .network-config-form-v2, .network-source-tree,
   .network-browser-shell, .network-download-shell, .network-links-panel,
@@ -85,80 +72,80 @@
   box-shadow: var(--tahoe-edge-light) !important;
   backdrop-filter: var(--tahoe-blur);
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(
+:root[data-color-theme='classic'] :is(
   .network-source-card, .network-link-card, .network-option-v2, .settings-toggle-card,
   .settings-data-root, .dl-row, .network-download-row, .download-delete-local-option
 ) { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); backdrop-filter: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace .library-collection.expanded { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); backdrop-filter: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.network-source-card:hover, .network-link-card:hover) { background: var(--tahoe-control-fill); border-color: var(--tahoe-edge-active); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.network-file-head, .network-browser-summary, .network-browser-toolbar, .settings-row) { background-color: transparent; border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .library-workspace .library-collection.expanded { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); backdrop-filter: none; }
+:root[data-color-theme='classic'] :is(.network-source-card:hover, .network-link-card:hover) { border-color: var(--tahoe-edge-active); }
+:root[data-color-theme='classic'] :is(.network-file-head, .network-browser-summary, .network-browser-toolbar, .settings-row) { background-color: transparent; border-color: var(--tahoe-edge-soft); }
 
 /* The existing circular rail stays airy rather than resembling raised buttons. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .nav-items .nav-item { color: var(--fg1); background: transparent; border-color: transparent; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .nav-items .nav-item:hover { color: var(--accent); background: var(--tahoe-glass-control); border-color: var(--tahoe-edge); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .nav-items .nav-item.active { color: var(--accent); background: var(--accent-soft); border-color: var(--tahoe-edge); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.nav-active-motion, .settings-category-active-motion, .network-protocol-active-motion, .library-type-tab-active-motion) {
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-items .nav-item { color: var(--fg1); background: transparent; border-color: transparent; }
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-items .nav-item:hover { color: inherit; background: transparent; border-color: transparent; box-shadow: none; }
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-items .nav-item.active { color: var(--accent); background: var(--accent-soft); border-color: var(--tahoe-edge); }
+:root[data-color-theme='classic'] :is(.nav-active-motion, .settings-category-active-motion, .network-protocol-active-motion, .library-type-tab-active-motion) {
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge);
   box-shadow: var(--tahoe-edge-light) !important;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .home-playback-toggle { color: var(--accent); background: var(--tahoe-glass-control); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .shell.home-shell .sidebar .home-playback-toggle:disabled { color: var(--fg3); background: transparent; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.settings-category.active svg, .library-type-tabs button.active) { color: var(--accent); }
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-toggle { color: var(--accent); background: var(--tahoe-glass-control); }
+:root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-toggle:disabled { color: var(--fg3); background: transparent; }
+:root[data-color-theme='classic'] :is(.settings-category.active svg, .library-type-tabs button.active) { color: var(--accent); }
 
 /* Transparent controls use a fine rim; selected/primary actions retain contrast. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions > button:not(.window-control-button),
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-settings-button, .btn, .settings-button, .network-secondary-action, .network-toolbar-button) {
+:root[data-color-theme='classic'] .audio-window-actions > button:not(.window-control-button),
+:root[data-color-theme='classic'] :is(.theme-settings-button, .btn, .settings-button, .network-secondary-action, .network-toolbar-button) {
   color: var(--fg1);
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge-soft);
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.titlebar .tb-btn, .cinematic-window-control) {
+:root[data-color-theme='classic'] :is(.titlebar .tb-btn, .cinematic-window-control) {
   color: var(--fg1);
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .titlebar .tb-btn:hover { color: var(--accent); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions > button:not(.window-control-button):hover,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.theme-settings-button:hover, .settings-button:hover, .network-secondary-action:hover, .network-toolbar-button:hover) { color: var(--accent); background: var(--tahoe-control-fill); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .titlebar .tb-btn.close:hover,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-window-actions .audio-window-close:hover { color: var(--danger); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace .library-action:not(.primary):not(.subtle):not(.play):not(.locate),
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace :is(.library-source-filter, .library-sort-select, .library-view-toggle, .library-query-field),
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinema-search, .library-search, .network-browser-search, .settings-select, .settings-input, .settings-font-select-trigger, .network-password-input-v2),
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .network-field-v2 > :is(input, select) {
+:root[data-color-theme='classic'] .titlebar .tb-btn:hover { color: var(--accent); }
+:root[data-color-theme='classic'] .audio-window-actions > button:not(.window-control-button):hover { color: var(--accent); background: var(--tahoe-control-fill); }
+:root[data-color-theme='classic'] :is(.theme-settings-button:hover, .settings-button:hover, .network-secondary-action:hover, .network-toolbar-button:hover) { color: var(--accent); }
+:root[data-color-theme='classic'] .titlebar .tb-btn.close:hover,
+:root[data-color-theme='classic'] .audio-window-actions .audio-window-close:hover { color: var(--danger); }
+:root[data-color-theme='classic'] .library-workspace .library-action:not(.primary):not(.subtle):not(.play):not(.locate),
+:root[data-color-theme='classic'] .library-workspace :is(.library-source-filter, .library-sort-select, .library-view-toggle, .library-query-field),
+:root[data-color-theme='classic'] :is(.cinema-search, .library-search, .network-browser-search, .settings-select, .settings-input, .settings-font-select-trigger, .network-password-input-v2),
+:root[data-color-theme='classic'] .network-field-v2 > :is(input, select) {
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge-soft);
   backdrop-filter: none;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinema-search, .network-browser-search, .library-query-field):focus-within { border-color: var(--accent); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace :is(.library-category-nav button.active, .library-view-toggle button.active),
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .network-filter-strip > button.active { color: var(--accent); background: var(--accent-soft); border-color: var(--tahoe-edge-active); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .library-workspace .library-action.primary,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.settings-button-primary, .btn-primary, .cinema-resume, .network-primary-action, .network-save-button-v2, .network-save-button, .network-add-fab, .media-details-play) {
+:root[data-color-theme='classic'] :is(.cinema-search, .network-browser-search, .library-query-field):focus-within { border-color: var(--accent); }
+:root[data-color-theme='classic'] .library-workspace :is(.library-category-nav button.active, .library-view-toggle button.active),
+:root[data-color-theme='classic'] .network-filter-strip > button.active { color: var(--accent); background: var(--accent-soft); border-color: var(--tahoe-edge-active); }
+:root[data-color-theme='classic'] .library-workspace .library-action.primary,
+:root[data-color-theme='classic'] :is(.settings-button-primary, .btn-primary, .cinema-resume, .network-primary-action, .network-save-button-v2, .network-save-button, .network-add-fab, .media-details-play) {
   color: #fff;
   background: var(--theme-primary-fill);
   border-color: #0066db33;
   box-shadow: inset 0 1px 0 #ffffff57 !important;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .btn-danger { color: var(--danger); background: transparent; border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .btn-danger:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .btn-ghost { background: transparent; border-color: transparent; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.nav-mark, .nav-icon, .cinema-resume, .library-audio-mark, .audio-control-icon, .audio-play-control, .audio-transport-controls) { filter: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .settings-switch { background: #adbed24d; border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .settings-switch.on { background: var(--accent); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .settings-switch span { background: #fff; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .settings-segmented { background: #d5e3f040; border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .settings-segmented button.active { color: var(--fg0); background: var(--tahoe-glass-control); }
+:root[data-color-theme='classic'] .btn-danger { color: var(--danger); background: transparent; border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+:root[data-color-theme='classic'] .btn-danger:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+:root[data-color-theme='classic'] .btn-ghost { background: transparent; border-color: transparent; }
+:root[data-color-theme='classic'] :is(.nav-mark, .nav-icon, .cinema-resume, .library-audio-mark, .audio-control-icon, .audio-play-control, .audio-transport-controls) { filter: none; }
+:root[data-color-theme='classic'] .settings-switch { background: #adbed24d; border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .settings-switch.on { background: var(--accent); }
+:root[data-color-theme='classic'] .settings-switch span { background: #fff; }
+:root[data-color-theme='classic'] .settings-segmented { background: #d5e3f040; border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .settings-segmented button.active { color: var(--fg0); background: var(--tahoe-glass-control); }
 .settings-font-select-trigger:disabled { opacity: .55; cursor: not-allowed; }
 
 /* Complete the previously missed detail badges, menus and legacy backdrops. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .media-details-page { --library-text: var(--fg0); --library-muted: var(--fg2); --library-dim: var(--fg3); --library-bg: transparent; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.media-details-kicker span, .media-details-badges span, .media-details-spec, .media-details-track-group span, .media-details-locate) { color: var(--fg1); background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .media-details-file-grid button:not(:disabled) { color: var(--accent); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .media-details-backdrop { opacity: .1; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinema-hero-shade { background: linear-gradient(90deg, var(--bg0) 0%, color-mix(in srgb, var(--bg0) 95%, transparent) 18%, color-mix(in srgb, var(--bg0) 68%, transparent) 32%, transparent 65%), linear-gradient(0deg, var(--bg0), color-mix(in srgb, var(--bg0) 20%, transparent) 34%, transparent 65%); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.library-workspace .library-file-art, .library-workspace .library-collection-art, .cinema-card-image, .media-details-art) { border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .dialog-overlay { background: var(--overlay); backdrop-filter: blur(5px) saturate(110%); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(
+:root[data-color-theme='classic'] .media-details-page { --library-text: var(--fg0); --library-muted: var(--fg2); --library-dim: var(--fg3); --library-bg: transparent; }
+:root[data-color-theme='classic'] :is(.media-details-kicker span, .media-details-badges span, .media-details-spec, .media-details-track-group span, .media-details-locate) { color: var(--fg1); background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .media-details-file-grid button:not(:disabled) { color: var(--accent); }
+:root[data-color-theme='classic'] .media-details-backdrop { opacity: .1; }
+:root[data-color-theme='classic'] .cinema-hero-shade { background: linear-gradient(90deg, var(--bg0) 0%, color-mix(in srgb, var(--bg0) 95%, transparent) 18%, color-mix(in srgb, var(--bg0) 68%, transparent) 32%, transparent 65%), linear-gradient(0deg, var(--bg0), color-mix(in srgb, var(--bg0) 20%, transparent) 34%, transparent 65%); }
+:root[data-color-theme='classic'] :is(.library-workspace .library-file-art, .library-workspace .library-collection-art, .cinema-card-image, .media-details-art) { border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .dialog-overlay { background: var(--overlay); backdrop-filter: blur(5px) saturate(110%); }
+:root[data-color-theme='classic'] :is(
   .theme-settings-popover, .floating-menu-layer.library-popover, .settings-font-menu,
   .context-menu, .dialog, .toast, .notification-center-panel, .hud .hud-panel,
   .download-thread-menu, .network-selection-bar, .cinematic-speed-menu, .cinematic-track-drawer
@@ -169,16 +156,14 @@
   box-shadow: var(--tahoe-edge-light), var(--tahoe-floating-shadow) !important;
   backdrop-filter: var(--tahoe-blur);
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .theme-choice { background: var(--tahoe-glass-control); border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .theme-choice.selected { background: var(--accent-soft); border-color: var(--tahoe-edge-active); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .startup-animation { color: var(--fg0); background: var(--tahoe-wallpaper); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .startup-atmosphere { background: radial-gradient(ellipse at 50% 48%, #bedbff38, transparent 65%); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .startup-wordmark span { color: var(--fg2); }
+:root[data-color-theme='classic'] .startup-animation { color: var(--fg0); background: var(--bg0); }
+:root[data-color-theme='classic'] .startup-atmosphere { background: radial-gradient(ellipse at 50% 48%, #bedbff38, transparent 65%); }
+:root[data-color-theme='classic'] .startup-wordmark span { color: var(--fg2); }
 
 /* On dark video, use glass only for compact labels and the mini player. Do
    not stack a panel behind the transport controls or alter media pixels. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .home-shell .cinema-mini-player,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-back, .cinematic-quality-badge, .cinematic-chapter-label) {
+:root[data-color-theme='classic'] .home-shell .cinema-mini-player,
+:root[data-color-theme='classic'] :is(.cinematic-back, .cinematic-quality-badge, .cinematic-chapter-label) {
   color: var(--fg1);
   background: var(--tahoe-glass-media);
   border-color: var(--tahoe-edge);
@@ -186,7 +171,7 @@
   backdrop-filter: var(--tahoe-blur);
   text-shadow: none;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console {
+:root[data-color-theme='classic'] .cinematic-console {
   color: var(--fg1);
   background: transparent;
   border-color: transparent;
@@ -194,31 +179,31 @@
   backdrop-filter: none;
   text-shadow: none;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console { border-radius: var(--r-xl); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-vignette { background: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-bottom-shade { background: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-window-control.close:hover { color: var(--danger); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.cinematic-time, .cinematic-buffered, .cinematic-network-speed, .cinematic-speed-menu button) { color: var(--fg1); text-shadow: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-speed-menu button:hover,
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-speed-menu button.active { color: var(--accent); background: var(--accent-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer :is(.vd-head, .vd-item, .vd-section-title) { color: var(--fg1); border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer :is(.vd-sub, .vd-section-count, .vd-empty) { color: var(--fg2); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer .vd-track-section { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer .vd-item:hover { color: var(--accent); background: var(--tahoe-control-fill); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-track-drawer .vd-item.active { color: var(--accent); background: var(--accent-soft); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten) { color: var(--fg1); text-shadow: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten):hover { color: var(--accent); background: transparent; border-color: transparent; box-shadow: none !important; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-play { color: var(--accent); background: transparent; box-shadow: none !important; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) :is(.audio-play-control, .audio-play-control:hover) { color: var(--accent); background: var(--tahoe-glass-control); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-title-row h1 { color: #fff; text-shadow: 0 1px 4px #0006; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-quality-badge.active { color: var(--accent); border-color: var(--tahoe-edge-active); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-player .vp-error { --fg0: #fff; --fg1: #ddd; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-chapter-tick { background: #ffffff80; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .cinematic-chapter-item.active .cinematic-chapter-tick { background: #fff; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .immersive-audio-player { background: var(--tahoe-wallpaper); }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-ambient { background: transparent; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-ambient::after { background: none; }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']) .audio-transport-controls { background: var(--tahoe-glass); border-color: var(--tahoe-edge); box-shadow: var(--tahoe-edge-light) !important; backdrop-filter: var(--tahoe-blur); border-radius: var(--r-pill); opacity: 1; }
+:root[data-color-theme='classic'] .cinematic-console { border-radius: var(--r-xl); }
+:root[data-color-theme='classic'] .cinematic-vignette { background: none; }
+:root[data-color-theme='classic'] .cinematic-bottom-shade { background: none; }
+:root[data-color-theme='classic'] .cinematic-window-control.close:hover { color: var(--danger); }
+:root[data-color-theme='classic'] :is(.cinematic-time, .cinematic-buffered, .cinematic-network-speed, .cinematic-speed-menu button) { color: var(--fg1); text-shadow: none; }
+:root[data-color-theme='classic'] .cinematic-speed-menu button:hover,
+:root[data-color-theme='classic'] .cinematic-speed-menu button.active { color: var(--accent); background: var(--accent-soft); }
+:root[data-color-theme='classic'] .cinematic-track-drawer :is(.vd-head, .vd-item, .vd-section-title) { color: var(--fg1); border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .cinematic-track-drawer :is(.vd-sub, .vd-section-count, .vd-empty) { color: var(--fg2); }
+:root[data-color-theme='classic'] .cinematic-track-drawer .vd-track-section { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .cinematic-track-drawer .vd-item:hover { color: var(--accent); background: var(--tahoe-control-fill); }
+:root[data-color-theme='classic'] .cinematic-track-drawer .vd-item.active { color: var(--accent); background: var(--accent-soft); }
+:root[data-color-theme='classic'] .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten) { color: var(--fg1); text-shadow: none; }
+:root[data-color-theme='classic'] .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten):hover { color: var(--accent); background: transparent; border-color: transparent; box-shadow: none !important; }
+:root[data-color-theme='classic'] .cinematic-play { color: var(--accent); background: transparent; box-shadow: none !important; }
+:root[data-color-theme='classic'] :is(.audio-play-control, .audio-play-control:hover) { color: var(--accent); background: var(--tahoe-glass-control); }
+:root[data-color-theme='classic'] .cinematic-title-row h1 { color: #fff; text-shadow: 0 1px 4px #0006; }
+:root[data-color-theme='classic'] .cinematic-quality-badge.active { color: var(--accent); border-color: var(--tahoe-edge-active); }
+:root[data-color-theme='classic'] .cinematic-player .vp-error { --fg0: #fff; --fg1: #ddd; }
+:root[data-color-theme='classic'] .cinematic-chapter-tick { background: #ffffff80; }
+:root[data-color-theme='classic'] .cinematic-chapter-item.active .cinematic-chapter-tick { background: #fff; }
+:root[data-color-theme='classic'] .immersive-audio-player { background: var(--bg0); }
+:root[data-color-theme='classic'] .audio-ambient { background: transparent; }
+:root[data-color-theme='classic'] .audio-ambient::after { background: none; }
+:root[data-color-theme='classic'] .audio-transport-controls { background: var(--tahoe-glass); border-color: var(--tahoe-edge); box-shadow: var(--tahoe-edge-light) !important; backdrop-filter: var(--tahoe-blur); border-radius: var(--r-pill); opacity: 1; }
 
 /* A single document transition covers every route, the titlebar, playback
    controls and portals, in both directions. No layout transforms or zoom. */
@@ -247,11 +232,10 @@
 }
 /* Global theme transitions replace the old Settings-only diffusion to avoid
    overlapping a local flash with the full-window reveal. */
-:root.theme-transition .settings-theme-diffusion,
 :root.theme-transition .settings-detail-content::before { visibility: hidden; }
 
 /* All fill tokens become solid together; nested controls keep the same geometry. */
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']).reduce-transparency {
+:root[data-color-theme='classic'].reduce-transparency {
   --tahoe-glass: #f5f9fe;
   --tahoe-glass-raised: #fbfdff;
   --tahoe-glass-control: #f1f6fc;
@@ -261,9 +245,9 @@
   --tahoe-edge: #cbdceb;
   --tahoe-blur: none;
 }
-:root:is([data-color-theme='classic'], [data-color-theme='tahoe']).reduce-transparency .shell.home-shell .sidebar { background-color: transparent !important; }
+:root[data-color-theme='classic'].reduce-transparency .shell.home-shell .sidebar { background-color: transparent !important; }
 @media (prefers-reduced-transparency: reduce) {
-  :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) {
+  :root[data-color-theme='classic'] {
     --tahoe-glass: #f5f9fe;
     --tahoe-glass-raised: #fbfdff;
     --tahoe-glass-control: #f1f6fc;
@@ -275,7 +259,7 @@
   }
 }
 @supports not (backdrop-filter: blur(1px)) {
-  :root:is([data-color-theme='classic'], [data-color-theme='tahoe']) {
+  :root[data-color-theme='classic'] {
     --tahoe-glass: #f5f9fe;
     --tahoe-glass-raised: #fbfdff;
     --tahoe-glass-control: #f1f6fc;
@@ -284,10 +268,10 @@
     --tahoe-control-fill: #f1f6fc;
   }
 }
-:root.reduce-motion :is(.theme-choice, .theme-settings-button) { transition: none; }
+:root.reduce-motion .theme-settings-button { transition: none; }
 :root.reduce-motion::view-transition-old(root),
 :root.reduce-motion::view-transition-new(root) { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .theme-choice, .theme-settings-button { transition: none; }
+  .theme-settings-button { transition: none; }
   :root::view-transition-old(root), :root::view-transition-new(root) { animation: none !important; }
 }

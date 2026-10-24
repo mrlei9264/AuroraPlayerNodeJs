@@ -1,11 +1,10 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { I, E } from '../shared/channels'
+import { I } from '../shared/channels'
 import type { SessionState, PlayRequest, PlayPlan, MediaItem } from '../shared/types'
 import { LibraryRepository } from './library/repository'
 import { LibraryController } from './library/controller'
-import { QueueController, PlaylistController } from './playback/queue'
-import { PlaybackLaunchPlanner, PlaybackQueueCoordinator, type PlannerDeps } from './playback/planner'
-import { PlaybackSessionController } from './playback/session'
+import { PlaylistController } from './playback/queue'
+import { PlaybackLaunchPlanner, type PlannerDeps } from './playback/planner'
 import { RemoteSourceManager } from './remote/manager'
 import { MediaProbeService } from './media/probe'
 import { SettingsStore } from './system/settings'
@@ -17,8 +16,13 @@ export interface PlaybackBus {
   request: PlayRequest
 }
 
+let backgroundsDir = ''
+
+export function setBackgroundsDir(dir: string): void {
+  backgroundsDir = dir
+}
+
 export class PlaybackIpc {
-  private session = new PlaybackSessionController()
   /** The plan most recently accepted by the renderer-facing playback API. */
   private activeMediaId: number | null = null
   private playRequestEpoch = 0
@@ -27,10 +31,8 @@ export class PlaybackIpc {
     private deps: {
       repo: LibraryRepository
       library: LibraryController
-      queue: QueueController
       playlists: PlaylistController
       planner: PlaybackLaunchPlanner
-      coordinator: PlaybackQueueCoordinator
       remote: RemoteSourceManager
       probe: MediaProbeService
       settings: SettingsStore
@@ -42,7 +44,7 @@ export class PlaybackIpc {
   ) {}
 
   init(): void {
-    const { repo, queue, remote, settings } = this.deps
+    const { repo, remote, settings } = this.deps
 
     ipcMain.handle(I.appIconsList, () => listAppIcons())
 
@@ -62,35 +64,7 @@ export class PlaybackIpc {
       }
     })
 
-    ipcMain.handle(I.queueNav, async (_e, action: unknown, rawMediaId: unknown, rawRepeat: unknown): Promise<PlayPlan | null> => {
-      const requestEpoch = ++this.playRequestEpoch
-      if (action !== 'previous' && action !== 'next' && action !== 'naturalEnd') return null
-      const mediaId = validMediaId(rawMediaId)
-      const repeat = validRepeatMode(rawRepeat)
-      if (mediaId === null || !repeat) return null
-      const ids = queue.mediaIds
-      const idx = queue.indexOf(mediaId)
-      if (idx < 0) return null
-      const target = action === 'previous' ? this.deps.coordinator.previous(idx, ids.length, repeat) : this.deps.coordinator.next(idx, ids.length, repeat)
-      if (target === null) return null
-      const request: PlayRequest = {
-        mediaIds: ids,
-        index: target,
-        action: action === 'previous' ? 'playPrevious' : 'playNext'
-      }
-      try {
-        const targetId = request.mediaIds[request.index]
-        if (targetId != null) await this.deps.library.checkItemAvailability(targetId)
-        const plan = this.deps.planner.plan(request)
-        if (plan.ok && requestEpoch === this.playRequestEpoch) this.acceptPlan(plan, request)
-        return plan
-      } catch (error) {
-        this.deps.logger.error('playback', `Could not move through the queue: ${errorMessage(error)}`)
-        return null
-      }
-    })
-
-    ipcMain.handle(I.sessionSync, (_e, state: unknown) => {
+    ipcMain.on(I.sessionSync, (_e, state: unknown) => {
       this.syncSession(state)
     })
 
@@ -98,11 +72,6 @@ export class PlaybackIpc {
     ipcMain.handle(I.mediaPlaybackDuration, (_e, mediaId: number) => this.deps.probe.getPlaybackDuration(mediaId))
     ipcMain.handle(I.mediaTracks, (_e, mediaId: number) => this.deps.probe.getTracks(mediaId))
     ipcMain.handle(I.mediaChapters, (_e, mediaId: number) => this.deps.probe.getChapters(mediaId))
-
-    ipcMain.on(I.sessionSync, (event, state: unknown) => {
-      this.syncSession(state)
-      event.returnValue = true
-    })
 
     ipcMain.handle(I.dialogsOpenMedia, async (e) => {
       const win = BrowserWindow.fromWebContents(e.sender)
@@ -116,6 +85,13 @@ export class PlaybackIpc {
       const { pickFolder } = await import('./system/settings')
       const dir = await pickFolder(win!)
       return dir ?? null
+    })
+
+    ipcMain.handle(I.backgroundsPick, async (e) => {
+      const win = BrowserWindow.fromWebContents(e.sender)
+      const { pickBackgroundImage } = await import('./system/settings')
+      if (!backgroundsDir) return null
+      return pickBackgroundImage(win!, backgroundsDir)
     })
 
     ipcMain.handle(I.dialogsRelocate, async (e, mediaId: number) => {
@@ -158,7 +134,7 @@ export class PlaybackIpc {
     }
     this.deps.logger.debug('session', `state=${state.phase} media=${state.mediaId} pos=${state.position.toFixed(1)}${state.phase === 'error' && state.error ? ` error=${state.error}` : ''}`)
     if (this.deps.settings.get('rememberPlaybackPosition') && state.mediaId != null && state.duration > 0) {
-      this.deps.repo.updatePlaybackState(state.mediaId, state.position, state.duration)
+      this.deps.repo.updatePlaybackProgress(state.mediaId, state.position, state.duration)
     }
     // Renderer invokes are asynchronous. Keep a late update for the old item
     // in its own history, but never let it overwrite the current session sent
@@ -166,8 +142,6 @@ export class PlaybackIpc {
     if (state.mediaId !== null && this.activeMediaId !== null && state.mediaId !== this.activeMediaId) return
     if (state.idle) this.activeMediaId = null
     else if (state.mediaId !== null) this.activeMediaId = state.mediaId
-    this.session.replace(state)
-    this.deps.broadcast(E.sessionState, this.session.snapshot())
   }
 }
 
@@ -180,7 +154,6 @@ export function makePlannerDeps(deps: {
 }): PlannerDeps {
   return {
     itemById: (id) => deps.repo.findById(id),
-    itemsByIds: (ids) => deps.repo.loadAll().filter((i) => ids.includes(i.id)),
     fileExists: deps.fileExists,
     sourceAvailable: (sourceId) => deps.remote.sourceAvailable(sourceId),
     resumePlayback: () => deps.settings.get('resumePlayback'),

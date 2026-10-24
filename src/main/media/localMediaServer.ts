@@ -17,7 +17,12 @@ export class LocalMediaServer {
 
   constructor() {
     this.token = randomToken(24)
-    this.server = http.createServer((request, response) => this.handle(request, response))
+    this.server = http.createServer((request, response) => {
+      void this.handle(request, response).catch(() => {
+        if (!response.headersSent) response.writeHead(500)
+        response.end()
+      })
+    })
     this.portReady = new Promise((resolve) => {
       this.server.listen(0, '127.0.0.1', () => {
         this._port = (this.server.address() as AddressInfo).port
@@ -28,7 +33,7 @@ export class LocalMediaServer {
 
   get port(): number { return this._port }
 
-  private handle(request: http.IncomingMessage, response: http.ServerResponse): void {
+  private async handle(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       response.writeHead(405, { Allow: 'GET, HEAD' })
       response.end()
@@ -48,7 +53,7 @@ export class LocalMediaServer {
     }
     let stats: fs.Stats
     try {
-      stats = fs.statSync(filePath)
+      stats = await fs.promises.stat(filePath)
     } catch {
       response.writeHead(404)
       response.end()

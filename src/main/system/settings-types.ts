@@ -1,13 +1,15 @@
 export interface AppSettingsData {
   language: 'en' | 'zh'
   accentIndex: number
-  themeStyle: 'classic' | 'tahoe'
+  themeStyle: 'classic'
   appIcon: string
   fontFamily: string
   fontSize: 12 | 13 | 14 | 15 | 16
   reducedMotion: boolean
   reduceTransparency: boolean
   startupAnimationEnabled: boolean
+  backgroundImageEnabled: boolean
+  backgroundImage: string
   playbackVolume: number
   resumePlayback: boolean
   performanceHudEnabled: boolean

@@ -6,7 +6,7 @@ import path from 'path'
 import { E, I } from '../../shared/channels'
 import { MEDIA_EXTS } from '../../shared/types'
 import type { AppSettingsData } from './settings-types'
-import { TAHOE_WINDOW_BACKGROUND, colorThemeAt, normalizeColorThemeIndex } from '../../shared/colorThemes'
+import { colorThemeAt, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import type { CredentialStore } from '../remote/credentials'
 import { makeAppIcon } from '../util'
 
@@ -43,9 +43,11 @@ const defaults: AppSettingsData = {
   reducedMotion: false,
   reduceTransparency: false,
   startupAnimationEnabled: true,
+  backgroundImageEnabled: false,
+  backgroundImage: '',
   playbackVolume: 80,
   resumePlayback: true,
-  performanceHudEnabled: true,
+  performanceHudEnabled: false,
   autoplayNextMedia: true,
   navigationPlayPrimaryAction: 'open-player',
   rememberPlaybackPosition: true,
@@ -102,7 +104,14 @@ export class SettingsStore {
         ;(this.data as unknown as Record<string, unknown>)[k] = v
       }
     }
-    if (changed) this.persist(true)
+    if (changed) this.persist()
+  }
+
+  flush(): void {
+    if (!this.saveTimer) return
+    clearTimeout(this.saveTimer)
+    this.saveTimer = null
+    this.writeToDisk()
   }
 
   private persist(immediate = false): void {
@@ -160,9 +169,9 @@ export class AppSettings {
   }
 
   private applySystemEffects(key: keyof AppSettingsData): void {
-    if (key === 'accentIndex' || key === 'themeStyle') {
+    if (key === 'accentIndex') {
       const win = BrowserWindow.getAllWindows()[0]
-      win?.setBackgroundColor(this.store.get('themeStyle') === 'tahoe' ? TAHOE_WINDOW_BACKGROUND : colorThemeAt(1).windowBackground)
+      win?.setBackgroundColor(colorThemeAt(this.store.get('accentIndex')).windowBackground)
     }
     if (key === 'appIcon') {
       const icon = nativeImage.createFromBuffer(makeAppIcon(256, this.store.get('appIcon')))
@@ -182,13 +191,14 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   const raw = input as Record<string, unknown>
   const result: Partial<AppSettingsData> = {}
   if (raw.language === 'en' || raw.language === 'zh') result.language = raw.language
-  if (raw.themeStyle === 'classic' || raw.themeStyle === 'tahoe') result.themeStyle = raw.themeStyle
+  result.themeStyle = 'classic'
   if (Number.isFinite(raw.accentIndex)) result.accentIndex = normalizeColorThemeIndex(Number(raw.accentIndex))
   if (typeof raw.appIcon === 'string') result.appIcon = raw.appIcon
+  if (typeof raw.backgroundImage === 'string') result.backgroundImage = raw.backgroundImage
   if (typeof raw.fontFamily === 'string') result.fontFamily = raw.fontFamily
   if ([12, 13, 14, 15, 16].includes(Number(raw.fontSize))) result.fontSize = Number(raw.fontSize) as AppSettingsData['fontSize']
   if (Number.isFinite(raw.playbackVolume)) result.playbackVolume = Math.max(0, Math.min(100, Math.round(Number(raw.playbackVolume))))
-  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'proxyEnabled', 'proxyBypassLocal'] as const) {
+  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'backgroundImageEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'proxyEnabled', 'proxyBypassLocal'] as const) {
     if (typeof raw[key] === 'boolean') result[key] = raw[key]
   }
   if (raw.navigationPlayPrimaryAction === 'open-player' || raw.navigationPlayPrimaryAction === 'toggle-playback') result.navigationPlayPrimaryAction = raw.navigationPlayPrimaryAction
@@ -226,5 +236,31 @@ export async function pickFolder(win: BrowserWindow): Promise<string | null> {
     properties: ['openDirectory']
   })
   return res.canceled ? null : res.filePaths[0] ?? null
+}
+
+const BACKGROUND_IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif']
+
+export async function pickBackgroundImage(win: BrowserWindow, backgroundsDir: string): Promise<string | null> {
+  const { dialog } = await import('electron')
+  const res = await dialog.showOpenDialog(win, {
+    title: 'Choose Background Image',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: BACKGROUND_IMAGE_EXTS },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+  const source = res.canceled ? null : res.filePaths[0] ?? null
+  if (!source) return null
+  try {
+    fs.mkdirSync(backgroundsDir, { recursive: true })
+    const ext = (path.extname(source).toLowerCase() || '.png').replace(/[^a-z0-9.]/g, '')
+    const name = `background_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`
+    const dest = path.join(backgroundsDir, name)
+    fs.copyFileSync(source, dest)
+    return dest
+  } catch {
+    return null
+  }
 }
 

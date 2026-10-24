@@ -110,6 +110,21 @@ export class LibraryRepository {
     return rowToMedia(row)
   }
 
+  findByIds(ids: number[]): MediaItem[] {
+    const unique = [...new Set(ids)].filter((id) => Number.isSafeInteger(id))
+    if (!unique.length) return []
+    const items: MediaItem[] = []
+    for (let offset = 0; offset < unique.length; offset += 500) {
+      const chunk = unique.slice(offset, offset + 500)
+      const rows = this.db.prepare(`SELECT * FROM media WHERE id IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Record<string, unknown>[]
+      for (const row of rows) {
+        const item = rowToMedia(row)
+        if (item) items.push(item)
+      }
+    }
+    return items
+  }
+
   findByUrl(url: string): MediaItem | null {
     const row = this.db.prepare('SELECT * FROM media WHERE url = ?').get(url) as Record<string, unknown> | undefined
     return rowToMedia(row)
@@ -202,10 +217,10 @@ export class LibraryRepository {
     return changed
   }
 
-  updatePlaybackState(mediaId: number, position: number, duration: number): void {
+  updatePlaybackProgress(mediaId: number, position: number, duration: number): void {
     this.db
-      .prepare('UPDATE media SET last_position = ?, duration = ?, last_played_at = ? WHERE id = ?')
-      .run(position, duration, Date.now(), mediaId)
+      .prepare('UPDATE media SET last_position = ?, duration = ? WHERE id = ?')
+      .run(position, duration, mediaId)
   }
 
   updateUrl(id: number, newUrl: string): void {
@@ -264,11 +279,22 @@ export class LibraryRepository {
   }
 
   loadPlaylists(): { id: number; name: string; createdAt: number; mediaIds: number[] }[] {
-    const rows = this.db.prepare('SELECT * FROM playlists ORDER BY created_at DESC').all() as { id: number; name: string; created_at: number }[]
-    return rows.map((r) => {
-      const entries = this.db.prepare('SELECT media_id FROM playlist_entries WHERE playlist_id = ? ORDER BY position').all(r.id) as { media_id: number }[]
-      return { id: r.id, name: r.name, createdAt: r.created_at, mediaIds: entries.map((e) => e.media_id) }
-    })
+    const rows = this.db.prepare(
+      `SELECT p.id, p.name, p.created_at, pe.media_id
+       FROM playlists p
+       LEFT JOIN playlist_entries pe ON pe.playlist_id = p.id
+       ORDER BY p.created_at DESC, pe.position`
+    ).all() as { id: number; name: string; created_at: number; media_id: number | null }[]
+    const playlists = new Map<number, { id: number; name: string; createdAt: number; mediaIds: number[] }>()
+    for (const row of rows) {
+      let playlist = playlists.get(row.id)
+      if (!playlist) {
+        playlist = { id: row.id, name: row.name, createdAt: row.created_at, mediaIds: [] }
+        playlists.set(row.id, playlist)
+      }
+      if (row.media_id != null) playlist.mediaIds.push(row.media_id)
+    }
+    return [...playlists.values()]
   }
 
   createPlaylist(name: string): number {

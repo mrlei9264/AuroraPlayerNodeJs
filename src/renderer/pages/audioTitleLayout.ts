@@ -1,5 +1,5 @@
 export const AUDIO_TITLE_ACTIVE_SCALE = 1
-export const AUDIO_TITLE_INACTIVE_SCALE = 0.56
+export const AUDIO_TITLE_INACTIVE_SCALE = 0.7
 export const AUDIO_TITLE_FOCUS_RATIO = 0.32
 export const AUDIO_TITLE_GLYPH_GAP = 2
 

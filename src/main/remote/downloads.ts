@@ -19,6 +19,7 @@ export class DownloadManager {
   private active = new Map<number, Set<ActivePart>>()
   private progressTicks = new Map<number, { at: number; bytes: number }>()
   private throttleSlots = new Map<number, number>()
+  private lastPersistAt = 0
   private options: DownloadOptions = { threadCount: 4, speedLimitMbps: 0 }
 
   constructor(
@@ -97,8 +98,12 @@ export class DownloadManager {
     return this.options
   }
 
-  private emit(): void {
-    this.persistTasks()
+  private emit(forcePersist = true): void {
+    const now = Date.now()
+    if (forcePersist || now - this.lastPersistAt >= 5000) {
+      this.lastPersistAt = now
+      this.persistTasks()
+    }
     this.broadcast(E.downloadsChanged, this.tasks.map((task) => ({ ...task, segments: task.segments.map((segment) => ({ ...segment })) })))
   }
 
@@ -301,7 +306,7 @@ export class DownloadManager {
     if (force || now - tick.at >= 600) {
       task.speedBps = Math.max(0, Math.round((task.bytesDone - tick.bytes) * 1000 / Math.max(1, now - tick.at)))
       this.progressTicks.set(task.id, { at: now, bytes: task.bytesDone })
-      this.emit()
+      this.emit(false)
     }
   }
 

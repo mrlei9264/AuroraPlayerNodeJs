@@ -13,6 +13,7 @@ export interface AppDataPaths {
   diagnosticsTemp: string
   diagnostics: string
   downloads: string
+  backgrounds: string
   runtime: string
   settingsFile: string
   databaseFile: string
@@ -36,6 +37,7 @@ export function initializeAppDataPaths(): AppDataPaths {
     diagnosticsTemp: path.join(root, 'temp', 'diagnostics'),
     diagnostics: path.join(root, 'diagnostics'),
     downloads: path.join(root, 'downloads'),
+    backgrounds: path.join(root, 'backgrounds'),
     runtime: path.join(root, 'runtime'),
     settingsFile: path.join(root, 'config', 'settings.json'),
     databaseFile: path.join(root, 'database', 'library.db'),
@@ -44,7 +46,7 @@ export function initializeAppDataPaths(): AppDataPaths {
     sourcesFile: path.join(root, 'config', 'remote-sources.json')
   }
 
-  for (const directory of [paths.root, paths.config, paths.database, paths.security, paths.logs, paths.temp, paths.covers, paths.diagnosticsTemp, paths.diagnostics, paths.downloads, paths.runtime]) {
+  for (const directory of [paths.root, paths.config, paths.database, paths.security, paths.logs, paths.temp, paths.covers, paths.diagnosticsTemp, paths.diagnostics, paths.downloads, paths.backgrounds, paths.runtime]) {
     fs.mkdirSync(directory, { recursive: true })
   }
 

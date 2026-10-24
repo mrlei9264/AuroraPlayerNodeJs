@@ -12,7 +12,7 @@ const SettingsPage = lazy(() => import('./pages/settings').then((module) => ({ d
 const VideoPlayerPage = lazy(() => import('./pages/playerVideo').then((module) => ({ default: module.VideoPlayerPage })))
 const MusicPlayerPage = lazy(() => import('./pages/playerMusic').then((module) => ({ default: module.MusicPlayerPage })))
 const MediaDetailsPage = lazy(() => import('./pages/mediaDetails').then((module) => ({ default: module.MediaDetailsPage })))
-import { applyTypographySettings } from './core/appearance'
+import { applyBackgroundImage, applyTypographySettings } from './core/appearance'
 import { StartupAnimation } from './shell/startupAnimation'
 const MotionLabPage = lazy(() => import('./pages/motionLab').then((module) => ({ default: module.MotionLabPage })))
 import { TahoeLighting } from './shared/tahoeLighting'
@@ -53,7 +53,8 @@ function ShellInner() {
   useEffect(() => {
     if (!settings) return
     applyTypographySettings(settings)
-  }, [settings?.fontFamily, settings?.fontSize])
+    applyBackgroundImage(settings)
+  }, [settings?.fontFamily, settings?.fontSize, settings?.backgroundImageEnabled, settings?.backgroundImage])
 
   useEffect(() => {
     if (!settings) return
@@ -62,11 +63,6 @@ function ShellInner() {
 
   useEffect(() => {
     const manageGlobalKeyboardFocus = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') {
-        if (event.target instanceof HTMLElement && event.target.closest('.theme-choices, .theme-settings-popover, .theme-settings-button')) return
-        event.preventDefault()
-        return
-      }
       if (event.key !== 'Escape') return
       window.requestAnimationFrame(() => {
         const focused = document.activeElement

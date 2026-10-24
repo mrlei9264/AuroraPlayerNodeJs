@@ -13,28 +13,29 @@ export interface ParsedTags {
   lyrics?: string
 }
 
-function readHead(p: string, n: number): Buffer {
-  const fd = fs.openSync(p, 'r')
+async function readHead(p: string, n: number): Promise<Buffer> {
+  const handle = await fs.promises.open(p, 'r')
   try {
-    const size = Math.min(n, fs.statSync(p).size)
+    const { size: fileSize } = await handle.stat()
+    const size = Math.min(n, fileSize)
     const buf = Buffer.alloc(size)
-    fs.readSync(fd, buf, 0, size, 0)
+    await handle.read(buf, 0, size, 0)
     return buf
   } finally {
-    fs.closeSync(fd)
+    await handle.close()
   }
 }
 
-function readTail(p: string, n: number): Buffer {
-  const fd = fs.openSync(p, 'r')
+async function readTail(p: string, n: number): Promise<Buffer> {
+  const handle = await fs.promises.open(p, 'r')
   try {
-    const fileSize = fs.statSync(p).size
+    const { size: fileSize } = await handle.stat()
     const size = Math.min(n, fileSize)
     const buf = Buffer.alloc(size)
-    fs.readSync(fd, buf, 0, size, fileSize - size)
+    await handle.read(buf, 0, size, fileSize - size)
     return buf
   } finally {
-    fs.closeSync(fd)
+    await handle.close()
   }
 }
 
@@ -408,13 +409,13 @@ function parseWav(buf: Buffer): number | undefined {
   return undefined
 }
 
-export function probeTags(p: string): ParsedTags {
+export async function probeTags(p: string): Promise<ParsedTags> {
   try {
-    const head = readHead(p, 4 * 1024 * 1024)
+    const head = await readHead(p, 4 * 1024 * 1024)
     if (head.length < 16) return {}
     const tags = probeTagsFromBuffer(head)
     if (path.extname(p).toLowerCase() !== '.mp3' || tags.title || tags.artist || tags.album) return tags
-    return { ...parseId3v1(readTail(p, 128)), ...tags }
+    return { ...parseId3v1(await readTail(p, 128)), ...tags }
   } catch {
     return {}
   }
@@ -518,9 +519,9 @@ function probeMp3Duration(p: string, skip: number): number | undefined {
   }
 }
 
-export function probeEmbeddedLyrics(p: string): string | undefined {
+export async function probeEmbeddedLyrics(p: string): Promise<string | undefined> {
   try {
-    const head = readHead(p, 1 * 1024 * 1024)
+    const head = await readHead(p, 1 * 1024 * 1024)
     if (head.toString('ascii', 0, 3) === 'ID3') {
       const { frames } = parseId3(head)
       const uslt = frames.get('USLT')
@@ -544,120 +545,4 @@ export function probeEmbeddedLyrics(p: string): string | undefined {
   } catch {
     return undefined
   }
-}
-
-const mkId = (buf: Buffer, off: number): number => {
-  const b = buf[off]
-  if (b < 0x80) return b
-  let id = b & 0x7f
-  let i = off + 1
-  while (i < off + 4 && i < buf.length) {
-    const nb = buf[i]
-    id = (id << 8) | (nb & 0x7f)
-    if (nb < 0x80) break
-    i++
-  }
-  return id
-}
-
-const mkSize = (buf: Buffer, off: number): number => {
-  let size = 0
-  let i = off
-  for (; i < off + 8 && i < buf.length; i++) {
-    const b = buf[i]
-    size = size * 128 + (b & 0x7f)
-    if (b < 0x80) break
-  }
-  return size
-}
-
-const CH_ID = 0x1043a770
-const EDITION_ID = 0x45b9
-const ATOM_ID = 0xb6
-const TSTART_ID = 0x33
-const TEND_ID = 0x45a3
-const DISPLAY_ID = 0x80
-const STRING_ID = 0x85
-const LANG_ID = 0x437c
-
-export function probeMkvChapters(p: string): { title: string; time: number; duration: number }[] {
-  try {
-    const st = fs.statSync(p)
-    const total = st.size
-    const fd = fs.openSync(p, 'r')
-    try {
-      const CH = Buffer.from([0x10, 0x43, 0xa7, 0x70])
-      const chunk = 4 * 1024 * 1024
-      let pos = 0
-      while (pos < total) {
-        const size = Math.min(chunk, total - pos)
-        const buf = Buffer.alloc(size)
-        fs.readSync(fd, buf, 0, size, pos)
-        let hit = buf.indexOf(CH)
-        while (hit >= 0) {
-          let off = hit + 4
-          const chaptersSize = mkSize(buf, off)
-          off += 1 + (buf[off] < 0x80 ? 0 : buf[off] < 0x4000 ? 1 : buf[off] < 0x200000 ? 2 : 3)
-          const end = Math.min(buf.length, off + chaptersSize)
-          const chapters = walkChapters(buf, off, end)
-          if (chapters.length) return chapters
-          hit = buf.indexOf(CH, hit + 1)
-        }
-        pos += size - 8
-      }
-      return []
-    } finally {
-      fs.closeSync(fd)
-    }
-  } catch {
-    return []
-  }
-}
-
-function walkChapters(buf: Buffer, start: number, end: number): { title: string; time: number; duration: number }[] {
-  const out: { title: string; time: number; duration: number }[] = []
-  let off = start
-  while (off + 2 <= end) {
-    const id = mkId(buf, off)
-    off += id < 0x80 ? 1 : id < 0x4000 ? 2 : id < 0x200000 ? 3 : 4
-    const size = mkSize(buf, off)
-    off += 1
-    if (off + size > end) break
-    const childStart = off
-    if (id === EDITION_ID) {
-      out.push(...walkChapters(buf, childStart, childStart + size))
-    } else if (id === ATOM_ID) {
-      let time = -1
-      let dur = 0
-      let title = ''
-      let p = childStart
-      while (p + 2 <= childStart + size) {
-        const cid = mkId(buf, p)
-        p += cid < 0x80 ? 1 : cid < 0x4000 ? 2 : cid < 0x200000 ? 3 : 4
-        const csize = mkSize(buf, p)
-        p += 1
-        if (p + csize > childStart + size) break
-        if (cid === TSTART_ID && csize >= 8) {
-          time = Number(buf.readBigUInt64BE(p)) / 1e9
-        } else if (cid === TEND_ID && csize >= 8) {
-          dur = Number(buf.readBigUInt64BE(p)) / 1e9 - time
-        } else if (cid === DISPLAY_ID) {
-          let q = p
-          while (q + 2 <= p + csize) {
-            const did = mkId(buf, q)
-            q += did < 0x80 ? 1 : did < 0x4000 ? 2 : did < 0x200000 ? 3 : 4
-            const dsize = mkSize(buf, q)
-            q += 1
-            if (q + dsize > p + csize) break
-            if (did === STRING_ID) title = buf.toString('utf8', q, q + dsize).trim()
-            q += dsize
-          }
-        }
-        p += csize
-      }
-      if (time >= 0) out.push({ title: title || `Chapter ${out.length + 1}`, time, duration: dur })
-    }
-    off = childStart + size
-  }
-  return out
 }

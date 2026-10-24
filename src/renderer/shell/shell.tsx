@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../core/icons'
 import { I } from '../../shared/channels'
 import type { MediaItem, NavState, Section } from '../../shared/types'
 import { coverUrl } from '../core/player'
-import { formatTime } from '../../shared/types'
+import { displayMediaTitle, formatTime } from '../../shared/types'
 import { ProgressSlider } from '../controls/controls'
 import type { AppSettingsData } from '../../main/system/settings-types'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
@@ -126,10 +126,10 @@ export function Sidebar() {
                 type="button"
                 key={item.section}
                 data-section={item.section}
+                data-label={label}
                 className={`nav-item ${active ? 'active' : ''}`}
                 onClick={() => navigate({ section: item.section })}
                 onKeyDown={(event) => activateFromKeyboard(event, () => navigate({ section: item.section }))}
-                title={label}
                 aria-label={label}
                 aria-current={active ? 'page' : undefined}
                 initial={active && magneticSwitching ? magneticButtonInitial(magneticDirectionValue) : false}
@@ -171,9 +171,14 @@ export function Sidebar() {
 
 function HomePlaybackStatus() {
   const { t, session, library, play, togglePlayPause, navigate, settings } = useRuntime()
-  const previewItem = [...library]
-    .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt || b.addedAt - a.addedAt)
-    .find((entry) => !entry.isImage && entry.sourceAvailable)
+  const previewItem = useMemo(() => {
+    let best: MediaItem | null = null
+    for (const entry of library) {
+      if (entry.isImage || !entry.sourceAvailable) continue
+      if (!best || entry.lastPlayedAt > best.lastPlayedAt || (entry.lastPlayedAt === best.lastPlayedAt && entry.addedAt > best.addedAt)) best = entry
+    }
+    return best
+  }, [library])
   const idle = session.idle || session.mediaId == null
   const stateLabel = idle ? t('play') : session.paused ? t('paused') : t('playing')
   const primaryAction = settings?.navigationPlayPrimaryAction ?? 'open-player'
@@ -495,7 +500,7 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
   const { session, library, nav, t, navigate, engine, playNext, playPrevious, togglePlayPause, setVolume, toggleMute, stopPlayback, setFullscreen, win, settings } = useRuntime()
   if (session.idle || session.mediaId == null) return null
   const item = library.find((i) => i.id === session.mediaId)
-  const title = item?.title || item?.fileName || t('appName')
+  const title = item ? displayMediaTitle(item.title, item.fileName) : t('appName')
   const artist = item?.artist || item?.album || ''
   const position = session.position
   const duration = session.duration
@@ -594,9 +599,11 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
 }
 
 export function GlobalShortcuts() {
-  const { togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav } = useRuntime()
+  const { togglePlayPause, setVolume, session, engine, setFullscreen, win, nav } = useRuntime()
   const shortcutVolumeRef = useRef(session.volume)
   shortcutVolumeRef.current = session.volume
+  const shortcutStateRef = useRef({ nav: nav.section, kind: session.kind, mediaId: session.mediaId, fullscreen: win.fullscreen })
+  shortcutStateRef.current = { nav: nav.section, kind: session.kind, mediaId: session.mediaId, fullscreen: win.fullscreen }
 
   useEffect(() => {
     const textEntryTarget = (target: EventTarget | null) => {
@@ -608,36 +615,37 @@ export function GlobalShortcuts() {
     const onKey = (e: KeyboardEvent) => {
       // The video player has richer, page-specific keyboard handling.
       // Avoid processing the same repeated keydown in both shortcut layers.
-      if (nav.section === 'player' && session.kind === 'video') return
+      const state = shortcutStateRef.current
+      if (state.nav === 'player' && state.kind === 'video') return
       if (e.defaultPrevented) return
       if (textEntryTarget(e.target)) return
       if (e.altKey || e.ctrlKey || e.metaKey) return
       if (e.key === ' ') {
         e.preventDefault()
         togglePlayPause()
-      } else if (e.key === 'ArrowRight' && session.mediaId != null) {
+      } else if (e.key === 'ArrowRight' && state.mediaId != null) {
         e.preventDefault()
         engine.seekTo(engine.position() + 10)
-      } else if (e.key === 'ArrowLeft' && session.mediaId != null) {
+      } else if (e.key === 'ArrowLeft' && state.mediaId != null) {
         e.preventDefault()
         engine.seekTo(engine.position() - 10)
-      } else if (e.key === 'ArrowUp' && session.mediaId != null) {
+      } else if (e.key === 'ArrowUp' && state.mediaId != null) {
         e.preventDefault()
         const nextVolume = Math.min(100, shortcutVolumeRef.current + 5)
         shortcutVolumeRef.current = nextVolume
         setVolume(nextVolume)
-      } else if (e.key === 'ArrowDown' && session.mediaId != null) {
+      } else if (e.key === 'ArrowDown' && state.mediaId != null) {
         e.preventDefault()
         const nextVolume = Math.max(0, shortcutVolumeRef.current - 5)
         shortcutVolumeRef.current = nextVolume
         setVolume(nextVolume)
       } else if (e.key === 'f' || e.key === 'F') {
-        void setFullscreen(!win.fullscreen)
+        void setFullscreen(!state.fullscreen)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [togglePlayPause, playNext, playPrevious, setVolume, session, engine, setFullscreen, win, nav.section])
+  }, [togglePlayPause, setVolume, engine, setFullscreen])
   return null
 }
 

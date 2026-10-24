@@ -211,6 +211,7 @@ export class MediaProbeService {
   private audioFeatureCache = new Map<number, MediaAudioFeatures>()
   private durationCache = new Map<number, number>()
   private trackCache = new Map<number, MediaTrackCatalog>()
+  private libraryEmitTimer: ReturnType<typeof setTimeout> | null = null
   private coverDir: string
 
   constructor(
@@ -472,7 +473,7 @@ export class MediaProbeService {
           await this.finishProbe(item, remote)
           this.emitLibrary()
         } else {
-          const tags = probeTags(job.url)
+          const tags = await probeTags(job.url)
           await this.finishProbe(item, tags)
           this.emitLibrary()
         }
@@ -567,7 +568,11 @@ export class MediaProbeService {
   }
 
   private emitLibrary(): void {
-    this.broadcast(E.libraryChanged, this.repo.loadAll())
+    if (this.libraryEmitTimer) return
+    this.libraryEmitTimer = setTimeout(() => {
+      this.libraryEmitTimer = null
+      this.broadcast(E.libraryChanged, this.repo.loadAll())
+    }, 400)
   }
 }
 

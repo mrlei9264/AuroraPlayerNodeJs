@@ -14,9 +14,16 @@ export interface AuroraApi {
   windowClose: () => void
 }
 
+const invokeChannels = new Set<string>(Object.values(I))
+const eventChannels = new Set<string>(Object.values(E))
+
 const api: AuroraApi = {
-  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  invoke: (channel, ...args) => {
+    if (!invokeChannels.has(channel)) return Promise.reject(new Error(`Blocked invoke channel: ${channel}`))
+    return ipcRenderer.invoke(channel, ...args)
+  },
   on: (channel, cb) => {
+    if (!eventChannels.has(channel)) return () => void 0
     const listener = (_e: Electron.IpcRendererEvent, payload: unknown) => cb(payload as never)
     ipcRenderer.on(channel, listener)
     return () => {
@@ -25,7 +32,7 @@ const api: AuroraApi = {
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
   persistSession: (state) => {
-    ipcRenderer.sendSync(I.sessionSync, state)
+    ipcRenderer.send(I.sessionSync, state)
   },
   windowMinimize: () => {
     void ipcRenderer.invoke(I.winMinimize)

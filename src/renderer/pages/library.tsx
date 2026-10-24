@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { p, useLibraryRuntime } from '../core/runtime'
 import { FilledIcon, Icon, type IconName } from '../core/icons'
 import { coverUrl } from '../core/player'
-import { formatBytes, type MediaItem } from '../../shared/types'
+import { displayMediaTitle, formatBytes, type MediaItem } from '../../shared/types'
 import { I } from '../../shared/channels'
 import { collectSimilarVideos } from './libraryCollections'
 import { AudioArtwork } from './mediaArtwork'
@@ -151,10 +151,6 @@ function formatCompactDuration(seconds: number, hour: string, minute: string): s
   const minutes = totalMinutes % 60
   if (hours > 0) return minutes > 0 ? `${hours}${hour} ${minutes}${minute}` : `${hours}${hour}`
   return `${Math.max(1, minutes)}${minute}`
-}
-
-function titleFor(item: MediaItem): string {
-  return item.title || item.fileName
 }
 
 function metadataFor(item: MediaItem, unknownArtist: string, video: string, hour: string, minute: string): string {
@@ -468,7 +464,7 @@ function LibraryPageView() {
       cards.push({
         kind,
         item,
-        title: titleFor(item),
+        title: displayMediaTitle(item.title, item.fileName),
         artwork: item.coverPath ? coverUrl(item.coverPath) : null,
         overlayDuration: formatOverlayDuration(item.duration),
         metadata: metadataFor(item, unknownArtist, videoLabel, hourLabel, minuteLabel)
@@ -753,7 +749,7 @@ function LibraryPageView() {
     const ids = visibleCards.filter((card) => selectedMediaIds.has(card.item.id)).map((card) => card.item.id)
     if (ids.length < 2) return
     const first = library.find((item) => item.id === ids[0])
-    const title = await prompt(t('createCollection'), first ? titleFor(first) : t('mediaCollection'), t('collectionNameHint'), t('create'))
+    const title = await prompt(t('createCollection'), first ? displayMediaTitle(first.title, first.fileName) : t('mediaCollection'), t('collectionNameHint'), t('create'))
     if (!title?.trim()) return
     setCollectionPreference((current) => ({
       ...current,
@@ -937,6 +933,7 @@ function LibraryPageView() {
             <div className="library-view-toggle" role="group" aria-label={t('viewMode')}>
               {(['grid', 'list'] as const).map((mode) => <button type="button" key={mode} className={view === mode ? 'active' : ''} onClick={() => switchLibraryView(mode)} aria-label={t(mode === 'grid' ? 'gridView' : 'listView')} aria-pressed={view === mode}><Icon name={mode} size={18} /></button>)}
             </div>
+            {currentMedia && <button type="button" className="library-action locate" aria-label={t('libraryLocatePlaying')} title={t('libraryLocatePlaying')} onClick={locateCurrent}><Icon name="locate" size={17} /></button>}
             <button type="button" className={`library-action ${selectionMode ? 'active' : ''}`} aria-pressed={selectionMode} onClick={() => selectionMode ? leaveSelectionMode() : setSelectionMode(true)}><Icon name="check" size={16} />{selectionMode ? t('cancelSelection') : t('selectItems')}</button>
           </div>
           {selectionMode ? (
@@ -1040,7 +1037,6 @@ function LibraryPageView() {
         )}
         </div>
       </section>
-      {currentMedia && <button type="button" className="library-locate-fab" aria-label={t('libraryLocatePlaying')} title={t('libraryLocatePlaying')} onClick={locateCurrent}><Icon name="locate" size={21} /></button>}
     </main>
   )
 }

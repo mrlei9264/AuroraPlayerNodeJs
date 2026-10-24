@@ -353,6 +353,7 @@ export class LibraryController {
   }
 
   itemsByIds(ids: number[]): MediaItem[] {
-    return ids.map((id) => this.repo.findById(id)).filter((x): x is MediaItem => !!x && !x.isImage)
+    const items = new Map(this.repo.findByIds(ids).map((item) => [item.id, item]))
+    return ids.map((id) => items.get(id)).filter((x): x is MediaItem => !!x && !x.isImage)
   }
 }

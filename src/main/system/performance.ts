@@ -94,7 +94,7 @@ export class PerformanceMonitor {
 
   private sampleWindowsMetrics(processIds: number[]): void {
     const now = Date.now()
-    if (!processIds.length || this.windowsMetricsBusy || now - this.lastWindowsMetricsAt < 2000) return
+    if (!processIds.length || this.windowsMetricsBusy || now - this.lastWindowsMetricsAt < 5000) return
     this.windowsMetricsBusy = true
     const pidList = processIds.filter((pid) => Number.isInteger(pid) && pid > 0).join(',')
     const script = [

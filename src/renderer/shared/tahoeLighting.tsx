@@ -1,8 +1,8 @@
 import React, { memo, useEffect, useRef } from 'react'
 
-const PANELS = '.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-browser-shell, .media-details-panel, .theme-settings-popover, .dialog, .audio-transport-controls'
-const CONTROLS = '.nav-item, .theme-choice, .network-source-card, .home-playback-toggle, .audio-play-control'
-const DEPTH_TARGETS = '.nav-icon, .theme-choice-swatch, .network-source-symbol, .home-playback-icon'
+const PANELS = '.settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-browser-shell, .media-details-panel, .theme-settings-popover, .dialog, .audio-transport-controls'
+const CONTROLS = '.network-source-card, .audio-play-control'
+const DEPTH_TARGETS = '.network-source-symbol, .home-playback-icon'
 const PROPERTIES = ['--glass-x', '--glass-y', '--glass-energy', '--glass-angle', '--glass-axis-x', '--glass-axis-y', '--glass-lift', '--glass-shadow-x']
 
 interface LitSurface {

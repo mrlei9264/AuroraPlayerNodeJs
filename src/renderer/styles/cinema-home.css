@@ -4,13 +4,26 @@
 #root:has(.cinema-home-shell) > .tahoe-light-scene { display: none; }
 #root:has(.cinema-library-shell) { background: var(--cinema-navy); }
 #root:has(.cinema-library-shell) > .tahoe-light-scene { display: none; }
+:root.custom-background #root:has(.cinema-home-shell),
+:root.custom-background #root:has(.cinema-library-shell) {
+  background:
+    linear-gradient(rgb(8 16 28 / .45), rgb(8 16 28 / .65)),
+    var(--custom-background-image, none) center / cover no-repeat,
+    var(--cinema-navy);
+}
 .cinematic-background {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: #081321 url('../assets/ui/cinematic-background.png') center center / cover no-repeat;
+  background: transparent;
   contain: strict;
+}
+:root.custom-background .cinematic-background {
+  background:
+    linear-gradient(rgb(8 16 28 / .45), rgb(8 16 28 / .65)),
+    var(--custom-background-image, none) center center / cover no-repeat,
+    var(--cinema-navy);
 }
 #root .shell.cinema-home-shell { padding-right: clamp(28px, 3.15vw, 60px); background: transparent; }
 #root .cinema-home-shell .main { background: transparent; min-width: 0; }
@@ -72,6 +85,47 @@
   width: min(73%, 1000px);
   z-index: 3;
 }
+#root .home-page .cinema-hero-art {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(55%, 780px);
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent 0, #000 24%, #000 100%);
+}
+#root .home-page .cinema-hero-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    linear-gradient(90deg, #061525 0%, #061525cc 12%, #06152570 34%, transparent 68%),
+    linear-gradient(0deg, #061525 0%, #06152599 18%, transparent 55%);
+}
+#root .home-page .cinema-hero-art .cinema-audio-artwork { z-index: 3; opacity: .9; }
+#root .home-page .cinema-hero-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: .6;
+  filter: brightness(.72) saturate(.92) contrast(1.08);
+  transform: scale(1.02);
+}
+#root .home-page .cinema-hero-art-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #9adfff;
+  background:
+    radial-gradient(circle at 62% 48%, #1b5b7a66, transparent 58%),
+    linear-gradient(120deg, #0a2036, #061321);
+}
+#root .home-page .cinema-hero-art-fallback > svg { opacity: .48; }
 #root .home-page :is(.cinema-title-block, .cinema-meta, .cinema-actions, .cinema-rail) { opacity: 1; animation: none; }
 #root .home-page .cinema-copy h1 {
   display: block;
@@ -89,7 +143,7 @@
   width: clamp(80px, 6vw, 110px);
   height: 2px;
   margin-top: 12px;
-  background: #f4d38a;
+  background: var(--accent-end);
   opacity: .9;
   transform: none;
   animation: none;
@@ -127,8 +181,8 @@
 }
 #root .home-page .cinema-resume:hover { transform: translateY(-2px); filter: brightness(1.08); }
 #root .home-page .cinema-resume:active { transform: translateY(0); }
-.cinema-motto { position: absolute; top: 25%; right: 2.8%; display: flex; flex-direction: column; gap: 10px; z-index: 2; color: #dfd2b18c; font-size: 14px; font-weight: 400; letter-spacing: .28em; }
-.cinema-motto i { width: 36px; height: 1px; margin-top: 16px; background: #f4d38a; }
+.cinema-motto { position: absolute; top: 25%; right: 2.8%; display: flex; flex-direction: column; gap: 10px; z-index: 2; color: color-mix(in srgb, var(--fg0) 58%, transparent); font-size: 14px; font-weight: 400; letter-spacing: .28em; text-shadow: 0 2px 12px #000c; }
+.cinema-motto i { width: 36px; height: 1px; margin-top: 16px; background: var(--accent-end); }
 #root .home-page .cinema-rail {
   margin-top: 24px;
   padding: 15px 0 0 clamp(20px, 2.5vw, 40px);
@@ -164,8 +218,8 @@
 #root .home-page .cinema-card-image img { opacity: 1; object-fit: cover; transform: none; filter: none; }
 #root .home-page .cinema-card:hover .cinema-card-image { border-color: #b4e3ff; }
 #root .home-page .cinema-card.is-featured .cinema-card-image {
-  border: 2px solid #f4d38a;
-  box-shadow: inset 0 0 0 1px #fff2, 0 0 20px #f4d38a2e, 0 0 42px #ffd36a14 !important;
+  border: 2px solid var(--accent);
+  box-shadow: inset 0 0 0 1px #fff2, 0 0 20px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 42px color-mix(in srgb, var(--accent) 10%, transparent) !important;
 }
 #root .home-page .cinema-card-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 12px; font-size: calc(clamp(14px, 1.02vw, 17px) * var(--font-scale, 1)); line-height: 1.5; font-weight: 400; color: #f5f8ff; }
 #root .home-page .cinema-card-track { left: 13px; right: 13px; bottom: 14px; height: 6px; border-radius: 6px; background: #b4c8dc59; z-index: 4; overflow: hidden; }
@@ -197,6 +251,13 @@
   #root .home-page .cinema-copy { top: 18%; }
   #root .home-page .cinema-actions { margin-top: 25px; }
   #root .home-page .cinema-rail { margin-top: 20px; padding-top: 12px; }
+}
+@media (max-height: 700px) {
+  #root .home-page { padding-top: 64px; }
+  #root .home-page .cinema-hero { height: clamp(290px, 52vh, 335px); min-height: calc(290px * var(--font-scale, 1)); }
+  #root .home-page .cinema-copy { top: 16%; }
+  #root .home-page .cinema-actions { margin-top: 18px; }
+  #root .home-page .cinema-rail { margin-top: 16px; padding-top: 10px; }
 }
 @media (max-width: 1199px) {
   #root .home-page .cinema-card-grid { display: flex; overflow-x: auto; gap: 18px; padding: 4px 4px 18px; margin: -4px; scroll-snap-type: x proximity; }

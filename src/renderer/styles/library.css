@@ -412,6 +412,9 @@
   background: color-mix(in srgb, var(--accent) 9%, var(--library-panel));
   padding-inline: 14px;
 }
+:root .library-workspace .library-action.locate {
+  width: 38px; padding: 0; border-radius: 50%; color: var(--accent-end);
+}
 :root .library-workspace .library-action:hover,
 :root .library-workspace .library-source-filter:hover { filter: brightness(1.12); }
 :root .library-workspace .library-category-nav {
@@ -478,21 +481,10 @@
 :root .library-workspace .list-view .library-source-bookmark { right: 5px; max-width: none; padding: 5px 4px 9px; }
 :root .library-workspace .list-view .library-source-bookmark > span { display: none; }
 :root .library-workspace .list-view .library-source-bookmark::before { transform: translate(2px, 2px); }
-.library-locate-fab {
-  position: absolute; right: clamp(26px, 3vw, 48px); bottom: 24px; z-index: 55;
-  display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--fg0) 17%, transparent);
-  background: color-mix(in srgb, var(--library-raised) 90%, transparent); color: var(--fg0);
-  backdrop-filter: blur(18px); box-shadow: 0 6px 22px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.06);
-  transition: background 160ms, transform 160ms, box-shadow 160ms;
-}
-.library-locate-fab:hover { background: var(--library-raised); transform: translateY(-2px); box-shadow: 0 8px 26px rgba(0,0,0,.3); }
-.library-locate-fab:active { transform: scale(.96); }
 @media (hover: none) { :root .library-workspace .library-card-actions > button { opacity: .8; } }
 @media (max-width: 820px) {
   :root .library-workspace .library-category-nav button { flex: 1; padding-inline: 10px; }
   :root .library-workspace .list-view .library-file-details { gap: 8px; }
-  .library-locate-fab { right: 26px; bottom: 20px; }
 }
 
 /* Cinematic library treatment. The existing toolbar controls and navigation remain intact. */
@@ -502,7 +494,7 @@
   --library-raised: rgb(17 55 84 / .76);
   --library-edge: rgb(133 207 255 / .28);
   --library-edge-hover: rgb(154 220 255 / .56);
-  --library-selection-edge: rgb(244 211 138 / .82);
+  --library-selection-edge: color-mix(in srgb, var(--accent) 76%, var(--fg0));
   --library-focus: rgb(169 226 255 / .95);
   color: #f2f7ff;
   background: transparent;
@@ -605,9 +597,9 @@
 }
 #root .cinema-library-shell .library-file-card:hover .library-file-art { border-color: rgb(164 224 255 / .72); box-shadow: inset 0 0 0 1px rgb(164 224 255 / .16), 0 7px 18px rgb(0 0 0 / .18); }
 #root .cinema-library-shell .library-file-card.selected,
-#root .cinema-library-shell .library-file-card.is-current { border-color: rgb(244 211 138 / .76); box-shadow: 0 14px 34px rgb(0 0 0 / .22), 0 0 22px rgb(244 211 138 / .16), inset 0 1px 0 rgb(255 246 208 / .18); }
+#root .cinema-library-shell .library-file-card.is-current { border-color: color-mix(in srgb, var(--accent) 76%, var(--border)); box-shadow: 0 14px 34px rgb(0 0 0 / .22), 0 0 22px color-mix(in srgb, var(--accent) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--accent-end) 18%, transparent); }
 #root .cinema-library-shell .library-file-card.selected .library-file-art,
-#root .cinema-library-shell .library-file-card.is-current .library-file-art { border-color: #f4d38a; box-shadow: inset 0 0 0 1px #f4d38a, 0 0 19px rgb(244 211 138 / .23); }
+#root .cinema-library-shell .library-file-card.is-current .library-file-art { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 19px color-mix(in srgb, var(--accent) 24%, transparent); }
 #root .cinema-library-shell .library-file-card .library-file-copy { padding: 12px 58px 0 13px; gap: 4px; }
 #root .cinema-library-shell .library-file-title { color: #f2f7ff; font-size: calc(16px * var(--font-scale, 1)); font-weight: 600; }
 #root .cinema-library-shell .library-file-meta { color: rgb(170 204 226 / .83); font-size: calc(13px * var(--font-scale, 1)); }

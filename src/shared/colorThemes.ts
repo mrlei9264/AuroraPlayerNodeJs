@@ -1,8 +1,5 @@
 export type ColorThemeId = 'aurora' | 'neon-cyan' | 'neon-gold' | 'emerald' | 'rose'
 
-/** Shared by the native window, renderer and player to avoid dark seams. */
-export const TAHOE_WINDOW_BACKGROUND = '#f8fbff'
-
 export interface ColorThemeDefinition {
   /** Persisted preference key, independent of the order in the picker. */
   index: number

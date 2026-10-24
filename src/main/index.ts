@@ -6,13 +6,13 @@ import path from 'path'
 import os from 'os'
 import { pathToFileURL } from 'url'
 import { E, I } from '../shared/channels'
-import type { MediaItem, PlayPlan, PlayRequest, SessionState } from '../shared/types'
+import type { MediaItem } from '../shared/types'
 import { openDatabase } from './library/db'
 import { LibraryRepository } from './library/repository'
 import { LibraryController } from './library/controller'
 import { ManagedFolderController } from './library/managedFolders'
 import { QueueController, PlaylistController } from './playback/queue'
-import { PlaybackLaunchPlanner, PlaybackQueueCoordinator } from './playback/planner'
+import { PlaybackLaunchPlanner } from './playback/planner'
 import { SettingsStore } from './system/settings'
 import { AppSettings } from './system/settings'
 import { Logger, DiagnosticsController, UpdateChecker } from './system/diagnostics'
@@ -25,13 +25,13 @@ import { RemoteStreamProxy } from './remote/proxy'
 import { DownloadManager } from './remote/downloads'
 import { MediaProbeService } from './media/probe'
 import { LyricsService } from './media/lyrics'
-import { PlaybackIpc, makePlannerDeps } from './ipc'
+import { PlaybackIpc, makePlannerDeps, setBackgroundsDir } from './ipc'
 import { makeAppIcon } from './util'
 import { LocalMediaServer } from './media/localMediaServer'
 import type { AppSettingsData } from './system/settings-types'
 import { initializeAppDataPaths, type AppDataPaths } from './system/dataPaths'
 import { NotificationHistoryStore } from './system/notifications'
-import { TAHOE_WINDOW_BACKGROUND, colorThemeAt } from '../shared/colorThemes'
+import { colorThemeAt } from '../shared/colorThemes'
 import { applyNetworkProxy, installProxyAuthentication } from './system/networkProxy'
 import electronMpvPackage from 'electron-mpv-video/package.json'
 
@@ -51,7 +51,6 @@ let folders: ManagedFolderController
 let queueCtrl: QueueController
 let playlistsCtrl: PlaylistController
 let planner: PlaybackLaunchPlanner
-let coordinator: PlaybackQueueCoordinator
 let remote: RemoteSourceManager
 let proxy: RemoteStreamProxy
 let downloads: DownloadManager
@@ -76,7 +75,7 @@ const broadcast = (channel: string, payload: unknown) => {
 }
 
 function createWindow(): void {
-  const colorTheme = colorThemeAt(1)
+  const colorTheme = colorThemeAt(settingsStore.get('accentIndex'))
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -84,7 +83,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     frame: false,
-    backgroundColor: settingsStore.get('themeStyle') === 'tahoe' ? TAHOE_WINDOW_BACKGROUND : colorTheme.windowBackground,
+    backgroundColor: colorTheme.windowBackground,
     icon: nativeImage.createFromBuffer(makeAppIcon(256, settingsStore.get('appIcon'))),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -263,8 +262,6 @@ async function bootstrap(): Promise<void> {
       fileExists: fs.existsSync
     })
   )
-  coordinator = new PlaybackQueueCoordinator()
-
   lyrics = new LyricsService(
     (title, msg) => broadcast(E.notify, { kind: 'info', title, message: msg }),
     async (sourceId, remotePath) => {
@@ -309,10 +306,8 @@ async function bootstrap(): Promise<void> {
   const playbackIpc = new PlaybackIpc({
     repo,
     library,
-    queue: queueCtrl,
     playlists: playlistsCtrl,
     planner,
-    coordinator,
     remote,
     probe,
     settings: settingsStore,
@@ -323,6 +318,7 @@ async function bootstrap(): Promise<void> {
     },
     urlFor: urlForItem
   })
+  setBackgroundsDir(dataPaths.backgrounds)
   playbackIpc.init()
 
   downloads = new DownloadManager(remote, logger, broadcast, dataPaths.downloads, db)
@@ -354,6 +350,7 @@ async function bootstrap(): Promise<void> {
     if (quitCleanupPromise) return
 
     mediaServer.dispose()
+    settingsStore.flush()
     quitCleanupPromise = (async () => {
       try {
         await windowCleanupPromise
@@ -361,6 +358,7 @@ async function bootstrap(): Promise<void> {
       } catch (error) {
         logger.error('playback', `libmpv shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
       } finally {
+        settingsStore.flush()
         quitCleanupComplete = true
         app.quit()
       }
@@ -424,6 +422,7 @@ function registerWindowIpc(): void {
       logs: dataPaths.logs,
       temp: dataPaths.temp,
       downloads: dataPaths.downloads,
+      backgrounds: dataPaths.backgrounds,
       diagnostics: dataPaths.diagnostics,
       runtime: dataPaths.runtime
     },

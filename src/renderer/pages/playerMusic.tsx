@@ -18,10 +18,11 @@ import {
 } from './audioTitleLayout'
 
 const visualizerUrl = new URL('./sonic-topography/index.html', window.location.href).toString()
+const visualizerOrigin = /^https?:/.test(visualizerUrl) ? new URL(visualizerUrl).origin : '*'
 
 export function MusicPlayerPage() {
   const {
-    t, session, library, lyrics, spectrum, theme, settings, engine, appIconUrl,
+    t, session, library, lyrics, theme, settings, engine, appIconUrl,
     togglePlayPause, playPrevious, playNext, setVolume, toggleMute, seek,
     setRepeat, setShuffle, loadLyrics, leavePlayer, retryPlayback, beginSeek, commitSeek,
     windowMinimize, windowMaximizeToggle, windowClose, win
@@ -29,6 +30,8 @@ export function MusicPlayerPage() {
   const visualizerRef = useRef<HTMLIFrameElement>(null)
   const previousVisualizerSpectrumRef = useRef<number[]>([])
   const pendingSpectrumRef = useRef<Float32Array | null>(null)
+  const playingRef = useRef(false)
+  const visualizerReadyRef = useRef(false)
   const [visualizerReady, setVisualizerReady] = useState(false)
   const [audioFeatures, setAudioFeatures] = useState<MediaAudioFeatures | null>(null)
 
@@ -71,14 +74,38 @@ export function MusicPlayerPage() {
   }, [])
 
   const visualizerPalette = useMemo(() => {
-    if (theme.variant === 'tahoe') {
-      return {
-        id: 'tahoe', background: theme.colors.bg0, surface: theme.colors.surface,
-        accent: theme.colors.accent, accentEnd: theme.colors.accentEnd, foreground: theme.colors.fg0
-      }
-    }
     return audioVisualizerPaletteForColorTheme(theme.accentIndex)
   }, [theme])
+
+  useEffect(() => {
+    playingRef.current = playing
+  }, [playing])
+
+  useEffect(() => {
+    visualizerReadyRef.current = visualizerReady
+    if (!visualizerReady) return
+    const frame = visualizerRef.current?.contentWindow
+    const pending = pendingSpectrumRef.current
+    if (frame && pending) {
+      frame.postMessage({ type: 'aurora-audio-spectrum', samples: pending }, visualizerOrigin)
+      pendingSpectrumRef.current = null
+    }
+  }, [visualizerReady])
+
+  useEffect(() => {
+    return engine.onSpectrum((samples) => {
+      const frame = visualizerRef.current?.contentWindow
+      if (!frame || !visualizerReadyRef.current) {
+        pendingSpectrumRef.current = samples
+        return
+      }
+      const shaped = shapeAudioVisualizerSpectrum(samples, playingRef.current, previousVisualizerSpectrumRef.current)
+      previousVisualizerSpectrumRef.current = playingRef.current
+        ? Array.from(samples, (value) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)))
+        : []
+      frame.postMessage({ type: 'aurora-audio-spectrum', samples: shaped }, visualizerOrigin)
+    })
+  }, [engine])
 
   useEffect(() => {
     const frame = visualizerRef.current?.contentWindow
@@ -91,27 +118,10 @@ export function MusicPlayerPage() {
       meteorClickEnabled: { value: false }, idleWaveEnabled: { value: false }, peakColorEnabled: { value: true },
       peakColorIntensity: { value: 0.3 }
     }
-    frame.postMessage({ type: 'aurora-visualizer-config', properties }, '*')
-    const retry = window.setTimeout(() => frame.postMessage({ type: 'aurora-visualizer-config', properties }, '*'), 500)
+    frame.postMessage({ type: 'aurora-visualizer-config', properties }, visualizerOrigin)
+    const retry = window.setTimeout(() => frame.postMessage({ type: 'aurora-visualizer-config', properties }, visualizerOrigin), 500)
     return () => window.clearTimeout(retry)
   }, [visualizerReady, visualizerPalette])
-
-  useEffect(() => {
-    const frame = visualizerRef.current?.contentWindow
-    if (!frame || !visualizerReady) {
-      if (!visualizerReady) pendingSpectrumRef.current = spectrum
-      return
-    }
-    if (pendingSpectrumRef.current) {
-      frame.postMessage({ type: 'aurora-audio-spectrum', samples: pendingSpectrumRef.current }, '*')
-      pendingSpectrumRef.current = null
-    }
-    const samples = shapeAudioVisualizerSpectrum(spectrum, playing, previousVisualizerSpectrumRef.current)
-    previousVisualizerSpectrumRef.current = playing
-      ? Array.from(spectrum, (value) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)))
-      : []
-    frame.postMessage({ type: 'aurora-audio-spectrum', samples }, '*')
-  }, [playing, spectrum, visualizerReady])
 
   const technical = useMemo(
     () => technicalLabels(item?.fileName ?? '', item?.fileSize ?? 0, duration, audioFeatures),
@@ -162,7 +172,7 @@ export function MusicPlayerPage() {
       </div>
 
       <div className="audio-visualizer-shell" aria-hidden="true">
-        <iframe ref={visualizerRef} className={visualizerReady ? 'ready' : ''} src={visualizerUrl} title="Audio spectrum visualization" tabIndex={-1} />
+        <iframe ref={visualizerRef} className={visualizerReady ? 'ready' : ''} src={visualizerUrl} title="Audio spectrum visualization" tabIndex={-1} sandbox="allow-scripts allow-same-origin" />
         <div className="audio-visualizer-scrim" />
       </div>
 
@@ -606,10 +616,9 @@ function drawTitleCanvas(
   )
   const glyphPositions = titleLayout.glyphs.map((position) => ({ ...position, x: position.x + motion.offset }))
 
-  const styles = getComputedStyle(canvas)
-  const outlineColor = colors.outline || styles.color || '#38d9ff'
-  const headColor = colors.head || styles.outlineColor || outlineColor
-  const baseColor = colors.base || styles.textDecorationColor || outlineColor
+  const outlineColor = colors.outline || '#38d9ff'
+  const headColor = colors.head || outlineColor
+  const baseColor = colors.base || outlineColor
 
   // A nearly invisible fill preserves the original title mass while the full
   // low-energy contour shows the remaining route, as in the visual reference.
@@ -617,7 +626,7 @@ function drawTitleCanvas(
   context.font = outlineFont
   context.textBaseline = 'alphabetic'
   context.fillStyle = baseColor
-  context.globalAlpha = .045
+  context.globalAlpha = .14
   glyphs.forEach((glyph, glyphIndex) => {
     const position = glyphPositions[glyphIndex]
     if (glyph.progressIndex === null || !position) return
@@ -627,8 +636,8 @@ function drawTitleCanvas(
 
   context.save()
   context.strokeStyle = outlineColor
-  context.globalAlpha = .14
-  context.lineWidth = .9 / viewScale
+  context.globalAlpha = .2
+  context.lineWidth = 1 / viewScale
   contours.forEach((contour) => {
     const glyph = glyphs[contour.glyphIndex]
     const position = glyphPositions[contour.glyphIndex]
@@ -642,8 +651,8 @@ function drawTitleCanvas(
 
   context.save()
   context.strokeStyle = outlineColor
-  context.globalAlpha = .84
-  context.lineWidth = 1.65 / viewScale
+  context.globalAlpha = .9
+  context.lineWidth = 1.8 / viewScale
   contours.forEach((contour, contourIndex) => {
     const start = precedingLength
     const end = start + contour.length

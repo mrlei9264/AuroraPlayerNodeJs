@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { formatTime, type MediaTrackCatalog } from '../../shared/types'
+import { displayMediaTitle, formatTime, type MediaTrackCatalog } from '../../shared/types'
 import { I } from '../../shared/channels'
 import { Icon } from '../core/icons'
 import { coverUrl } from '../core/player'
@@ -38,7 +38,7 @@ export function MediaDetailsPage({ mediaId }: { mediaId: number }) {
     return () => { active = false }
   }, [mediaId])
 
-  const title = item?.title || item?.fileName || ''
+  const title = item ? displayMediaTitle(item.title, item.fileName) : ''
   const artwork = item?.coverPath ? coverUrl(item.coverPath) : ''
 
   if (!item) {

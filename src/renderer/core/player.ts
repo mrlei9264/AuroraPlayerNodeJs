@@ -17,7 +17,6 @@ export const coverUrl = (coverPath?: string | null) => (coverPath ? mediaUrl(cov
 export interface EngineEvents {
   onSession?: (state: SessionState) => void
   onTracks?: (info: MediaTrackCatalog) => void
-  onSpectrum?: (samples: Float32Array) => void
   onFps?: (fps: number) => void
   onEnded?: () => void
   onPlaybackError?: (message: string) => void
@@ -87,6 +86,7 @@ export class PlayerEngine {
   private analyser: AnalyserNode | null = null
   private sourceNode: MediaElementAudioSourceNode | null = null
   private spectrum = new Float32Array(128)
+  private readonly spectrumListeners = new Set<(samples: Float32Array) => void>()
   private lastSpectrumAt = 0
   private raf = 0
   private lastFrameAt = 0
@@ -141,6 +141,15 @@ export class PlayerEngine {
     this.ev = {}
     this.stop()
     this.hiddenHost.remove()
+  }
+
+  onSpectrum(listener: (samples: Float32Array) => void): () => void {
+    this.spectrumListeners.add(listener)
+    return () => this.spectrumListeners.delete(listener)
+  }
+
+  private emitSpectrum(samples: Float32Array): void {
+    for (const listener of this.spectrumListeners) listener(samples)
   }
 
   attach(container: HTMLElement, muted: boolean, volume: number, speed: number): void {
@@ -952,7 +961,7 @@ private ensureAudioGraph(): void {
     this.analyser = null
     this.ctx = null
     this.spectrum.fill(0)
-    this.ev.onSpectrum?.(new Float32Array(this.spectrum))
+    this.emitSpectrum(new Float32Array(this.spectrum))
     if (context && context.state !== 'closed') void context.close().catch(() => void 0)
   }
 
@@ -979,7 +988,7 @@ private ensureAudioGraph(): void {
         const gated = Math.max(0, (rms - 0.018) / 0.982)
         this.spectrum[i] = Math.min(1, Math.pow(gated, 0.72))
       }
-      this.ev.onSpectrum?.(new Float32Array(this.spectrum))
+      this.emitSpectrum(new Float32Array(this.spectrum))
     }
     if (this.session.kind === 'audio' && this.video && !this.video.paused) {
       this.updateAudioPosition(this.video)
@@ -1198,8 +1207,11 @@ private updateVideoClockStall(now: number): void {
 
   private syncToMain(): void {
     if (this.session.seeking || this.seekingGesture) return
-    void window.aurora.invoke(I.sessionSync, { ...this.session, volume: this.volume, muted: this.muted, speed: this.speed })
-      .catch((error) => console.warn('[PlayerEngine] Failed to sync playback progress', error))
+    try {
+      window.aurora.persistSession({ ...this.session, volume: this.volume, muted: this.muted, speed: this.speed })
+    } catch (error) {
+      console.warn('[PlayerEngine] Failed to sync playback progress', error)
+    }
   }
 
   persistPlaybackProgress(): void {

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { p, useRuntime } from '../core/runtime'
 import { Icon } from '../core/icons'
 import { coverUrl } from '../core/player'
-import type { MediaItem, MediaTrackCatalog } from '../../shared/types'
+import { displayMediaTitle, type MediaItem, type MediaTrackCatalog } from '../../shared/types'
 import { I } from '../../shared/channels'
 import { AudioArtwork } from './mediaArtwork'
 
@@ -71,7 +71,7 @@ export function HomePage() {
 
 function HeroMediaPanel({ item, onPlay }: { item: MediaItem; onPlay: () => void }) {
   const { t } = useRuntime()
-  const title = item.title || item.fileName
+  const title = displayMediaTitle(item.title, item.fileName)
   return (
     <section className="cinema-hero" aria-label={title}>
       <div className="cinema-copy">
@@ -86,6 +86,13 @@ function HeroMediaPanel({ item, onPlay }: { item: MediaItem; onPlay: () => void 
             {item.lastPosition > 5 ? t('resume') : t('play')}
           </button>
         </div>
+      </div>
+      <div className="cinema-hero-art" aria-hidden="true">
+        {item.isAudio
+          ? <AudioArtwork artwork={item.coverPath ? coverUrl(item.coverPath) : null} variant="hero" className="cinema-audio-artwork" />
+          : item.coverPath
+            ? <img src={coverUrl(item.coverPath)} alt="" draggable={false} />
+            : <span className="cinema-hero-art-fallback"><Icon name="video" size={64} /></span>}
       </div>
       <div className="cinema-motto" aria-hidden="true">
         <span>GOOD</span><span>MOVIES</span><span>BETTER</span><span>MOMENTS</span>
@@ -144,8 +151,9 @@ export function CinemaTopbar({ query, onQueryChange, results }: { query: string;
 
 function CinemaCard({ item, onPlay, featured }: { item: MediaItem; onPlay: () => void; featured: boolean }) {
   const progress = item.duration > 0 ? Math.min(100, Math.max(0, item.lastPosition / item.duration * 100)) : 0
+  const title = displayMediaTitle(item.title, item.fileName)
   return (
-    <button className={`cinema-card ${featured ? 'is-featured' : ''}`} onClick={onPlay} title={item.title || item.fileName} aria-current={featured ? 'true' : undefined}>
+    <button className={`cinema-card ${featured ? 'is-featured' : ''}`} onClick={onPlay} title={title} aria-current={featured ? 'true' : undefined}>
       <div className={`cinema-card-image ${item.isAudio ? 'audio-art' : ''}`}>
         {item.isAudio
           ? <AudioArtwork artwork={item.coverPath ? coverUrl(item.coverPath) : null} className="cinema-audio-artwork" />
@@ -155,7 +163,7 @@ function CinemaCard({ item, onPlay, featured }: { item: MediaItem; onPlay: () =>
         <div className="cinema-card-play"><Icon name="play" size={20} /></div>
         <div className="cinema-card-track" aria-hidden="true"><i style={{ width: `${progress}%` }} /></div>
       </div>
-      <span className="cinema-card-title">{item.title || item.fileName}</span>
+      <span className="cinema-card-title">{title}</span>
     </button>
   )
 }

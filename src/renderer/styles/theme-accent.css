@@ -128,7 +128,7 @@
   background: var(--accent-gradient);
   box-shadow: 0 8px 22px var(--accent-soft);
 }
-:root[data-accent-theme] .network-link-card:hover { border-color: color-mix(in srgb, var(--accent) 54%, var(--border)); background-color: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+:root[data-accent-theme] .network-link-card:hover { border-color: color-mix(in srgb, var(--accent) 54%, var(--border)); }
 :root[data-accent-theme] .network-link-protocol { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 :root[data-accent-theme] .network-link-actions button:hover { color: var(--accent-end); }
 :root[data-accent-theme] .network-add-fab,

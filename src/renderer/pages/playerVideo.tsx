@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRuntime } from '../core/runtime'
 import { Icon, type IconName } from '../core/icons'
-import { formatTime, type TrackInfo } from '../../shared/types'
+import { displayMediaTitle, formatTime, type TrackInfo } from '../../shared/types'
 import { I } from '../../shared/channels'
 import { NetworkMediaLoader, formatNetworkSpeed } from './networkMediaLoader'
 import { playbackErrorKey } from '../core/i18n'
@@ -76,7 +76,7 @@ export function VideoPlayerPage() {
   })
 
   const item = library.find((candidate) => candidate.id === session.mediaId)
-  const title = item?.title || item?.fileName || t('unknown')
+  const title = item ? displayMediaTitle(item.title, item.fileName) : t('unknown')
   const networkMedia = Boolean(item && ((item.sourceId !== null) || item.protocol !== 'local'))
   const duration = session.duration || item?.duration || 0
   const isVideo = session.kind === 'video'

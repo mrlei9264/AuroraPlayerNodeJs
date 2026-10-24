@@ -14,6 +14,7 @@ export class RemoteStreamProxy {
   private port = 0
   private bytesServed = 0
   private active = new Set<http.ServerResponse>()
+  private statCache = new Map<string, { size: number | null; expiresAt: number }>()
 
   constructor(
     private manager: RemoteSourceManager,
@@ -93,19 +94,29 @@ export class RemoteStreamProxy {
     void this.serve(req, res, parsed)
   }
 
+  private async statSize(sourceId: number, path: string): Promise<number | null> {
+    const key = `${sourceId}:${path}`
+    const cached = this.statCache.get(key)
+    if (cached && cached.expiresAt > Date.now()) return cached.size
+    let size: number | null = null
+    try {
+      const stat = await this.manager.stat(sourceId, path)
+      size = typeof stat?.size === 'number' && Number.isSafeInteger(stat.size) && stat.size >= 0 ? stat.size : null
+    } catch {
+      size = null
+    }
+    if (this.statCache.size > 512) this.statCache.clear()
+    this.statCache.set(key, { size, expiresAt: Date.now() + 60_000 })
+    return size
+  }
+
   private async serve(req: http.IncomingMessage, res: http.ServerResponse, parsed: { sourceId: number; path: string }): Promise<void> {
     // URLSearchParams has already decoded this value. Decoding it again can
     // throw for a literal percent in a valid remote filename and leaves the
     // request promise rejected outside the HTTP handler.
     const fileName = safeBaseName(parsed.path)
     const mime = mimeOf(fileName)
-    let size: number | null = null
-    try {
-      const stat = await this.manager.stat(parsed.sourceId, parsed.path)
-      size = typeof stat?.size === 'number' && Number.isSafeInteger(stat.size) && stat.size >= 0 ? stat.size : null
-    } catch {
-      size = null
-    }
+    const size = await this.statSize(parsed.sourceId, parsed.path)
 
     if (req.destroyed || res.destroyed) return
     const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : undefined

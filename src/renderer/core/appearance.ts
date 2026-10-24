@@ -1,6 +1,8 @@
 import type { AppSettingsData } from '../../main/system/settings-types'
+import { mediaUrl } from './player'
 
 type TypographySettings = Pick<AppSettingsData, 'fontFamily' | 'fontSize'>
+type BackgroundSettings = Pick<AppSettingsData, 'backgroundImageEnabled' | 'backgroundImage'>
 
 export function fontFamilyStack(fontFamily: string): string {
   const selectedFont = fontFamily.trim().replace(/^['"]|['"]$/g, '')
@@ -31,4 +33,15 @@ export function applyTypographySettings(settings: TypographySettings): void {
   root.style.removeProperty('--interface-scale')
   root.style.removeProperty('zoom')
   root.style.fontSize = '14px'
+}
+
+export function applyBackgroundImage(settings: BackgroundSettings): void {
+  const root = document.documentElement
+  const enabled = settings.backgroundImageEnabled && !!settings.backgroundImage
+  root.classList.toggle('custom-background', enabled)
+  if (enabled) {
+    root.style.setProperty('--custom-background-image', `url("${mediaUrl(settings.backgroundImage)}")`)
+  } else {
+    root.style.removeProperty('--custom-background-image')
+  }
 }

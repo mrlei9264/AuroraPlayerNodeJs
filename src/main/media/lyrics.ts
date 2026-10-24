@@ -114,16 +114,14 @@ export class LyricsService {
     const base = path.basename(url).replace(/\.[^.]+$/, '')
     const candidates = [path.join(dir, base + '.lrc'), path.join(dir, base + '.LRC')]
     for (const c of candidates) {
-      if (fs.existsSync(c)) {
-        try {
-          const text = decodeTextBuffer(fs.readFileSync(c))
-          return { ...parseLrc(text), source: 'external' }
-        } catch {
-          void 0
-        }
+      try {
+        const text = decodeTextBuffer(await fs.promises.readFile(c))
+        return { ...parseLrc(text), source: 'external' }
+      } catch {
+        void 0
       }
     }
-    const embedded = probeEmbeddedLyrics(url)
+    const embedded = await probeEmbeddedLyrics(url)
     if (embedded) {
       return { ...parseLrc(embedded), source: 'embedded' }
     }

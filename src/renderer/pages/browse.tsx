@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { useRuntime } from '../core/runtime'
 import { MediaTile, MediaRow, EmptyState, PageHeader, SearchBox, FilterChips } from '../shared/shared'
 import { Icon } from '../core/icons'
-import type { MediaItem } from '../../shared/types'
+import { displayMediaTitle } from '../../shared/types'
 
 export type BrowseKind = 'video' | 'audio'
 
@@ -24,8 +24,8 @@ export function BrowsePage({ kind }: { kind: BrowseKind }) {
     if (filter === 'missing') list = list.filter((i) => !i.sourceAvailable)
     const sorted = [...list]
     if (sort === 'recent') sorted.sort((a, b) => b.addedAt - a.addedAt)
-    else if (sort === 'title') sorted.sort((a, b) => (a.title || a.fileName).localeCompare(b.title || b.fileName))
-    else if (sort === 'artist') sorted.sort((a, b) => a.artist.localeCompare(b.artist) || (a.title || a.fileName).localeCompare(b.title || b.fileName))
+    else if (sort === 'title') sorted.sort((a, b) => displayMediaTitle(a.title, a.fileName).localeCompare(displayMediaTitle(b.title, b.fileName)))
+    else if (sort === 'artist') sorted.sort((a, b) => a.artist.localeCompare(b.artist) || displayMediaTitle(a.title, a.fileName).localeCompare(displayMediaTitle(b.title, b.fileName)))
     else if (sort === 'duration') sorted.sort((a, b) => b.duration - a.duration)
     return sorted
   }, [library, kind, query, sort, filter])
@@ -33,10 +33,11 @@ export function BrowsePage({ kind }: { kind: BrowseKind }) {
   const title = kind === 'video' ? t('videos') : t('music')
   const icon = kind === 'video' ? 'video' as const : 'music' as const
   const allIds = items.map((i) => i.id)
+  const unit = kind === 'video' ? t('collectionVideos') : t('collectionItems')
 
   return (
     <div className="col grow">
-      <PageHeader title={title} subtitle={`${items.length} ${t('selected')}`}>
+      <PageHeader title={title} subtitle={`${items.length} ${unit}`}>
         <SearchBox value={query} onChange={setQuery} placeholder={t('searchPlaceholder')} />
         <button
           className={`btn-icon ${view === 'grid' ? 'active' : ''}`}
@@ -93,20 +94,20 @@ export function BrowsePage({ kind }: { kind: BrowseKind }) {
           description={query ? '' : t('emptyLibraryDesc')}
         />
       ) : view === 'grid' ? (
-        <div className={`grid ${kind === 'audio' ? 'cover' : ''}`}>
-          {items.map((item) => (
-            <MediaTile key={item.id} item={item} onPlay={() => void play([item.id], 0)} />
+        <div className={`grid browse-deferred ${kind === 'audio' ? 'cover' : ''}`}>
+          {items.map((item, index) => (
+            <MediaTile key={item.id} item={item} onPlay={() => void play(allIds, index)} />
           ))}
         </div>
       ) : (
-        <div className="media-list">
+        <div className="media-list browse-deferred">
           {items.map((item, idx) => (
             <MediaRow
               key={item.id}
               item={item}
               index={idx}
               active={session.mediaId === item.id}
-              onPlay={() => void play([item.id], 0)}
+              onPlay={() => void play(allIds, idx)}
             />
           ))}
         </div>

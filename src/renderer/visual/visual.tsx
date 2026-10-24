@@ -76,28 +76,6 @@ export function AuroraBackground({ seed = 7 }: { seed?: number }) {
   return <canvas ref={canvasRef} className="viz-canvas" style={{ opacity: theme.richEffectsEnabled ? 0.85 : 0.35 }} />
 }
 
-export function SpectrumBars({ samples, count = 32 }: { samples: Float32Array; count?: number }) {
-  const bars = []
-  for (let i = 0; i < count; i++) {
-    const idx = Math.min(samples.length - 1, Math.floor((i / count) * samples.length))
-    const v = Math.min(1, samples[idx] * 1.6)
-    bars.push(v)
-  }
-  return (
-    <div className="spectrum-bar">
-      {bars.map((v, i) => (
-        <div
-          key={i}
-          className="sb"
-          style={{
-            height: `${Math.max(3, v * 40)}px`,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
 export function Artwork({ src, size = 'md', rounded = 'lg', className }: { src?: string | null; size?: 'sm' | 'md' | 'lg' | 'xl'; rounded?: string; className?: string }) {
   const dims = { sm: 44, md: 72, lg: 120, xl: 200 }[size]
   return (

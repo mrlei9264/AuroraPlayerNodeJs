@@ -3,7 +3,7 @@ import { Icon, type IconName } from '../core/icons'
 import { useRuntime } from '../core/runtime'
 import type { MediaItem } from '../../shared/types'
 import { coverUrl } from '../core/player'
-import { formatTime } from '../../shared/types'
+import { displayMediaTitle, formatTime } from '../../shared/types'
 
 export function MediaTile({ item, onPlay, onContextMenu, selected, onSelect }: { item: MediaItem; onPlay: () => void; onContextMenu?: (e: React.MouseEvent) => void; selected?: boolean; onSelect?: () => void }) {
   return (
@@ -33,7 +33,7 @@ export function MediaTile({ item, onPlay, onContextMenu, selected, onSelect }: {
         )}
       </div>
       <div className="tile-body">
-        <div className="tile-title">{item.title || item.fileName}</div>
+        <div className="tile-title">{displayMediaTitle(item.title, item.fileName)}</div>
         <div className="tile-sub">{item.artist || item.album || ''}</div>
       </div>
     </div>
@@ -51,7 +51,7 @@ export function MediaRow({ item, index, onPlay, onContextMenu, active }: { item:
       <div className="row-thumb">
         <img src={item.coverPath ? coverUrl(item.coverPath) : ''} alt="" />
       </div>
-      <div className="row-title">{item.title || item.fileName}</div>
+      <div className="row-title">{displayMediaTitle(item.title, item.fileName)}</div>
       <div className="row-sub">{item.artist || item.album || ''}</div>
       <div className="row-meta">{formatTime(item.duration)}</div>
     </div>
@@ -124,7 +124,7 @@ export function QueueRow({ item, index, onPlay, onRemove, active }: { item: Medi
     <div className={`track-queue-row ${active ? 'active' : ''}`} onClick={onPlay}>
       <div className="tq-index">{index + 1}</div>
       <div className="tq-main">
-        <div className="tq-title">{item.title || item.fileName}</div>
+        <div className="tq-title">{displayMediaTitle(item.title, item.fileName)}</div>
         <div className="tq-sub">{item.artist || ''}</div>
       </div>
       <div className="tq-dur">{formatTime(item.duration)}</div>

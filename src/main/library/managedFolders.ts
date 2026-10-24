@@ -40,9 +40,12 @@ export class ManagedFolderController {
       this.emitChanged()
     })
     ipcMain.handle(I.folderScan, (_e, folderPath: string) => this.scanFolder(folderPath))
-    ipcMain.handle(I.folderScanAll, () => {
-      for (const f of this.repo.loadManagedFolders()) void this.scanFolder(f.path)
-    })
+    ipcMain.handle(I.folderScanAll, () => this.scanAll())
+    setImmediate(() => void this.scanAll())
+  }
+
+  private async scanAll(): Promise<void> {
+    for (const folder of this.repo.loadManagedFolders()) await this.scanFolder(folder.path)
   }
 
   list(): FolderState[] {

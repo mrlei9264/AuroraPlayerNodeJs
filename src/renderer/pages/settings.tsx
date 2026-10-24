@@ -8,7 +8,6 @@ import { applyTypographySettings } from '../core/appearance'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
 import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS, type UpdateStatus } from '../../shared/types'
 import { FloatingMenu } from '../shared/floatingMenu'
-import { ThemeChoices } from '../shared/themeSettings'
 
 type SettingsCategory = 'general' | 'proxy' | 'appearance' | 'about'
 type DraftUpdater<T> = (update: (draft: T) => T) => void
@@ -37,13 +36,14 @@ interface ProxyDraft {
 }
 
 interface AppearanceDraft {
-  themeStyle: AppSettingsData['themeStyle']
   appIcon: string
   fontFamily: string
   fontSize: AppSettingsData['fontSize']
   startupAnimationEnabled: boolean
   reducedMotion: boolean
   reduceTransparency: boolean
+  backgroundImageEnabled: boolean
+  backgroundImage: string
 }
 
 const CATEGORIES: { key: SettingsCategory; icon: IconName }[] = [
@@ -88,6 +88,10 @@ const SETTINGS_COPY = {
     appearanceMotionGroup: 'Motion & material',
     appIcon: 'Application icon',
     appIconDescription: 'Place PNG, JPG, WEBP, or ICO files in the icon folder next to the app executable; Aurora Player reads them automatically. Some system icon changes take effect after restarting the app.',
+    backgroundImage: 'Custom background',
+    backgroundImageDescription: 'Choose an image used as the application background. A dark overlay keeps text readable.',
+    chooseBackground: 'Choose image',
+    backgroundClear: 'Clear',
     applicationFont: 'Application font',
     applicationFontDescription: 'Applied throughout the interface.',
     systemDefault: 'Aurora Default',
@@ -121,6 +125,7 @@ const SETTINGS_COPY = {
       logs: ['Logs', 'Application and runtime diagnostic logs'],
       temp: ['Temporary files', 'Generated video covers and diagnostic working files'],
       downloads: ['Downloads', 'Files downloaded from network media'],
+      backgrounds: ['Background images', 'Custom application background images'],
       diagnostics: ['Diagnostics', 'Exported diagnostic bundles'],
       runtime: ['Runtime data', 'Cache, sessions, and crash information']
     },
@@ -174,6 +179,10 @@ const SETTINGS_COPY = {
     appearanceMotionGroup: '动效与材质',
     appIcon: '应用图标',
     appIconDescription: '将 PNG、JPG、WEBP 或 ICO 图片放入应用程序旁的 icon 文件夹，Aurora Player 会自动读取。部分系统图标变化需要重启程序后生效。',
+    backgroundImage: '自定义背景',
+    backgroundImageDescription: '选择一张图片作为程序背景；会叠加暗色遮罩以保证文字可读。',
+    chooseBackground: '选择图片',
+    backgroundClear: '清除',
     applicationFont: '应用字体',
     applicationFontDescription: '应用于整个软件界面。',
     systemDefault: 'Aurora 默认字体',
@@ -207,6 +216,7 @@ const SETTINGS_COPY = {
       logs: ['日志', '应用与运行诊断日志'],
       temp: ['临时文件', '自动生成的视频封面与诊断工作文件'],
       downloads: ['下载文件', '从网络媒体下载的文件'],
+      backgrounds: ['背景图片', '自定义的程序背景图片'],
       diagnostics: ['诊断文件', '导出的诊断数据包'],
       runtime: ['运行时数据', '缓存、会话与崩溃信息']
     },
@@ -250,13 +260,14 @@ const defaultProxy: ProxyDraft = {
 }
 
 const defaultAppearance: AppearanceDraft = {
-  themeStyle: 'classic',
   appIcon: 'app_icon.png',
   fontFamily: 'Space Grotesk Variable',
   fontSize: 13,
   startupAnimationEnabled: true,
   reducedMotion: false,
-  reduceTransparency: false
+  reduceTransparency: false,
+  backgroundImageEnabled: false,
+  backgroundImage: ''
 }
 
 function generalFrom(settings: AppSettingsData): GeneralDraft {
@@ -284,13 +295,14 @@ function proxyFrom(settings: AppSettingsData): ProxyDraft {
 
 function appearanceFrom(settings: AppSettingsData): AppearanceDraft {
   return {
-    themeStyle: settings.themeStyle ?? 'classic',
     appIcon: settings.appIcon,
     fontFamily: settings.fontFamily,
     fontSize: settings.fontSize,
     startupAnimationEnabled: settings.startupAnimationEnabled,
     reducedMotion: settings.reducedMotion,
-    reduceTransparency: settings.reduceTransparency
+    reduceTransparency: settings.reduceTransparency,
+    backgroundImageEnabled: settings.backgroundImageEnabled,
+    backgroundImage: settings.backgroundImage
   }
 }
 
@@ -304,18 +316,37 @@ export function SettingsPage() {
   const [showProxyPassword, setShowProxyPassword] = useState(false)
   const [checkingUpdates, setCheckingUpdates] = useState(false)
   const [categoryDirection, setCategoryDirection] = useState(1)
-  const [themePulse, setThemePulse] = useState(0)
   const [restoreCycle, setRestoreCycle] = useState(0)
   const [restoreCategory, setRestoreCategory] = useState<SettingsCategory | null>(null)
   const feedbackTimersRef = useRef(new Map<HTMLElement, number>())
   const systemReducedMotion = useReducedMotion()
   const reduceMotion = settings.reducedMotion || systemReducedMotion
 
-  useEffect(() => {
-    setGeneral(generalFrom(settings))
-    setProxy(proxyFrom(settings))
-    setAppearance(appearanceFrom(settings))
-  }, [settings])
+  const pendingPatchRef = useRef<Partial<AppSettingsData> | null>(null)
+  const pendingErrorRef = useRef<string>(copy.generalError)
+  const patchTimerRef = useRef<number | null>(null)
+  const flushPatch = () => {
+    if (patchTimerRef.current !== null) {
+      window.clearTimeout(patchTimerRef.current)
+      patchTimerRef.current = null
+    }
+    const pending = pendingPatchRef.current
+    if (!pending) return
+    pendingPatchRef.current = null
+    void patchSettings(pending).catch(() => toast('error', pendingErrorRef.current))
+  }
+  const flushPatchRef = useRef(flushPatch)
+  flushPatchRef.current = flushPatch
+  const queuePatch = (partial: Partial<AppSettingsData>, errorMessage: string) => {
+    pendingPatchRef.current = { ...pendingPatchRef.current, ...partial }
+    pendingErrorRef.current = errorMessage
+    if (patchTimerRef.current !== null) window.clearTimeout(patchTimerRef.current)
+    patchTimerRef.current = window.setTimeout(() => {
+      patchTimerRef.current = null
+      flushPatchRef.current()
+    }, 300)
+  }
+  useEffect(() => () => flushPatchRef.current(), [])
 
   useEffect(() => () => {
     for (const timer of feedbackTimersRef.current.values()) window.clearTimeout(timer)
@@ -325,20 +356,20 @@ export function SettingsPage() {
   const updateGeneral: DraftUpdater<GeneralDraft> = (update) => {
     const next = update(general)
     setGeneral(next)
-    void patchSettings({
+    queuePatch({
       language: next.language,
       autoplayNextMedia: next.autoplayNextMedia,
       navigationPlayPrimaryAction: next.navigationPlayPrimaryAction,
       resumePlayback: next.resumePlayback,
       rememberPlaybackPosition: next.rememberPlaybackPosition,
       performanceHudEnabled: next.performanceHudEnabled
-    }).catch(() => toast('error', copy.generalError))
+    }, copy.generalError)
   }
 
   const updateProxy: DraftUpdater<ProxyDraft> = (update) => {
     const next = update(proxy)
     setProxy(next)
-    void patchSettings({
+    queuePatch({
       proxyEnabled: next.enabled,
       proxyType: next.type,
       proxyServer: next.server.trim(),
@@ -346,22 +377,23 @@ export function SettingsPage() {
       proxyUsername: next.username.trim(),
       proxyPassword: next.password,
       proxyBypassLocal: next.bypassLocal
-    }).catch(() => toast('error', copy.proxyError))
+    }, copy.proxyError)
   }
 
   const updateAppearance: DraftUpdater<AppearanceDraft> = (update) => {
     const next = update(appearance)
     setAppearance(next)
     applyTypographySettings(next)
-    void patchSettings({
-      themeStyle: next.themeStyle,
+    queuePatch({
       appIcon: next.appIcon,
       fontFamily: next.fontFamily.trim(),
       fontSize: next.fontSize,
       startupAnimationEnabled: next.startupAnimationEnabled,
       reducedMotion: next.reducedMotion,
-      reduceTransparency: next.reduceTransparency
-    }).catch(() => toast('error', copy.appearanceError))
+      reduceTransparency: next.reduceTransparency,
+      backgroundImageEnabled: next.backgroundImageEnabled,
+      backgroundImage: next.backgroundImage
+    }, copy.appearanceError)
   }
 
   const restoreCurrentCategory = () => {
@@ -370,7 +402,7 @@ export function SettingsPage() {
     if (category === 'appearance') {
       setAppearance(defaultAppearance)
       applyTypographySettings(defaultAppearance)
-      void patchSettings(defaultAppearance).catch(() => toast('error', copy.restoreError))
+      queuePatch(defaultAppearance, copy.restoreError)
     }
   }
 
@@ -416,8 +448,7 @@ export function SettingsPage() {
       onClickCapture={(event) => {
         if ((event.target as HTMLElement).closest('.settings-switch, .settings-segmented button, .settings-select-menu [role="option"]')) signalSettingFeedback(event.target)
       }}
-    >
-      {themePulse > 0 && <span key={themePulse} className="settings-theme-diffusion" aria-hidden="true" />}
+      >
       <div className="settings-workspace">
         <LayoutGroup id="settings-category-selection">
           <nav className="settings-category-panel" aria-label={copy.categoriesLabel}>
@@ -471,7 +502,7 @@ export function SettingsPage() {
                   onTogglePassword={() => setShowProxyPassword((visible) => !visible)}
                 />
               )}
-              {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} language={settings.language} onThemeChange={() => setThemePulse((pulse) => pulse + 1)} />}
+              {category === 'appearance' && <AppearancePanel value={appearance} onChange={updateAppearance} copy={copy} />}
               {category === 'about' && (
                 <AboutPanel
                   application={appInfo?.name ?? 'Aurora Player'}
@@ -602,10 +633,12 @@ function ProxyPanel({
   )
 }
 
-function AppearancePanel({ value, onChange, copy, language, onThemeChange }: { value: AppearanceDraft; onChange: DraftUpdater<AppearanceDraft>; copy: SettingsCopy; language: AppSettingsData['language']; onThemeChange: () => void }) {
+function AppearancePanel({ value, onChange, copy }: { value: AppearanceDraft; onChange: DraftUpdater<AppearanceDraft>; copy: SettingsCopy }) {
+  const { toast } = useRuntime()
   const fontSizes: AppSettingsData['fontSize'][] = [12, 13, 14, 15, 16]
   const [fontFamilies, setFontFamilies] = useState<string[]>([])
   const [appIcons, setAppIcons] = useState<AppIconOption[]>([])
+  const [pickingBackground, setPickingBackground] = useState(false)
   const selectableFontFamilies = useMemo(() => {
     const families = new Map<string, string>()
     for (const font of [value.fontFamily, ...fontFamilies]) {
@@ -642,15 +675,21 @@ function AppearancePanel({ value, onChange, copy, language, onThemeChange }: { v
     imageOnly: true
   }))
 
+  const pickBackground = async () => {
+    setPickingBackground(true)
+    try {
+      const picked = await p<string | null>(I.backgroundsPick)
+      if (picked) onChange((draft) => ({ ...draft, backgroundImage: picked, backgroundImageEnabled: true }))
+    } catch {
+      toast('error', copy.appearanceError)
+    } finally {
+      setPickingBackground(false)
+    }
+  }
+
   return (
     <div className="settings-rows settings-appearance-rows">
       <SettingsGroup title={copy.appearanceThemeGroup}>
-        <div className="settings-theme-style">
-          <ThemeChoices value={value.themeStyle} language={language} onChange={(themeStyle) => {
-            onThemeChange()
-            onChange((draft) => ({ ...draft, themeStyle }))
-          }} />
-        </div>
         <SettingRow label={copy.appIcon} description={copy.appIconDescription}>
           <SettingsSelect
             label={copy.appIcon}
@@ -659,6 +698,32 @@ function AppearancePanel({ value, onChange, copy, language, onThemeChange }: { v
             options={appIconOptions}
             onChange={(appIcon) => onChange((draft) => ({ ...draft, appIcon }))}
           />
+        </SettingRow>
+        <SettingRow label={copy.backgroundImage} description={copy.backgroundImageDescription}>
+          <div className="settings-background-controls">
+            <SettingsSwitch
+              checked={value.backgroundImageEnabled}
+              label={copy.backgroundImage}
+              onChange={(checked) => onChange((draft) => ({ ...draft, backgroundImageEnabled: checked }))}
+            />
+            <button
+              type="button"
+              className="settings-button"
+              disabled={pickingBackground}
+              onClick={() => { void pickBackground() }}
+            >
+              {copy.chooseBackground}
+            </button>
+            {value.backgroundImage && (
+              <button
+                type="button"
+                className="settings-button settings-button-ghost"
+                onClick={() => onChange((draft) => ({ ...draft, backgroundImage: '', backgroundImageEnabled: false }))}
+              >
+                {copy.backgroundClear}
+              </button>
+            )}
+          </div>
         </SettingRow>
       </SettingsGroup>
       <SettingsGroup title={copy.appearanceTypographyGroup}>
@@ -876,7 +941,7 @@ function AboutPanel({
   checking: boolean
   copy: SettingsCopy
   dataRoot: string
-  dataDirectories: Record<'config' | 'database' | 'security' | 'logs' | 'temp' | 'downloads' | 'diagnostics' | 'runtime', string> | null
+  dataDirectories: Record<'config' | 'database' | 'security' | 'logs' | 'temp' | 'downloads' | 'backgrounds' | 'diagnostics' | 'runtime', string> | null
   onOpenData: () => void
   onCheck: () => Promise<void>
   onOpenUpdate: () => void

@@ -81,7 +81,7 @@ export interface AppInfo {
   homeDir: string
   userData: string
   dataRoot: string
-  dataDirectories: Record<'config' | 'database' | 'security' | 'logs' | 'temp' | 'downloads' | 'diagnostics' | 'runtime', string>
+  dataDirectories: Record<'config' | 'database' | 'security' | 'logs' | 'temp' | 'downloads' | 'backgrounds' | 'diagnostics' | 'runtime', string>
   refreshRate: number
 }
 
@@ -102,7 +102,6 @@ interface RuntimeState {
   session: SessionState
   tracks: MediaTrackCatalog
   lyrics: LyricsData | null
-  spectrum: Float32Array
   win: WindowState
   hud: HudStats | null
   updateStatus: UpdateStatus
@@ -272,7 +271,6 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   })
   const [tracks, setTracks] = useState<RuntimeState['tracks']>({ video: [], audio: [], subtitles: [], chapters: [], width: 0, height: 0, fps: 0 })
   const [lyrics, setLyrics] = useState<LyricsData | null>(null)
-  const [spectrum, setSpectrum] = useState<Float32Array>(new Float32Array(64))
   const [win, setWin] = useState<WindowState>({ maximized: false, fullscreen: false })
   const [hud, setHud] = useState<HudStats | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'disabled' })
@@ -282,9 +280,16 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const toastTimersRef = useRef<Map<number, ToastTimer>>(new Map())
   const libraryProgressRef = useRef({ mediaId: null as number | null, paused: true })
-const playRequestEpochRef = useRef(0)
+  const playRequestEpochRef = useRef(0)
   const sessionRef = useRef(session)
+  const libraryRef = useRef(library)
+  const queueRef = useRef(queue)
+  const lastPlayListRef = useRef<number[]>([])
+  const volumeRef = useRef(session.volume)
+  const volumePersistTimerRef = useRef(0)
   sessionRef.current = session
+  libraryRef.current = library
+  queueRef.current = queue
 
   const engineRef = useRef<PlayerEngine | null>(null)
   if (!engineRef.current) {
@@ -304,8 +309,8 @@ const playRequestEpochRef = useRef(0)
 
   const t = useMemo(() => (settings ? makeT(settings.language) : makeT('en')), [settings?.language])
   const theme = useMemo(
-    () => buildTheme(settings?.accentIndex ?? 0, settings?.themeStyle ?? 'classic'),
-    [settings?.accentIndex, settings?.themeStyle]
+    () => buildTheme(settings?.accentIndex ?? 0, 'classic'),
+    [settings?.accentIndex]
   )
 
   useLayoutEffect(() => {
@@ -422,11 +427,7 @@ const playRequestEpochRef = useRef(0)
 
   const patchSettings = useCallback(async (partial: Partial<AppSettingsData>) => {
     const current = settingsRef.current
-    const nextStyle = partial.themeStyle ?? current?.themeStyle ?? 'classic'
-    const changesTheme = current != null && (
-      nextStyle !== current.themeStyle ||
-      (nextStyle === 'classic' && partial.accentIndex !== undefined && partial.accentIndex !== current.accentIndex)
-    )
+    const changesTheme = current != null && partial.accentIndex !== undefined && partial.accentIndex !== current.accentIndex
     const update = () => setSettings((prev) => (prev ? { ...prev, ...partial } : prev))
     if (changesTheme) await transitionTheme(update, partial.reducedMotion ?? current?.reducedMotion ?? false)
     else update()
@@ -458,6 +459,7 @@ const playRequest = useCallback(
         }
         return plan
       }
+      if (request.mediaIds.length > 1) lastPlayListRef.current = request.mediaIds
       engine.load(plan, sessionRef.current.volume, sessionRef.current.muted, sessionRef.current.speed)
       if (navigateToPlayer) navigate({ section: 'player' })
       return plan
@@ -492,65 +494,50 @@ const playRequest = useCallback(
 
   const navQueue = useCallback(
     async (action: 'previous' | 'next' | 'naturalEnd') => {
-      const current = session.mediaId
+      const current = sessionRef.current.mediaId
       if (current == null) return
-      if (session.kind === 'audio') {
-        const ids = library
-          .filter((item) => item.isAudio && !item.isImage && item.sourceAvailable)
+      const libraryMap = new Map(libraryRef.current.map((item) => [item.id, item]))
+      const usable = (id: number) => {
+        const item = libraryMap.get(id)
+        return item != null && !item.isImage && item.sourceAvailable
+      }
+      const queueIds = queueRef.current.map((entry) => entry.mediaId).filter(usable)
+      let ids = queueIds.includes(current) ? queueIds : lastPlayListRef.current.filter(usable)
+      if (!ids.includes(current)) {
+        if (action === 'naturalEnd') return
+        const audio = sessionRef.current.kind === 'audio'
+        ids = libraryRef.current
+          .filter((item) => !item.isImage && item.sourceAvailable && item.isAudio === audio)
           .map((item) => item.id)
-        const currentIndex = ids.indexOf(current)
-        if (currentIndex < 0 || ids.length === 0) return
+      }
+      const currentIndex = ids.indexOf(current)
+      if (currentIndex < 0 || ids.length === 0) return
 
-        let targetIndex: number | null = null
-        if (action === 'naturalEnd' && session.repeatMode === 'one') {
-          targetIndex = currentIndex
-        } else if (session.shuffle) {
-          const candidates = ids.map((_, index) => index).filter((index) => index !== currentIndex)
-          targetIndex = candidates.length
-            ? candidates[Math.floor(Math.random() * candidates.length)]
-            : currentIndex
-        } else if (action === 'previous') {
-          targetIndex = (currentIndex - 1 + ids.length) % ids.length
-        } else if (action === 'next') {
-          targetIndex = (currentIndex + 1) % ids.length
-        } else {
-          const nextIndex = currentIndex + 1
-          targetIndex = nextIndex < ids.length ? nextIndex : session.repeatMode === 'all' ? 0 : null
-        }
-
-        if (targetIndex == null) return
-        await playRequest({
-          mediaIds: ids,
-          index: targetIndex,
-          action: targetIndex === currentIndex
-            ? 'restart'
-            : action === 'previous' ? 'playPrevious' : 'playNext'
-        }, false)
-        return
+      const { repeatMode, shuffle } = sessionRef.current
+      let targetIndex: number | null = null
+      if (repeatMode === 'one' && action === 'naturalEnd') {
+        targetIndex = currentIndex
+      } else if (shuffle && action !== 'previous') {
+        const candidates = ids.map((_, index) => index).filter((index) => index !== currentIndex)
+        targetIndex = candidates.length
+          ? candidates[Math.floor(Math.random() * candidates.length)]
+          : repeatMode === 'all' ? currentIndex : null
+      } else if (action === 'previous') {
+        targetIndex = currentIndex > 0 ? currentIndex - 1 : repeatMode === 'all' ? ids.length - 1 : null
+      } else {
+        const nextIndex = currentIndex + 1
+        targetIndex = nextIndex < ids.length ? nextIndex : repeatMode === 'all' ? 0 : null
       }
-      if (action === 'next' && session.shuffle) {
-        const ids = queue.map((q) => q.mediaId)
-        const candidates = ids.filter((id) => id !== current)
-        if (candidates.length === 0) return
-        const pick = candidates[Math.floor(Math.random() * candidates.length)]
-        await playRequest({ mediaIds: ids, index: ids.indexOf(pick), action: 'play' })
-        return
-      }
-      const requestEpoch = ++playRequestEpochRef.current
-      let plan: PlayPlan | null
-      try {
-        plan = await p<PlayPlan | null>(I.queueNav, action, current, session.repeatMode)
-      } catch (error) {
-        if (requestEpoch === playRequestEpochRef.current) toast('error', t(playbackErrorKey(error instanceof Error ? error.message : String(error))))
-        return
-      }
-      if (requestEpoch !== playRequestEpochRef.current) return
-      if (plan && plan.ok) {
-        engine.load(plan, session.volume, session.muted, session.speed)
-        setNav((prev) => ({ ...prev, section: 'player' }))
-      }
+      if (targetIndex == null) return
+      await playRequest({
+        mediaIds: ids,
+        index: targetIndex,
+        action: targetIndex === currentIndex
+          ? 'restart'
+          : action === 'previous' ? 'playPrevious' : 'playNext'
+      }, false)
     },
-    [engine, session, library, queue, playRequest, t, toast]
+    [playRequest]
   )
 
   const playNext = useCallback(() => navQueue('next'), [navQueue])
@@ -597,10 +584,21 @@ const playRequest = useCallback(
     (v: number) => {
       const volume = Math.max(0, Math.min(100, Math.round(v)))
       engine.setVolume(volume)
-      void p<AppSettingsData>(I.settingsPatch, { playbackVolume: volume }).catch(() => void 0)
+      volumeRef.current = volume
+      window.clearTimeout(volumePersistTimerRef.current)
+      volumePersistTimerRef.current = window.setTimeout(() => {
+        volumePersistTimerRef.current = 0
+        void p<AppSettingsData>(I.settingsPatch, { playbackVolume: volumeRef.current }).catch(() => void 0)
+      }, 250)
     },
     [engine]
   )
+
+  useEffect(() => () => {
+    if (!volumePersistTimerRef.current) return
+    window.clearTimeout(volumePersistTimerRef.current)
+    void p(I.settingsPatch, { playbackVolume: volumeRef.current }).catch(() => void 0)
+  }, [])
 
   const toggleMute = useCallback(() => {
     engine.setMuted(!session.muted)
@@ -1036,7 +1034,8 @@ const playRequest = useCallback(
       onTracks: setTracks,
       onFps: () => void 0,
       onEnded: () => {
-        if (session.repeatMode === 'one' || settings?.autoplayNextMedia !== false) void navQueue('naturalEnd')
+        const current = sessionRef.current
+        if (current.repeatMode === 'one' || settingsRef.current?.autoplayNextMedia !== false) void navQueue('naturalEnd')
       },
       onPlaybackError: (msg) => {
         console.error('[Runtime] playback error', msg)
@@ -1048,16 +1047,7 @@ const playRequest = useCallback(
     return () => {
       e.ev = { ...e.ev, onSession: undefined, onTracks: undefined, onFps: undefined, onEnded: undefined, onPlaybackError: undefined, onLoaded: undefined, onBuffering: undefined }
     }
-  }, [navQueue, session.repeatMode, settings?.autoplayNextMedia, t, toast])
-
-  // Spectrum callback only when on player page
-  useEffect(() => {
-    const e = engineRef.current!
-    e.ev = { ...e.ev, onSpectrum: nav.section === 'player' ? setSpectrum : () => void 0 }
-    return () => {
-      e.ev = { ...e.ev, onSpectrum: () => void 0 }
-    }
-  }, [nav.section])
+  }, [navQueue, t, toast])
 
   // ---- subscriptions ----
   useEffect(() => {
@@ -1082,7 +1072,6 @@ const playRequest = useCallback(
       const done = dls.find((d) => d.status === 'completed')
       if (done) void 0
     }))
-    unsubs.push(window.aurora.on(E.sessionState, () => void 0))
     unsubs.push(window.aurora.on(E.notify, (n: { kind: string; title: string; message?: string }) => {
       const kind: ToastItem['kind'] = n.kind === 'error' ? 'error' : n.kind === 'success' ? 'success' : 'info'
       toast(kind, n.message ? `${n.title}: ${n.message}` : n.title)
@@ -1220,7 +1209,6 @@ const playRequest = useCallback(
       session,
       tracks,
       lyrics,
-      spectrum,
       win,
       hud,
       updateStatus,
@@ -1233,7 +1221,7 @@ const playRequest = useCallback(
       ...api
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, nav, session, tracks, lyrics, spectrum, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
+    [settings, appIconUrl, appInfo, library, queue, playlists, sources, folders, downloads, downloadOptions, probe, nav, session, tracks, lyrics, win, hud, updateStatus, toasts, notificationHistory, dialog, ctxMenu, t, theme]
   )
 
   const libraryValue = useMemo<LibraryRuntimeValue>(() => ({

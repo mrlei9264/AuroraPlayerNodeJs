@@ -118,8 +118,8 @@
 }
 
 @keyframes startup-title-resolve {
-  0%, 26% { opacity: 1; transform: scale(1); filter: blur(0); }
-  40%, 100% { opacity: 0; transform: scale(.92); filter: blur(3px); }
+  0%, 26% { opacity: 1; transform: scale(1); }
+  40%, 100% { opacity: 0; transform: scale(.92); }
 }
 
 @keyframes startup-atmosphere {

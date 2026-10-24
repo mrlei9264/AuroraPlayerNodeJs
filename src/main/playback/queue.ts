@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { I, E } from '../../shared/channels'
-import type { QueueEntry, Playlist, MediaItem } from '../../shared/types'
+import { displayMediaTitle, type QueueEntry, type Playlist, type MediaItem } from '../../shared/types'
 import { LibraryRepository } from '../library/repository'
 import { Logger } from '../system/diagnostics'
 
@@ -9,7 +9,7 @@ function toEntry(item: MediaItem | null | undefined): QueueEntry | null {
   return {
     position: 0,
     mediaId: item.id,
-    title: item.title || item.fileName,
+    title: displayMediaTitle(item.title, item.fileName),
     artist: item.artist,
     duration: item.duration,
     isAudio: item.isAudio,
@@ -59,16 +59,10 @@ export class QueueController {
     })
   }
 
-  get mediaIds(): number[] {
-    return [...this.ids]
-  }
-
   snapshot(): QueueEntry[] {
+    const items = new Map(this.repo.findByIds(this.ids).map((item) => [item.id, item]))
     return this.ids
-      .map((id) => {
-        const item = this.repo.findById(id)
-        return toEntry(item)
-      })
+      .map((id) => toEntry(items.get(id)))
       .filter((e): e is QueueEntry => !!e)
       .map((e, i) => ({ ...e, position: i }))
   }
@@ -195,17 +189,17 @@ export class PlaylistController {
   }
 
   snapshot(): Playlist[] {
-    return this.repo
-      .loadPlaylists()
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        createdAt: p.createdAt,
-        entries: p.mediaIds
-          .map((id) => toEntry(this.repo.findById(id)))
-          .filter((e): e is QueueEntry => !!e)
-          .map((e, i) => ({ ...e, position: i }))
-      }))
+    const playlists = this.repo.loadPlaylists()
+    const items = new Map(this.repo.findByIds(playlists.flatMap((p) => p.mediaIds)).map((item) => [item.id, item]))
+    return playlists.map((p) => ({
+      id: p.id,
+      name: p.name,
+      createdAt: p.createdAt,
+      entries: p.mediaIds
+        .map((id) => toEntry(items.get(id)))
+        .filter((e): e is QueueEntry => !!e)
+        .map((e, i) => ({ ...e, position: i }))
+    }))
   }
 
   referencesForMediaId(mediaId: number): { playlistId: number; playlistName: string }[] {

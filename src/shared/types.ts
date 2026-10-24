@@ -28,6 +28,35 @@ export function cleanMediaText(value: unknown): string {
   return text
 }
 
+const TITLE_TECH_TOKEN = /\b(?:2160p|1080p|720p|576p|480p|4k|8k|hdr(?:10\+?)?|dolby|vision|bluray|blu-ray|web[- .]?dl|webrip|bdrip|remux|x26[45]|h[ .]?26[45]|hevc|av1|aac|dts|atmos|\d{2,3}\s*fps)\b/gi
+const TITLE_YEAR_TOKEN = /(?:^|[\s._([{_-])(?:19|20)\d{2}(?=$|[\s._)\]}-])/g
+
+/** Prefer embedded metadata titles; fall back to a readable filename. */
+export function displayMediaTitle(title: string, fileName: string): string {
+  const tagged = cleanMediaText(title)
+  const rawFileName = cleanMediaText(fileName)
+  if (tagged && tagged !== rawFileName) return tagged
+  const source = rawFileName.replace(/\.[a-z0-9]{2,5}$/i, '').trim()
+  if (!source) return tagged || rawFileName
+
+  TITLE_YEAR_TOKEN.lastIndex = 0
+  const releaseYear = [...source.matchAll(TITLE_YEAR_TOKEN)].reverse().find((match) => {
+    TITLE_TECH_TOKEN.lastIndex = 0
+    return TITLE_TECH_TOKEN.test(source.slice((match.index ?? 0) + match[0].length))
+  })
+  const trimmed = releaseYear?.index != null
+    ? source.slice(0, releaseYear.index + releaseYear[0].length)
+    : source
+  TITLE_TECH_TOKEN.lastIndex = 0
+  const display = trimmed
+    .replace(TITLE_TECH_TOKEN, ' ')
+    .replace(/[._]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s[\](){}-]+|[\s[\](){}-]+$/g, '')
+    .trim()
+  return display || tagged || rawFileName
+}
+
 export interface QueueEntry {
   position: number
   mediaId: number

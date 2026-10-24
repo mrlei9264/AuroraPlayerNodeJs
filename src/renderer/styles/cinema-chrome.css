@@ -1,8 +1,8 @@
 /* Shared cinema chrome. Keep palette local: page themes still own their content.
    Explicit !important shadows override the older theme-wide shadow reset. */
 :root {
-  --cinema-navy: #081321;
-  --cinema-deep: #06101c;
+  --cinema-navy: var(--bg0);
+  --cinema-deep: color-mix(in srgb, var(--bg0) 92%, black 8%);
   --cinema-ice: #7bcbff;
   --cinema-cyan: #4ccbff;
   --cinema-champagne: #f4d38a;
@@ -43,10 +43,10 @@
   border: 1px solid transparent;
   background: transparent !important;
   box-shadow: none !important;
-  transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+  transition: color 180ms ease;
 }
 #root .shell.home-shell .sidebar .nav-items .nav-item:not(.active):hover {
-  color: #ecf4ff;
+  color: inherit;
   border-color: transparent;
   background: transparent !important;
   box-shadow: none !important;
@@ -84,10 +84,6 @@
 #root .window-control-button:hover { color: #9ce4ff; background: #7bbfff12; }
 #root .window-control-button:is(.close, .audio-window-close):hover { color: #ffaaa8; background: #e45c5c18; }
 #root .titlebar .tb-btn svg { width: 18px; height: 18px; }
-:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button { color: #244766; }
-:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button svg { filter: none; }
-:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button:hover { color: #0871bb; }
-:root[data-color-theme='tahoe'] #root:not(:has(.cinema-home-shell)) :is(.titlebar, .audio-window-actions) .window-control-button:is(.close, .audio-window-close):hover { color: #c34848; }
 
 #root .hud {
   top: 12px;
