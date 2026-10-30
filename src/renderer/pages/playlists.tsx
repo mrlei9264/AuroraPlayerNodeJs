@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useRuntime } from '../core/runtime'
-import { EmptyState, PageHeader, QueueRow } from '../shared/shared'
+import { EmptyState, PageHeader, QueueRow } from '../shared/ui'
 import { Icon } from '../core/icons'
 
 export function PlaylistsPage() {

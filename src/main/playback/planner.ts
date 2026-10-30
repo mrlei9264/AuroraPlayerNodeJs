@@ -1,11 +1,11 @@
 import type { MediaItem, PlayPlan, PlayRequest, MediaKind } from '../../shared/types'
+import { getResumePosition } from '../../shared/playback'
 
 export interface PlannerDeps {
   itemById: (id: number) => MediaItem | null
   fileExists: (p: string) => boolean
   sourceAvailable: (sourceId: number) => boolean
   resumePlayback: () => boolean
-  rememberPlaybackPosition: () => boolean
   urlFor: (item: MediaItem) => string
 }
 
@@ -48,14 +48,7 @@ export class PlaybackLaunchPlanner {
     if (request.action === 'restart' || request.action === 'playNext' || request.action === 'playPrevious') {
       return { ok: true, result: 'ready', item, url, kind, resumePosition: 0 }
     }
-    const resumePosition = this.decideResume(item, kind)
+    const resumePosition = getResumePosition(item, this.deps.resumePlayback())
     return { ok: true, result: 'ready', item, url, kind, resumePosition }
-  }
-
-  decideResume(item: MediaItem, kind: MediaKind): number {
-    if (!this.deps.resumePlayback() || !this.deps.rememberPlaybackPosition()) return 0
-    const pos = item.lastPosition
-    if (pos <= 0 || pos > Math.max(30, item.duration || 0) - 5) return 0
-    return pos
   }
 }

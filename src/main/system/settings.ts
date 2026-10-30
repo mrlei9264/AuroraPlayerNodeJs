@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { E, I } from '../../shared/channels'
 import { MEDIA_EXTS } from '../../shared/types'
-import type { AppSettingsData } from './settings-types'
+import { DEFAULT_APP_SETTINGS, type AppSettingsData } from '../../shared/settings'
 import { colorThemeAt, normalizeColorThemeIndex } from '../../shared/colorThemes'
 import type { CredentialStore } from '../remote/credentials'
 import { makeAppIcon } from '../util'
@@ -33,33 +33,6 @@ async function getAvailableFontFamilies(): Promise<string[]> {
   }
 }
 
-const defaults: AppSettingsData = {
-  language: 'zh',
-  accentIndex: 1,
-  themeStyle: 'classic',
-  appIcon: 'app_icon.png',
-  fontFamily: 'Space Grotesk Variable',
-  fontSize: 13,
-  reducedMotion: false,
-  reduceTransparency: false,
-  startupAnimationEnabled: true,
-  backgroundImageEnabled: false,
-  backgroundImage: '',
-  playbackVolume: 80,
-  resumePlayback: true,
-  performanceHudEnabled: false,
-  autoplayNextMedia: true,
-  navigationPlayPrimaryAction: 'open-player',
-  rememberPlaybackPosition: true,
-  proxyEnabled: false,
-  proxyType: 'http',
-  proxyServer: '',
-  proxyPort: '',
-  proxyUsername: '',
-  proxyPassword: '',
-  proxyBypassLocal: true
-}
-
 export class SettingsStore {
   private data: AppSettingsData
   private file: string
@@ -67,16 +40,19 @@ export class SettingsStore {
 
   constructor(settingsFile: string) {
     this.file = settingsFile
-    this.data = { ...defaults }
+    this.data = { ...DEFAULT_APP_SETTINGS }
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'))
       this.data = {
-        ...defaults,
+        ...DEFAULT_APP_SETTINGS,
         ...sanitizeSettings(raw),
+        // Preserve an explicit opt-out from either legacy switch. Persisting
+        // this normalized shape below removes the retired setting from disk.
+        resumePlayback: raw.rememberPlaybackPosition === false ? false : typeof raw.resumePlayback === 'boolean' ? raw.resumePlayback : DEFAULT_APP_SETTINGS.resumePlayback,
         accentIndex: normalizeColorThemeIndex(raw.accentIndex)
       }
     } catch {
-      this.data = { ...defaults }
+      this.data = { ...DEFAULT_APP_SETTINGS }
     }
     // Rewrite the normalized public settings shape so removed legacy fields and
     // plaintext proxy credentials do not remain in the configuration file.
@@ -154,7 +130,7 @@ export class AppSettings {
     ipcMain.handle(I.settingsPatch, async (_e, partial: Partial<AppSettingsData>) => {
       const safe: Partial<AppSettingsData> = {}
       for (const [key, value] of Object.entries(partial ?? {})) {
-        if (key in defaults) (safe as Record<string, unknown>)[key] = value
+        if (key in DEFAULT_APP_SETTINGS) (safe as Record<string, unknown>)[key] = value
       }
       this.store.patch(safe)
       if (safe.proxyPassword !== undefined) await this.persistProxyPassword(safe.proxyPassword)
@@ -198,7 +174,7 @@ function sanitizeSettings(input: unknown): Partial<AppSettingsData> {
   if (typeof raw.fontFamily === 'string') result.fontFamily = raw.fontFamily
   if ([12, 13, 14, 15, 16].includes(Number(raw.fontSize))) result.fontSize = Number(raw.fontSize) as AppSettingsData['fontSize']
   if (Number.isFinite(raw.playbackVolume)) result.playbackVolume = Math.max(0, Math.min(100, Math.round(Number(raw.playbackVolume))))
-  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'backgroundImageEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'rememberPlaybackPosition', 'proxyEnabled', 'proxyBypassLocal'] as const) {
+  for (const key of ['reducedMotion', 'reduceTransparency', 'startupAnimationEnabled', 'backgroundImageEnabled', 'resumePlayback', 'performanceHudEnabled', 'autoplayNextMedia', 'proxyEnabled', 'proxyBypassLocal'] as const) {
     if (typeof raw[key] === 'boolean') result[key] = raw[key]
   }
   if (raw.navigationPlayPrimaryAction === 'open-player' || raw.navigationPlayPrimaryAction === 'toggle-playback') result.navigationPlayPrimaryAction = raw.navigationPlayPrimaryAction

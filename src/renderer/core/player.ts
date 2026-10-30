@@ -1,6 +1,14 @@
 import type { MpvVideoElement, MpvVideoState } from 'electron-mpv-video/renderer'
 import { I } from '../../shared/channels'
 import type { Chapter, MediaTrackCatalog, PlayPlan, SessionState, TrackInfo } from '../../shared/types'
+import { PcmSpectrum } from '../audio/pcmSpectrum'
+import { mapFrequencyBands, SPECTRUM_BANDS } from '../audio/frequencyBands'
+
+// React Refresh preserves RuntimeProvider's engine ref. Reload when this class
+// changes so playback cannot keep executing methods from the previous module.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => window.location.reload())
+}
 
 let mediaBase = ''
 
@@ -52,7 +60,7 @@ export class PlayerEngine {
   private plan: PlayPlan | null = null
   private disposed = true
   private audioEvents: AbortController | null = null
-  private frequencyData = new Uint8Array(256)
+  private frequencyData = new Float32Array(1024)
   private loadEpoch = 0
   private trackEpoch = 0
   private loadTimeout = 0
@@ -85,7 +93,8 @@ export class PlayerEngine {
   private ctx: AudioContext | null = null
   private analyser: AnalyserNode | null = null
   private sourceNode: MediaElementAudioSourceNode | null = null
-  private spectrum = new Float32Array(128)
+  private spectrum = new Float32Array(SPECTRUM_BANDS)
+  private readonly pcmSpectrum = new PcmSpectrum()
   private readonly spectrumListeners = new Set<(samples: Float32Array) => void>()
   private lastSpectrumAt = 0
   private raf = 0
@@ -145,7 +154,10 @@ export class PlayerEngine {
 
   onSpectrum(listener: (samples: Float32Array) => void): () => void {
     this.spectrumListeners.add(listener)
-    return () => this.spectrumListeners.delete(listener)
+    return () => {
+      this.spectrumListeners.delete(listener)
+      if (!this.spectrumListeners.size) this.pcmSpectrum.reset()
+    }
   }
 
   private emitSpectrum(samples: Float32Array): void {
@@ -153,17 +165,27 @@ export class PlayerEngine {
   }
 
   attach(container: HTMLElement, muted: boolean, volume: number, speed: number): void {
+    if (this.mpvElement?.parentElement && this.mpvElement.parentElement !== container) {
+      // Moving mpv-video disconnects it and destroys its native session. Bind
+      // the next stage to a fresh element after the previous teardown drains.
+      this.retireMpvElement('replace')
+      this.session.loaded = false
+      this.session.phase = 'loading'
+    }
     this.container = container
     this.muted = muted
     this.volume = normalizeVolume(volume)
     this.speed = normalizeSpeed(speed)
     if (this.session.kind !== 'video' || !this.plan || this.session.phase === 'error') return
+    // attach may replace the surface while an earlier open is still pending.
+    // Keep the request queued so that task's finally opens the new surface.
+    if (!this.session.loaded || this.loadedMpvSource !== this.plan.url) this.needsMpvOpen = true
     void this.openMpvIfNeeded()
   }
 
-  detach(): void {
-    // Reparenting a custom element disconnects it and destroys its native mpv
-    // session. The player route calls stop() before the stage is unmounted.
+  detach(container?: HTMLElement): void {
+    // An exiting route must not detach a stage already bound by the next route.
+    if (container && this.container !== container) return
     this.container = null
   }
 
@@ -381,6 +403,7 @@ private fallbackToMpvAudio(): void {
     const plan = this.plan
     if (!plan || !this.usesMpv || this.session.phase === 'error') return
 
+    let openingPlayer: AuroraMpvElement | null = null
     // Removing a custom element starts an asynchronous native teardown. A new
     // element created before it finishes can race the old IPC session and leave
     // the next video attached to the stale player.
@@ -396,6 +419,7 @@ private fallbackToMpvAudio(): void {
       }
       this.needsMpvOpen = false
       const player = this.ensureMpvElement()
+      openingPlayer = player
       if (player.parentElement !== container) container.appendChild(player)
       if (this.loadedMpvSource === plan.url) return
       await player.open(plan.url)
@@ -404,8 +428,9 @@ private fallbackToMpvAudio(): void {
       await this.applyMpvControls()
     } catch (error) {
       const message = errorMessage(error)
-      if (epoch !== this.loadEpoch) return
+      if (epoch !== this.loadEpoch || (openingPlayer && openingPlayer !== this.mpvElement)) return
       if (isMpvAbortError(message)) {
+        this.retireMpvElement('replace')
         // Route remount / StrictMode tore the element down mid-open.
         // Stay in loading and reopen on a later tick; leave needsMpvOpen
         // false so the task finally does not immediately re-enter open.
@@ -499,6 +524,7 @@ private fallbackToMpvAudio(): void {
     if (event.currentTarget !== this.mpvElement) return
     const message = event.detail || 'libmpv playback error'
     if (isMpvAbortError(message)) {
+      this.retireMpvElement('replace')
       this.loadedMpvSource = ''
       const retryEpoch = this.loadEpoch
       window.setTimeout(() => {
@@ -557,6 +583,7 @@ private fallbackToMpvAudio(): void {
       const message = errorMessage(error)
       if (!isCurrent()) return
       if (isMpvAbortError(message)) {
+        this.retireMpvElement('replace')
         console.warn('[PlayerEngine] finishMpvLoad aborted during teardown, will retry', { message })
         this.loadedMpvSource = ''
         const retryEpoch = this.loadEpoch
@@ -603,10 +630,11 @@ private fallbackToMpvAudio(): void {
   }
 
   private async waitForMpvDestroy(): Promise<void> {
-    const destroyTask = this.mpvDestroyTask
-    if (!destroyTask) return
-    await destroyTask
-    if (this.mpvDestroyTask === destroyTask) this.mpvDestroyTask = null
+    while (this.mpvDestroyTask) {
+      const destroyTask = this.mpvDestroyTask
+      await destroyTask
+      if (this.mpvDestroyTask === destroyTask) this.mpvDestroyTask = null
+    }
   }
 
   private async applySelectedTracks(): Promise<void> {
@@ -933,10 +961,10 @@ private ensureAudioGraph(): void {
       this.runCommand(() => this.ctx!.resume().catch(() => void 0))
       if (this.ctx.state === 'suspended') this.runCommand(() => this.ctx!.resume())
       this.analyser = this.ctx.createAnalyser()
-      this.analyser.fftSize = 512
+      this.analyser.fftSize = 2048
       this.analyser.minDecibels = -90
       this.analyser.maxDecibels = -18
-      this.analyser.smoothingTimeConstant = 0.34
+      this.analyser.smoothingTimeConstant = 0
       this.analyser.connect(this.ctx.destination)
       this.sourceNode = this.ctx.createMediaElementSource(audio)
       this.sourceNode.connect(this.analyser)
@@ -975,20 +1003,20 @@ private ensureAudioGraph(): void {
       this.frameCount = 0
       if (this.session.kind === 'audio') this.ev.onFps?.(fps)
     }
-    if (this.analyser && now - this.lastSpectrumAt >= 32) {
+    if (this.analyser && now - this.lastSpectrumAt >= 20) {
       this.lastSpectrumAt = now
-      const raw = this.frequencyData
-      this.analyser.getByteFrequencyData(raw)
-      for (let i = 0; i < this.spectrum.length; i++) {
-        const start = Math.floor((i / this.spectrum.length) * raw.length)
-        const end = Math.max(start + 1, Math.floor(((i + 1) / this.spectrum.length) * raw.length))
-        let sumSquares = 0
-        for (let bin = start; bin < end; bin++) sumSquares += raw[bin] * raw[bin]
-        const rms = Math.sqrt(sumSquares / Math.max(1, end - start)) / 255
-        const gated = Math.max(0, (rms - 0.018) / 0.982)
-        this.spectrum[i] = Math.min(1, Math.pow(gated, 0.72))
-      }
+      const playing = this.session.loaded && !this.session.paused && !this.session.buffering &&
+        !this.session.seeking && !this.seekingGesture && !this.muted && this.volume > 0
+      if (playing && this.ctx) {
+        this.analyser.getFloatFrequencyData(this.frequencyData)
+        mapFrequencyBands(this.frequencyData, this.ctx.sampleRate / this.analyser.fftSize, this.spectrum)
+      } else this.spectrum.fill(0)
       this.emitSpectrum(new Float32Array(this.spectrum))
+    } else if (this.mpvAudio && this.session.mediaId != null && this.spectrumListeners.size && now - this.lastSpectrumAt >= 20) {
+      this.lastSpectrumAt = now
+      const playing = this.session.loaded && !this.session.paused && !this.session.buffering &&
+        !this.session.seeking && !this.seekingGesture && this.seekTarget === null
+      this.emitSpectrum(this.pcmSpectrum.sample(this.session.mediaId, this.session.position, playing, this.muted ? 0 : this.volume / 100))
     }
     if (this.session.kind === 'audio' && this.video && !this.video.paused) {
       this.updateAudioPosition(this.video)
@@ -1214,12 +1242,15 @@ private updateVideoClockStall(now: number): void {
     }
   }
 
-  persistPlaybackProgress(): void {
-    if (this.session.idle || this.session.mediaId == null || this.session.seeking || this.seekingGesture) return
+  persistPlaybackProgress(): SessionState | null {
+    if (this.session.idle || this.session.mediaId == null || this.session.seeking || this.seekingGesture) return null
     if (this.session.kind === 'audio' && this.video) this.updateAudioPosition(this.video)
+    else if (this.session.loaded && this.mpvElement) this.updateMpvPosition(this.mpvElement.currentTime)
+    const snapshot = { ...this.session, volume: this.volume, muted: this.muted, speed: this.speed }
     try {
-      window.aurora.persistSession({ ...this.session, volume: this.volume, muted: this.muted, speed: this.speed })
+      window.aurora.persistSession(snapshot)
     } catch (error) { console.warn('[PlayerEngine] Failed to persist playback progress', error) }
+    return snapshot
   }
 
   private resetNetworkStats(): void {
@@ -1233,6 +1264,7 @@ private updateVideoClockStall(now: number): void {
   }
 
   private stopBackends(reason: 'replace' | 'failure' | 'stop'): void {
+    this.pcmSpectrum.reset()
     this.mpvLoadTask = null
     // Abandon any in-flight open so its finally cannot reopen after teardown.
     this.mpvOpenTask = null
@@ -1247,25 +1279,34 @@ private updateVideoClockStall(now: number): void {
       this.video.remove()
       this.video = null
     }
-    if (this.mpvElement) {
-      const player = this.mpvElement
-      this.mpvElement = null
-      player.removeEventListener('mpv-state', this.onMpvState as EventListener)
-      player.removeEventListener('mpv-event', this.onMpvEvent as EventListener)
-      player.removeEventListener('mpv-error', this.onMpvError as EventListener)
-      const previousDestroyTask = this.mpvDestroyTask
-      const currentDestroyTask = (previousDestroyTask ?? Promise.resolve())
-        .catch(() => void 0)
-        .then(() => player.destroy())
-        .catch((error) => {
-          console.error('[PlayerEngine] Failed to destroy mpv backend', { reason, error })
-        })
-      this.mpvDestroyTask = currentDestroyTask
-      void currentDestroyTask.then(() => {
-        if (this.mpvDestroyTask === currentDestroyTask) this.mpvDestroyTask = null
+    this.retireMpvElement(reason)
+  }
+
+  private retireMpvElement(reason: 'replace' | 'failure' | 'stop'): void {
+    const player = this.mpvElement
+    if (!player) return
+    this.mpvElement = null
+    this.mpvLoadTask = null
+    this.loadedMpvSource = ''
+    player.removeEventListener('mpv-state', this.onMpvState as EventListener)
+    player.removeEventListener('mpv-event', this.onMpvEvent as EventListener)
+    player.removeEventListener('mpv-error', this.onMpvError as EventListener)
+    const previousDestroyTask = this.mpvDestroyTask
+    const currentDestroyTask = (previousDestroyTask ?? Promise.resolve())
+      .catch(() => void 0)
+      .then(() => player.destroy())
+      .catch((error) => {
+        console.error('[PlayerEngine] Failed to destroy mpv backend', { reason, error })
       })
-      player.remove()
-    }
+      .finally(() => {
+        // Removing first invokes disconnectedCallback and starts a second,
+        // untracked teardown. Keep removal inside the serialized destroy task.
+        player.remove()
+      })
+    this.mpvDestroyTask = currentDestroyTask
+    void currentDestroyTask.then(() => {
+      if (this.mpvDestroyTask === currentDestroyTask) this.mpvDestroyTask = null
+    })
   }
 
   stop(): void {

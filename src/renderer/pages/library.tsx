@@ -1,5 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { LayoutGroup, useReducedMotion } from 'motion/react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { p, useLibraryRuntime } from '../core/runtime'
 import { FilledIcon, Icon, type IconName } from '../core/icons'
@@ -9,6 +9,8 @@ import { I } from '../../shared/channels'
 import { collectSimilarVideos } from './libraryCollections'
 import { AudioArtwork } from './mediaArtwork'
 import { FloatingMenu } from '../shared/floatingMenu'
+import { clearIdleThumbnails, ThumbnailImage } from '../shared/thumbnail'
+import { TabHighlight, useItemRevealAnimation } from '../shared/tabMotion'
 
 type MediaKind = 'video' | 'audio'
 type LibraryTab = 'all' | 'favorite' | MediaKind
@@ -106,7 +108,13 @@ type LibraryDisplayEntry =
   | { type: 'collection'; id: string; title: string; cards: LibraryCardData[]; source: 'auto' | 'manual' }
 
 type LibraryVirtualEntry = { entry: LibraryDisplayEntry; index: number }
-type LibraryVirtualRow = { key: string; entries: LibraryVirtualEntry[]; expanded: boolean }
+type LibraryVirtualRow = {
+  key: string
+  entries: LibraryVirtualEntry[]
+  expanded: boolean
+  collectionChild?: boolean
+  firstCollectionRow?: boolean
+}
 
 function displayEntryKey(entry: LibraryDisplayEntry): string {
   return entry.type === 'item' ? `item-${entry.card.item.id}` : `collection-${entry.id}`
@@ -125,6 +133,19 @@ function buildVirtualRows(entries: LibraryDisplayEntry[], columns: number, expan
     if (expanded) {
       flush()
       rows.push({ key: `expanded-${entry.id}`, entries: [{ entry, index }], expanded: true })
+      // Children participate in the same virtual window as ordinary cards.
+      // A large collection must never mount all of its covers in one row.
+      for (let offset = 0; offset < entry.cards.length; offset += columns) {
+        const children: LibraryVirtualEntry[] = entry.cards.slice(offset, offset + columns)
+          .map((card): LibraryVirtualEntry => ({ entry: { type: 'item', card }, index }))
+        rows.push({
+          key: `children-${entry.id}-${children.map(({ entry }) => displayEntryKey(entry)).join('|')}`,
+          entries: children,
+          expanded: false,
+          collectionChild: true,
+          firstCollectionRow: offset === 0
+        })
+      }
       return
     }
     pending.push({ entry, index })
@@ -162,161 +183,66 @@ function metadataFor(item: MediaItem, unknownArtist: string, video: string, hour
   return duration ? `${duration} · ${video}` : video
 }
 
-function LibrarySortSelect({
-  value,
-  direction,
-  options,
-  label,
-  ascendingLabel,
-  descendingLabel,
-  onChange,
-  onDirectionChange
-}: {
-  value: SortBy
-  direction: SortDirection
-  options: Array<{ value: SortBy; label: string }>
+type LibraryToolbarOption = {
   label: string
-  ascendingLabel: string
-  descendingLabel: string
-  onChange: (value: SortBy) => void
-  onDirectionChange: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
-  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
-  const selected = options[selectedIndex] ?? options[0]
-
-  useEffect(() => {
-    if (!open) return
-    const frame = window.requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus())
-    return () => window.cancelAnimationFrame(frame)
-  }, [open, selectedIndex])
-
-  const choose = (nextValue: SortBy) => {
-    onChange(nextValue)
-    setOpen(false)
-    window.requestAnimationFrame(() => triggerRef.current?.focus())
-  }
-
-  const moveOptionFocus = (currentIndex: number, offset: number) => {
-    const nextIndex = (currentIndex + offset + options.length) % options.length
-    optionRefs.current[nextIndex]?.focus()
-  }
-
-  return (
-    <div className="library-sort-select" ref={rootRef} data-open={open ? 'true' : 'false'}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className="library-sort-trigger"
-        aria-label={label}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((visible) => !visible)}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault()
-            setOpen(true)
-          }
-          if (event.key === 'Escape') setOpen(false)
-        }}
-      >
-        <Icon name="sliders" size={17} />
-        <span className="library-sort-value">{selected?.label ?? ''}</span>
-        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={15} />
-      </button>
-      <button
-        type="button"
-        className={`library-sort-direction ${direction}`}
-        onClick={onDirectionChange}
-        aria-label={direction === 'asc' ? ascendingLabel : descendingLabel}
-        title={direction === 'asc' ? ascendingLabel : descendingLabel}
-      >
-        <Icon name="up" size={17} />
-      </button>
-      <FloatingMenu
-        open={open}
-        anchorRef={rootRef}
-        onClose={() => setOpen(false)}
-        className="library-sort-menu library-popover"
-        role="listbox"
-        ariaLabel={label}
-        align="end"
-        width={196}
-        gap={5}
-      >
-          {options.map((option, index) => (
-            <button
-              ref={(node) => { optionRefs.current[index] = node }}
-              type="button"
-              role="option"
-              aria-selected={value === option.value}
-              className={value === option.value ? 'selected' : ''}
-              key={option.value}
-              onClick={() => choose(option.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowDown') { event.preventDefault(); moveOptionFocus(index, 1) }
-                if (event.key === 'ArrowUp') { event.preventDefault(); moveOptionFocus(index, -1) }
-                if (event.key === 'Home') { event.preventDefault(); optionRefs.current[0]?.focus() }
-                if (event.key === 'End') { event.preventDefault(); optionRefs.current[options.length - 1]?.focus() }
-                if (event.key === 'Escape') { event.preventDefault(); setOpen(false); triggerRef.current?.focus() }
-              }}
-            >
-              <span className="settings-select-option-main"><span>{option.label}</span></span>
-              {value === option.value && <Icon name="check" size={15} />}
-            </button>
-          ))}
-      </FloatingMenu>
-    </div>
-  )
+  icon: IconName
+  onSelect: () => void
+  checked?: boolean
+  role?: 'menuitemradio' | 'menuitemcheckbox'
+  disabled?: boolean
+  hint?: string
+  divider?: boolean
 }
 
-function LibrarySourceSelect({ value, options, label, onChange }: {
-  value: SourceFilter
-  options: { value: SourceFilter; label: string; icon: IconName }[]
+function LibraryToolbarMenu({ label, icon, active = false, options }: {
   label: string
-  onChange: (value: SourceFilter) => void
+  icon: IconName
+  active?: boolean
+  options: LibraryToolbarOption[]
 }) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const menuId = useId()
-  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
+  const close = () => { setOpen(false); triggerRef.current?.focus() }
   useEffect(() => {
     if (!open) return
-    const frame = requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus())
+    const frame = requestAnimationFrame(() => optionRefs.current.find((node) => node && !node.disabled)?.focus())
     return () => cancelAnimationFrame(frame)
-  }, [open, selectedIndex])
-  const close = () => { setOpen(false); triggerRef.current?.focus() }
+  }, [open])
+  const moveFocus = (index: number, offset: number) => {
+    for (let step = 1; step <= options.length; step++) {
+      const next = (index + offset * step + options.length) % options.length
+      if (!options[next].disabled) { optionRefs.current[next]?.focus(); break }
+    }
+  }
   return (
     <>
-      <button ref={triggerRef} type="button" className="library-source-filter" aria-label={`${label}: ${options[selectedIndex]?.label}`} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined}
+      <button ref={triggerRef} type="button" className={`library-action icon ${active ? 'active' : ''}`}
+        aria-label={label} data-tooltip={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)} onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true) }
-        }}>
-        <span>{options[selectedIndex]?.label}</span><Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} />
-      </button>
-      <FloatingMenu open={open} anchorRef={triggerRef} onClose={() => setOpen(false)} className="library-source-menu library-popover" width={184} gap={7}>
-        <div id={menuId} role="listbox" aria-label={label}>
+        }}><Icon name={icon} size={17} /></button>
+      <FloatingMenu open={open} anchorRef={triggerRef} onClose={() => setOpen(false)} className="library-source-menu library-popover library-toolbar-menu" width={220} gap={7} align="end">
+        <div id={menuId} role="menu" aria-label={label}>
           {options.map((option, index) => (
-            <button key={option.value} ref={(node) => { optionRefs.current[index] = node }} type="button" role="option" aria-selected={value === option.value} tabIndex={value === option.value ? 0 : -1}
-              onClick={() => { onChange(option.value); close() }}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                  event.preventDefault(); optionRefs.current[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]?.focus()
-                } else if (event.key === 'Home' || event.key === 'End') {
-                  event.preventDefault(); optionRefs.current[event.key === 'Home' ? 0 : options.length - 1]?.focus()
-                } else if (event.key === 'Escape') {
-                  event.preventDefault(); event.stopPropagation(); close()
-                } else if (event.key === 'Tab') {
-                  // Restore the anchor before the browser advances focus out of the menu.
-                  close()
-                }
-              }}>
-              <Icon name={option.icon} size={16} /><span>{option.label}</span>{value === option.value && <Icon name="check" size={15} />}
-            </button>
+            <React.Fragment key={option.label}>
+              {option.divider && <div className="library-menu-divider" role="separator" />}
+              <button ref={(node) => { optionRefs.current[index] = node }} type="button" role={option.role ?? 'menuitem'}
+                aria-checked={option.role ? !!option.checked : undefined} disabled={option.disabled} data-tooltip={option.hint} aria-label={option.hint}
+                className={option.checked ? 'selected' : ''} tabIndex={-1}
+                onClick={() => { close(); option.onSelect() }} onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault(); moveFocus(index, event.key === 'ArrowDown' ? 1 : -1)
+                  } else if (event.key === 'Home' || event.key === 'End') {
+                    event.preventDefault(); moveFocus(event.key === 'Home' ? options.length - 1 : 0, event.key === 'Home' ? 1 : -1)
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault(); event.stopPropagation(); close()
+                  } else if (event.key === 'Tab') close()
+                }}>
+                <Icon name={option.icon} size={16} /><span>{option.label}</span>{option.checked && <Icon name="check" size={15} />}
+              </button>
+            </React.Fragment>
           ))}
         </div>
       </FloatingMenu>
@@ -355,6 +281,7 @@ function LibraryPageView() {
     try { return Math.max(0, Number(window.sessionStorage.getItem('aurora.library.scroll.v1')) || 0) } catch { return 0 }
   })
   const [query, setQuery] = useState(initialBrowse.query)
+  const [searchOpen, setSearchOpen] = useState(initialBrowse.query !== '')
   const [kind, setKind] = useState<LibraryTab>(initialBrowse.kind)
   const [source, setSource] = useState<SourceFilter>(initialBrowse.source)
   const [grouped, setGrouped] = useState(initialBrowse.grouped)
@@ -362,9 +289,23 @@ function LibraryPageView() {
   const previousFiltersRef = useRef(filterSignature)
   const [busy, setBusy] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const searchToggleRef = useRef<HTMLButtonElement>(null)
+  const searchWasOpenRef = useRef(false)
+  const openSearch = useCallback(() => {
+    if (searchRef.current) { searchRef.current.focus(); searchRef.current.select(); return }
+    setSearchOpen(true)
+  }, [])
+  const closeSearch = useCallback(() => {
+    setQuery('')
+    setSearchOpen(false)
+  }, [])
+  useEffect(() => {
+    if (searchOpen) { searchRef.current?.focus(); searchRef.current?.select() }
+    else if (searchWasOpenRef.current) searchToggleRef.current?.focus()
+    searchWasOpenRef.current = searchOpen
+  }, [searchOpen])
   const selectionAnchorRef = useRef<number | null>(null)
   const [view, setView] = useState<ViewMode>(readLibraryViewMode)
-  const [viewHasChanged, setViewHasChanged] = useState(false)
   const [sortPreference, setSortPreference] = useState<LibrarySortPreference>(readLibrarySortPreference)
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(() => new Set())
   const [collectionPreference, setCollectionPreference] = useState<LibraryCollectionPreference>(readLibraryCollectionPreference)
@@ -380,7 +321,6 @@ function LibraryPageView() {
   }, [])
   useEffect(() => () => window.clearTimeout(scrollHideTimerRef.current), [])
   const gridRef = useRef<HTMLDivElement>(null)
-  const viewAnimationTimerRef = useRef(0)
   const viewAnchorMediaIdRef = useRef<number | null>(null)
   const locatedMediaIdRef = useRef<number | null>(null)
   const [gridWidth, setGridWidth] = useState(0)
@@ -412,7 +352,7 @@ function LibraryPageView() {
     const focusSearch = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('[role="dialog"], [role="alertdialog"]')) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-        event.preventDefault(); searchRef.current?.focus(); searchRef.current?.select()
+        event.preventDefault(); openSearch()
       }
     }
     page.addEventListener('scroll', saveScroll, { passive: true })
@@ -423,7 +363,7 @@ function LibraryPageView() {
       page.removeEventListener('scroll', saveScroll)
       window.removeEventListener('keydown', focusSearch)
     }
-  }, [])
+  }, [openSearch])
 
   useEffect(() => {
     try {
@@ -474,6 +414,7 @@ function LibraryPageView() {
   }, [library, t])
 
   const deferredQuery = useDeferredValue(query)
+  useItemRevealAnimation(JSON.stringify([kind, source, deferredQuery, grouped, view, sortBy, sortDirection]), !!reduceMotion, gridRef)
   const collator = useMemo(() => new Intl.Collator(locale, { numeric: true, sensitivity: 'base' }), [locale])
 
   const visibleCards = useMemo(() => {
@@ -555,18 +496,14 @@ function LibraryPageView() {
   )
   const estimateRowSize = useCallback((index: number) => {
     const row = virtualRows[index]
+    if (row?.expanded) return view === 'list' ? 104 : 78
+    const inset = row?.firstCollectionRow ? (view === 'list' ? 6 : 18) : 0
     if (view === 'list') {
-      if (!row?.expanded) return 100
-      const collection = row.entries[0]?.entry
-      const itemCount = collection?.type === 'collection' ? collection.cards.length : 0
-      return 98 + itemCount * 100
+      return 80 + inset + (row?.collectionChild ? 2 : 0)
     }
-    const rowGap = 22
-    const cardHeight = ((measuredGridWidth - gridColumnGap * (columnCount - 1)) / columnCount) * (9 / 16) + 78
-    if (!row?.expanded) return cardHeight + rowGap
-    const collection = row.entries[0]?.entry
-    const itemCount = collection?.type === 'collection' ? collection.cards.length : 0
-    return 108 + Math.ceil(itemCount / columnCount) * (cardHeight + rowGap) + 24
+    const rowGap = 0
+    const cardHeight = ((measuredGridWidth - gridColumnGap * (columnCount - 1)) / columnCount) * (9 / 16) + 100
+    return cardHeight + rowGap + inset
   }, [columnCount, gridWidth, measuredGridWidth, gridColumnGap, selectionMode, view, virtualRows])
   const getVirtualRowKey = useCallback((index: number) => virtualRows[index]?.key ?? index, [virtualRows])
   const rowVirtualizer = useVirtualizer<HTMLElement, HTMLDivElement>({
@@ -582,6 +519,20 @@ function LibraryPageView() {
     overscan: view === 'list' ? 8 : 3,
     scrollMargin: gridScrollMargin
   })
+
+  // React detaches callback refs before removing their DOM nodes. Sweep after
+  // the commit, when isConnected is false, so measurements cannot retain cards
+  // (and their decoded covers) that have left the virtual window.
+  useLayoutEffect(() => { rowVirtualizer.measureElement(null) })
+  useLayoutEffect(() => {
+    // The virtualizer keeps measured sizes by key across filters and layouts.
+    // Retain only keys in this data set, rather than every historical grouping.
+    const keys = new Set(virtualRows.map((row) => row.key))
+    for (const key of rowVirtualizer.itemSizeCache.keys()) {
+      if (typeof key !== 'string' || !keys.has(key)) rowVirtualizer.itemSizeCache.delete(key)
+    }
+  }, [rowVirtualizer, virtualRows])
+  useEffect(() => () => { queueMicrotask(clearIdleThumbnails) }, [filterSignature, grouped, view])
 
   useLayoutEffect(() => {
     const page = scrollRef.current
@@ -601,15 +552,11 @@ function LibraryPageView() {
   }, [displayEntries.length, selectionMode, view])
 
   useLayoutEffect(() => {
-    rowVirtualizer.measure()
-  }, [columnCount, gridWidth, rowVirtualizer, selectionMode, view, virtualRows])
-
-  useLayoutEffect(() => {
     const mediaId = viewAnchorMediaIdRef.current
     if (mediaId == null) return
     const rowIndex = virtualRows.findIndex((row) => row.entries.some(({ entry }) => entry.type === 'item'
       ? entry.card.item.id === mediaId
-      : entry.cards.some((card) => card.item.id === mediaId)))
+      : !row.expanded && entry.cards.some((card) => card.item.id === mediaId)))
     viewAnchorMediaIdRef.current = null
     if (rowIndex >= 0) rowVirtualizer.scrollToIndex(rowIndex, { align: 'center' })
   }, [rowVirtualizer, view, virtualRows])
@@ -620,7 +567,7 @@ function LibraryPageView() {
     if (currentMediaId == null) return -1
     return virtualRows.findIndex((row) => row.entries.some(({ entry }) => entry.type === 'item'
       ? entry.card.item.id === currentMediaId
-      : entry.cards.some((card) => card.item.id === currentMediaId)))
+      : !row.expanded && entry.cards.some((card) => card.item.id === currentMediaId)))
   }, [currentMediaId, virtualRows])
 
   const [locateRequested, setLocateRequested] = useState(false)
@@ -660,18 +607,10 @@ function LibraryPageView() {
 
   const visibleMediaIds = useMemo(() => visibleCards.map((card) => card.item.id), [visibleCards])
   const allVisibleSelected = visibleMediaIds.length > 0 && visibleMediaIds.every((id) => selectedMediaIds.has(id))
-  const hasAnimatedEntriesRef = useRef(false)
-  const shouldStaggerEntries = displayEntries.length > 0 && !hasAnimatedEntriesRef.current
-
-  useEffect(() => {
-    if (displayEntries.length > 0) hasAnimatedEntriesRef.current = true
-  }, [displayEntries.length])
-
   useEffect(() => {
     try { window.localStorage.setItem(LIBRARY_VIEW_STORAGE_KEY, view) } catch { void 0 }
   }, [view])
 
-  useEffect(() => () => window.clearTimeout(viewAnimationTimerRef.current), [])
 
   const switchLibraryView = (nextView: ViewMode) => {
     if (nextView === view) return
@@ -684,16 +623,11 @@ function LibraryPageView() {
     }
     const anchorEntry = anchor ? virtualRows[anchor.index]?.entries[0]?.entry : null
     viewAnchorMediaIdRef.current = anchorEntry?.type === 'item' ? anchorEntry.card.item.id : anchorEntry?.cards[0]?.item.id ?? null
-    window.clearTimeout(viewAnimationTimerRef.current)
     setView(nextView)
-    setViewHasChanged(true)
-    viewAnimationTimerRef.current = window.setTimeout(() => {
-      viewAnimationTimerRef.current = 0
-      setViewHasChanged(false)
-    }, 260)
   }
 
   const filesTitle = kind === 'video' ? t('videoFiles') : kind === 'audio' ? t('audioFiles') : kind === 'favorite' ? t('favorites') : t('allFiles')
+  const checkFilesLabel = settings.language === 'zh' ? (availabilityRefreshing ? '检查中…' : '检查文件') : (availabilityRefreshing ? 'Checking…' : 'Check files')
 
   const openCard = (card: LibraryCardData, event?: React.MouseEvent) => {
     if (selectionMode || event?.ctrlKey || event?.metaKey || event?.shiftKey) {
@@ -792,7 +726,7 @@ function LibraryPageView() {
       { label: t('addToQueue'), icon: 'playlist', disabled: !item.sourceAvailable, onSelect: () => void enqueue([item.id]) },
       { label: item.favorite ? t('unfavorite') : t('favorite'), icon: 'heart', checked: item.favorite, onSelect: () => toggleFavorite(item.id) },
       { divider: true },
-      { label: t('regenerateCover'), icon: 'refresh', disabled: !item.sourceAvailable, onSelect: () => void p(I.probeRegenerateCover, item.id) },
+      ...(!item.isAudio ? [{ label: t('regenerateCover'), icon: 'refresh' as const, disabled: !item.sourceAvailable, onSelect: () => void p(I.probeRegenerateCover, item.id) }] : []),
       { label: t('revealFile'), icon: 'folder', disabled: item.protocol !== 'local' || !item.sourceAvailable, onSelect: () => void openPath(item.url) },
       { divider: true },
       {
@@ -848,9 +782,7 @@ function LibraryPageView() {
     ])
   }
 
-  const playableIds = useMemo(() => visibleCards.filter((card) => card.item.sourceAvailable).map((card) => card.item.id), [visibleCards])
   const selectedCards = useMemo(() => visibleCards.filter((card) => selectedMediaIds.has(card.item.id)), [selectedMediaIds, visibleCards])
-  const selectedPlayableIds = useMemo(() => selectedCards.filter((card) => card.item.sourceAvailable).map((card) => card.item.id), [selectedCards])
   const allSelectedFavorite = selectedCards.length > 0 && selectedCards.every((card) => card.item.favorite)
   const resetFilters = () => { setKind('video'); setQuery(''); setSource('all') }
   const removeSelected = async () => {
@@ -867,9 +799,9 @@ function LibraryPageView() {
     if (event.target instanceof Element && event.target.closest('[role="dialog"], [role="menu"], [role="listbox"]')) return
     const editing = event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable)
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-      event.preventDefault(); event.stopPropagation(); searchRef.current?.focus(); searchRef.current?.select()
+      event.preventDefault(); event.stopPropagation(); openSearch()
     } else if (event.key === 'Escape') {
-      if (editing && query) { event.preventDefault(); setQuery('') }
+      if (editing) { event.preventDefault(); closeSearch() }
       else if (selectionMode) { event.preventDefault(); leaveSelectionMode() }
     } else if (!editing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault(); event.stopPropagation(); setSelectionMode(true); setSelectedMediaIds(new Set(visibleMediaIds))
@@ -877,90 +809,87 @@ function LibraryPageView() {
   }
 
   return (
-    <main ref={pageRef} className={`library-page library-workspace ${reduceMotion ? 'is-reduced' : ''}`} aria-labelledby="library-title" onKeyDown={handleKeys} tabIndex={-1}>
-      <header className="library-topline">
-        <div>
-          <h1 id="library-title">{t('libraryTitle')}</h1>
-          <p>{t('librarySummary', { count: libraryStats.total.toLocaleString(locale) })}</p>
-        </div>
-        <div className="library-import-actions">
-          <button type="button" className="library-action" disabled={availabilityRefreshing} onClick={() => void refreshAvailability()} aria-busy={availabilityRefreshing}><Icon name="refresh" size={17} />{settings.language === 'zh' ? (availabilityRefreshing ? '检查中…' : '检查文件') : (availabilityRefreshing ? 'Checking…' : 'Check files')}</button>
-          <button type="button" className="library-action" onClick={() => void addFolderDialog()}><Icon name="folder" size={17} />{t('libraryAddFolder')}</button>
-          <button type="button" className="library-action primary" onClick={() => void addMediaDialog()}><Icon name="plus" size={17} />{t('addMedia')}</button>
-        </div>
-      </header>
-
+    <main ref={pageRef} className={`library-page library-workspace ${reduceMotion ? 'is-reduced' : ''}`} aria-label={t('libraryTitle')} onKeyDown={handleKeys} tabIndex={-1}>
       <section className="library-files" aria-label={filesTitle}>
         <div className="library-files-head library-toolbar">
-          <div className="library-browse-row">
-            <div className="library-category-nav" role="group" aria-label={t('mediaType')}>
+          <div className="library-organize-row">
+            <LayoutGroup id="library-tab-selection"><div className="library-tab-dock has-tab-motion" role="group" aria-label={t('mediaType')}>
               {([
-                ['video', t('videos'), 'video'],
-                ['audio', t('audios'), 'music'],
-                ['favorite', t('favorites'), 'heart']
-              ] as const).map(([value, label, icon]) => (
-                <button type="button" key={value} aria-pressed={kind === value} className={kind === value ? 'active' : ''} onClick={() => setKind(value)}>
-                  <Icon name={icon} size={17} />
+                ['video', t('videos'), 'video', libraryStats.videos],
+                ['audio', t('audios'), 'music', libraryStats.audios],
+                ['favorite', t('favorites'), 'heart', libraryStats.favorites]
+              ] as const).map(([value, label, icon, count]) => (
+                <button type="button" key={value} aria-pressed={kind === value} aria-label={`${label} ${count.toLocaleString(locale)}`} data-tooltip={label} className={kind === value ? 'active' : ''} onClick={() => setKind(value)}>
+                  {kind === value && <TabHighlight reducedMotion={!!reduceMotion} />}
+                  <Icon name={icon} size={16} />
                   <span className="library-category-label">{label}</span>
+                  <span className="library-category-count">{count.toLocaleString(locale)}</span>
                 </button>
               ))}
-            </div>
-            <div className="library-query-field">
-              <Icon name="search" size={17} />
-              <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('librarySearchHint')} aria-label={t('librarySearchHint')} />
-              {query ? <button type="button" onClick={() => { setQuery(''); searchRef.current?.focus() }} aria-label={t('libraryClearSearch')}><Icon name="close" size={15} /></button> : <kbd>Ctrl F</kbd>}
-            </div>
-          </div>
-          <div className="library-organize-row">
-            {!selectionMode && <button type="button" className="library-action play" disabled={!playableIds.length} onClick={() => void play(playableIds, 0)}><Icon name="play" size={16} />{t('playAll')}</button>}
-            {(query || source !== 'all') && <div className="library-result-summary" aria-live="polite">{t('libraryResults', { count: visibleCards.length.toLocaleString(locale) })}</div>}
-            <LibrarySourceSelect value={source} label={t('librarySourceFilter')} onChange={setSource}
-              options={[
+            </div></LayoutGroup>
+            <div className="library-toolbar-spacer" />
+            {!selectionMode && (query || source !== 'all'
+              ? <span className="library-toolbar-hint is-results" aria-live="polite">{t('libraryResults', { count: visibleCards.length.toLocaleString(locale) })}</span>
+              : <button type="button" className="library-toolbar-info" data-tooltip={t('libraryBrowseHint')} aria-label={t('libraryBrowseHint')}><Icon name="info" size={16} /></button>)}
+            <div className="library-toolbar-actions" role="group" aria-label={t('libraryActions')}>
+              <button ref={searchToggleRef} type="button" className="library-action icon" onClick={openSearch} aria-label={t('search')} data-tooltip={t('search')} aria-expanded={searchOpen}><Icon name="search" size={17} /></button>
+              <LibraryToolbarMenu label={t('addMedia')} icon="plus" options={[
+                { label: t('addFile'), icon: 'file', onSelect: () => void addMediaDialog() },
+                { label: t('libraryAddFolder'), icon: 'folder', onSelect: () => void addFolderDialog() }
+              ]} />
+              <span className="library-toolbar-actions-divider" aria-hidden="true" />
+              <LibraryToolbarMenu label={`${t('librarySourceFilter')}: ${t(source === 'all' ? 'libraryAllSources' : source === 'local' ? 'libraryLocal' : source === 'remote' ? 'libraryRemote' : 'libraryUnavailable')}`} icon="filter" active={source !== 'all'} options={[
                 { value: 'all', label: t('libraryAllSources'), icon: 'library' },
                 { value: 'local', label: t('libraryLocal'), icon: 'folder' },
                 { value: 'remote', label: t('libraryRemote'), icon: 'network' },
                 { value: 'unavailable', label: t('libraryUnavailable'), icon: 'alert' }
+              ].map((option) => ({ label: option.label, icon: option.icon as IconName, role: 'menuitemradio', checked: source === option.value, onSelect: () => setSource(option.value as SourceFilter) }))} />
+              <LibraryToolbarMenu label={`${t('sortBy')}: ${t(sortBy === 'added' ? 'sortAddedTime' : sortBy === 'played' ? 'librarySortPlayed' : sortBy === 'name' ? 'sortName' : sortBy === 'size' ? 'sortFileSize' : 'sortDuration')}, ${t(sortDirection === 'asc' ? 'sortAscending' : 'sortDescending')}`} icon="sort" options={[
+                ...([
+                  { value: 'added', label: t('sortAddedTime'), icon: 'calendar' },
+                  { value: 'played', label: t('librarySortPlayed'), icon: 'history' },
+                  { value: 'name', label: t('sortName'), icon: 'text' },
+                  { value: 'size', label: t('sortFileSize'), icon: 'hardDrive' },
+                  { value: 'duration', label: t('sortDuration'), icon: 'clock' }
+                ] as const).map((option) => ({
+                  label: option.label, icon: option.icon, role: 'menuitemradio' as const, checked: sortBy === option.value,
+                  onSelect: () => { setSortPreference({ sortBy: option.value, sortDirection: option.value === 'name' ? 'asc' : 'desc' }); scrollRef.current?.scrollTo({ top: 0 }) }
+                })),
+                { label: t('sortAscending'), icon: 'up', role: 'menuitemradio', checked: sortDirection === 'asc', divider: true, onSelect: () => setSortPreference((current) => ({ ...current, sortDirection: 'asc' })) },
+                { label: t('sortDescending'), icon: 'down', role: 'menuitemradio', checked: sortDirection === 'desc', onSelect: () => setSortPreference((current) => ({ ...current, sortDirection: 'desc' })) }
               ]} />
-            <button type="button" className={`library-action subtle ${grouped ? 'active' : ''}`} aria-pressed={grouped} disabled={!!query.trim()} title={query.trim() ? t('librarySearchUngrouped') : t('libraryGroupHint')} onClick={() => setGrouped(!grouped)}><Icon name="library" size={16} />{t('libraryGroup')}</button>
-            <div className="library-toolbar-spacer" />
-            <LibrarySortSelect
-              value={sortBy} direction={sortDirection}
-              options={[{ value: 'added', label: t('sortAddedTime') }, { value: 'played', label: t('librarySortPlayed') }, { value: 'name', label: t('sortName') }, { value: 'size', label: t('sortFileSize') }, { value: 'duration', label: t('sortDuration') }]}
-              label={t('sortBy')} ascendingLabel={t('sortAscending')} descendingLabel={t('sortDescending')}
-              onChange={(sortBy) => { setSortPreference({ sortBy, sortDirection: sortBy === 'name' ? 'asc' : 'desc' }); scrollRef.current?.scrollTo({ top: 0 }) }}
-              onDirectionChange={() => setSortPreference((current) => ({ ...current, sortDirection: current.sortDirection === 'asc' ? 'desc' : 'asc' }))}
-            />
-            <div className="library-view-toggle" role="group" aria-label={t('viewMode')}>
-              {(['grid', 'list'] as const).map((mode) => <button type="button" key={mode} className={view === mode ? 'active' : ''} onClick={() => switchLibraryView(mode)} aria-label={t(mode === 'grid' ? 'gridView' : 'listView')} aria-pressed={view === mode}><Icon name={mode} size={18} /></button>)}
+              <LibraryToolbarMenu label={`${t('viewMode')}: ${t(view === 'grid' ? 'gridView' : 'listView')}${grouped ? ` · ${t('libraryGroup')}` : ''}`} icon={view} active={grouped} options={[
+                ...(['grid', 'list'] as const).map((mode) => ({ label: t(mode === 'grid' ? 'gridView' : 'listView'), icon: mode, role: 'menuitemradio' as const, checked: view === mode, onSelect: () => switchLibraryView(mode) })),
+                { label: t('libraryGroup'), icon: 'library', role: 'menuitemcheckbox', checked: grouped, disabled: !!query.trim(), hint: query.trim() ? t('librarySearchUngrouped') : t('libraryGroupHint'), divider: true, onSelect: () => setGrouped(!grouped) }
+              ]} />
+              <span className="library-toolbar-actions-divider" aria-hidden="true" />
+              <button type="button" className={`library-action icon ${selectionMode ? 'active' : ''}`} aria-pressed={selectionMode} aria-label={selectionMode ? t('cancelSelection') : t('selectItems')} data-tooltip={selectionMode ? t('cancelSelection') : t('selectItems')} onClick={() => selectionMode ? leaveSelectionMode() : setSelectionMode(true)}><Icon name={selectionMode ? 'close' : 'check'} size={17} /></button>
+              {currentMedia && <button type="button" className="library-action locate" aria-label={t('libraryLocatePlaying')} data-tooltip={t('libraryLocatePlaying')} onClick={locateCurrent}><Icon name="locate" size={17} /></button>}
+              <button type="button" className="library-action icon" disabled={availabilityRefreshing} onClick={() => void refreshAvailability()} aria-busy={availabilityRefreshing} aria-label={checkFilesLabel} data-tooltip={checkFilesLabel}><Icon name="refresh" size={17} /></button>
             </div>
-            {currentMedia && <button type="button" className="library-action locate" aria-label={t('libraryLocatePlaying')} title={t('libraryLocatePlaying')} onClick={locateCurrent}><Icon name="locate" size={17} /></button>}
-            <button type="button" className={`library-action ${selectionMode ? 'active' : ''}`} aria-pressed={selectionMode} onClick={() => selectionMode ? leaveSelectionMode() : setSelectionMode(true)}><Icon name="check" size={16} />{selectionMode ? t('cancelSelection') : t('selectItems')}</button>
           </div>
+          {searchOpen && (
+            <div className="library-query-field library-search-dock">
+              <Icon name="search" size={17} />
+              <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('librarySearchHint')} aria-label={t('librarySearchHint')} />
+              <button type="button" onClick={() => { if (query) { setQuery(''); searchRef.current?.focus() } else closeSearch() }} aria-label={query ? t('libraryClearSearch') : t('close')}><Icon name="close" size={15} /></button>
+            </div>
+          )}
           {selectionMode ? (
             <div className="library-batch-actions" role="group" aria-label={t('selectedCount', { count: selectedCards.length })}>
               <button type="button" className="library-action" disabled={!visibleMediaIds.length} onClick={toggleSelectAll}><Icon name={allVisibleSelected ? 'close' : 'check'} size={16} />{allVisibleSelected ? t('deselectAll') : t('selectAll')}</button>
               <span aria-live="polite">{t('selectedCount', { count: selectedCards.length })}</span>
-              <button type="button" className="library-action" disabled={!selectedPlayableIds.length} onClick={() => void play(selectedPlayableIds, 0)}><Icon name="play" size={16} />{t('play')}</button>
-              <button type="button" className="library-action" disabled={!selectedPlayableIds.length} onClick={() => void enqueue(selectedPlayableIds)}><Icon name="playlist" size={16} />{t('addToQueue')}</button>
               <button type="button" className="library-action" disabled={!selectedCards.length} onClick={() => void setFavorites(selectedCards.map((card) => card.item.id), !allSelectedFavorite).catch(() => toast('error', t('libraryActionFailed')))}><Icon name="heart" size={16} />{allSelectedFavorite ? t('unfavorite') : t('favorite')}</button>
               <button type="button" className="library-action" disabled={selectedCards.length < 2} onClick={() => void createCollection()}><Icon name="library" size={16} />{t('combineAsCollection')}</button>
               <button type="button" className="library-action danger" disabled={!selectedCards.length || busy} onClick={() => void removeSelected()}><Icon name="trash" size={16} />{t('removeFromLibrary')}</button>
             </div>
           ) : null}
         </div>
-        <div className="library-content-heading" aria-live="polite">
-          <div className="library-content-heading-title">
-            <Icon name={kind === 'audio' ? 'music' : kind === 'favorite' ? 'heart' : kind === 'video' ? 'video' : 'library'} size={20} />
-            <h2>{filesTitle}</h2>
-            <span>{visibleCards.length.toLocaleString(locale)}</span>
-          </div>
-          <span className="library-content-heading-hint">{query || source !== 'all' ? t('libraryResults', { count: visibleCards.length.toLocaleString(locale) }) : t('libraryBrowseHint')}</span>
-        </div>
         <div ref={scrollRef} className="library-file-viewport" tabIndex={0} role="region" aria-label={filesTitle} onScroll={revealScrollbar} onWheel={revealScrollbar} onPointerMove={revealScrollbar} onFocusCapture={revealScrollbar}>
         {visibleCards.length > 0 ? (
           <div
             ref={gridRef}
-            className={`library-file-grid ${view === 'list' ? 'list-view' : ''} ${selectionMode ? 'selection-mode' : ''} ${viewHasChanged ? `view-switch-${view}` : ''}`}
+            className={`library-file-grid ${view === 'list' ? 'list-view' : ''} ${selectionMode ? 'selection-mode' : ''}`}
             style={{
               height: `${rowVirtualizer.getTotalSize()}px`,
               '--library-columns': columnCount,
@@ -975,28 +904,20 @@ function LibraryPageView() {
                   key={virtualRow.key}
                   ref={rowVirtualizer.measureElement}
                   data-index={virtualRow.index}
-                  className={`library-virtual-row ${row.expanded ? 'collection-expanded' : ''}`}
+                  className={`library-virtual-row ${row.expanded ? 'collection-expanded' : ''} ${row.collectionChild ? 'collection-children' : ''} ${row.firstCollectionRow ? 'collection-children-first' : ''}`}
                   style={{ transform: `translate3d(0, ${virtualRow.start - gridScrollMargin}px, 0)` }}
                 >
                   {row.entries.map(({ entry, index }) => {
                     const expanded = entry.type === 'collection' && expandedCollections.has(entry.id)
-                    const entryDelay = shouldStaggerEntries ? Math.min(index, 8) * 0.035 : 0
                     return (
-                      <motion.div
+                      <div
                         key={displayEntryKey(entry)}
                         className={`library-entry-motion ${expanded ? 'collection-expanded' : ''}`}
+                        data-item-reveal={displayEntryKey(entry)}
                         style={{ '--library-entry-index': Math.min(index, 8) } as React.CSSProperties}
-                        initial={reduceMotion || !shouldStaggerEntries ? false : { opacity: 0, y: 10, scale: 0.985, filter: 'brightness(0.62) saturate(0.72)' }}
-                        animate={{ opacity: 1, y: 0, scale: 1, filter: 'brightness(1) saturate(1)' }}
-                        transition={reduceMotion ? { duration: 0 } : {
-                          opacity: { duration: 0.24, delay: entryDelay },
-                          y: { duration: 0.44, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
-                          scale: { duration: 0.4, delay: entryDelay, ease: [0.16, 1, 0.3, 1] },
-                          filter: { duration: 0.5, delay: entryDelay, ease: [0.16, 1, 0.3, 1] }
-                        }}
                       >
                         {entry.type === 'item' ? (
-                          <LibraryFileCard card={entry.card} current={entry.card.item.id === currentMediaId} selected={selectedMediaIds.has(entry.card.item.id)} selectionMode={selectionMode} favoriteOnly={kind === 'favorite'} onToggleFavorite={() => void toggleFavorite(entry.card.item.id)} onOpen={(event) => openCard(entry.card, event)} onContextMenu={(event) => openCardMenu(event, entry.card)} />
+                          <LibraryFileCard card={entry.card} current={entry.card.item.id === currentMediaId} selected={selectedMediaIds.has(entry.card.item.id)} selectionMode={selectionMode} onToggleFavorite={() => void toggleFavorite(entry.card.item.id)} onOpen={(event) => openCard(entry.card, event)} onContextMenu={(event) => openCardMenu(event, entry.card)} />
                         ) : (
                           <LibraryCollectionCard
                             collection={entry}
@@ -1004,13 +925,8 @@ function LibraryPageView() {
                             onToggle={() => toggleCollection(entry.id)}
                             selectionMode={selectionMode}
                             selected={entry.cards.every((card) => selectedMediaIds.has(card.item.id))}
-                            selectedIds={selectedMediaIds}
                             currentMediaId={currentMediaId}
-                            favoriteOnly={kind === 'favorite'}
                             onSelect={() => toggleSelected(entry.cards.map((card) => card.item.id))}
-                            onToggleFavorite={(card) => void toggleFavorite(card.item.id)}
-                            onOpen={openCard}
-                            onContextMenu={openCardMenu}
                             onCollectionContextMenu={openCollectionMenu}
                             collectionLabel={t('mediaCollection')}
                             itemLabel={t('collectionItems')}
@@ -1018,7 +934,7 @@ function LibraryPageView() {
                             collapseLabel={t('collapseCollection')}
                           />
                         )}
-                      </motion.div>
+                      </div>
                     )
                   })}
                 </div>
@@ -1037,6 +953,7 @@ function LibraryPageView() {
         )}
         </div>
       </section>
+
     </main>
   )
 }
@@ -1049,13 +966,8 @@ function LibraryCollectionCard({
   onToggle,
   selectionMode,
   selected,
-  selectedIds,
   currentMediaId,
-  favoriteOnly,
   onSelect,
-  onToggleFavorite,
-  onOpen,
-  onContextMenu,
   onCollectionContextMenu,
   collectionLabel,
   itemLabel,
@@ -1067,13 +979,8 @@ function LibraryCollectionCard({
   onToggle: () => void
   selectionMode: boolean
   selected: boolean
-  selectedIds: Set<number>
   currentMediaId: number | null
-  favoriteOnly: boolean
   onSelect: () => void
-  onToggleFavorite: (card: LibraryCardData) => void
-  onOpen: (card: LibraryCardData, event?: React.MouseEvent) => void
-  onContextMenu: (event: React.MouseEvent, card: LibraryCardData) => void
   onCollectionContextMenu: (event: React.MouseEvent, collection: Extract<LibraryDisplayEntry, { type: 'collection' }>) => void
   collectionLabel: string
   itemLabel: string
@@ -1083,80 +990,75 @@ function LibraryCollectionCard({
   const previewCards = collection.cards.slice(0, 3)
   return (
     <section className={`library-collection ${expanded ? 'expanded' : ''} ${selected ? 'selected' : ''} ${collection.cards.some((card) => card.item.id === currentMediaId) ? 'contains-current' : ''}`} data-collection-id={collection.id}>
-      <button
-        type="button"
-        className="library-collection-summary"
-        onClick={selectionMode ? onSelect : onToggle}
-        onContextMenu={(event) => onCollectionContextMenu(event, collection)}
-        aria-expanded={selectionMode ? undefined : expanded}
-        aria-pressed={selectionMode ? selected : undefined}
-        aria-label={`${selectionMode ? collectionLabel : expanded ? collapseLabel : expandLabel}: ${collection.title}`}
-      >
-        <span className="library-collection-art">
-          {previewCards.map((card, index) => (
-            <span className="library-collection-preview" key={card.item.id} style={{ '--preview-index': index } as React.CSSProperties}>
-              {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" decoding="async" fetchPriority="low" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={30} /></span>}
-            </span>
-          ))}
-          {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
-          <span className="library-collection-badge"><Icon name="library" size={14} />{collectionLabel}</span>
-          <span className="library-collection-count">{collection.cards.length}</span>
-        </span>
-        <span className="library-file-copy">
-          <span className="library-file-title">{collection.title}</span>
-          <span className="library-file-meta">
-            <Icon name="video" size={14} />
-            <span>{collection.cards.length} {itemLabel}</span>
-            <Icon className="library-collection-chevron" name={expanded ? 'chevronUp' : 'chevronDown'} size={15} />
+      <div className="library-collection-head">
+        <button
+          type="button"
+          className="library-collection-summary"
+          onClick={selectionMode ? onSelect : onToggle}
+          onContextMenu={(event) => onCollectionContextMenu(event, collection)}
+          aria-expanded={selectionMode ? undefined : expanded}
+          aria-pressed={selectionMode ? selected : undefined}
+          aria-label={`${selectionMode ? collectionLabel : expanded ? collapseLabel : expandLabel}: ${collection.title}`}
+        >
+          <span className="library-collection-art">
+            {previewCards.map((card, index) => (
+              <span className="library-collection-preview" key={card.item.id} style={{ '--preview-index': index } as React.CSSProperties}>
+                {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} seed={card.item.id} thumbnail /> : card.artwork ? <ThumbnailImage src={card.artwork} alt="" loading="lazy" decoding="async" fetchPriority="low" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={30} /></span>}
+              </span>
+            ))}
+            {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
+            <span className="library-collection-count">{collection.cards.length}</span>
           </span>
-        </span>
-      </button>
-      {!selectionMode && <button type="button" className="library-collection-more" aria-label={`${collection.title} · ${collectionLabel}`} aria-haspopup="menu" onClick={(event) => onCollectionContextMenu(event, collection)}><Icon name="more" size={17} /></button>}
-      {expanded && (
-        <div className="library-collection-items">
-          {collection.cards.map((card) => (
-            <LibraryFileCard key={card.item.id} card={card} current={card.item.id === currentMediaId} selected={selectedIds.has(card.item.id)} selectionMode={selectionMode} favoriteOnly={favoriteOnly} onToggleFavorite={() => onToggleFavorite(card)} onOpen={(event) => onOpen(card, event)} onContextMenu={(event) => onContextMenu(event, card)} />
-          ))}
-        </div>
-      )}
+          <span className="library-file-copy">
+            <span className="library-file-title">{collection.title}</span>
+            <span className="library-file-meta">
+              <span>{collectionLabel}</span>
+              <span className="library-file-meta-sep" aria-hidden="true">·</span>
+              <span>{collection.cards.length} {itemLabel}</span>
+              <Icon className="library-collection-chevron" name={expanded ? 'chevronUp' : 'chevronDown'} size={15} />
+            </span>
+          </span>
+        </button>
+        {!selectionMode && <button type="button" className="library-collection-more" aria-label={`${collection.title} · ${collectionLabel}`} aria-haspopup="menu" onClick={(event) => onCollectionContextMenu(event, collection)}><Icon name="more" size={17} /></button>}
+      </div>
     </section>
   )
 }
 
-function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly, onToggleFavorite, onOpen, onContextMenu }: {
+function LibraryFileCard({ card, current, selected, selectionMode, onToggleFavorite, onOpen, onContextMenu }: {
   card: LibraryCardData
   current: boolean
   selected: boolean
   selectionMode: boolean
-  favoriteOnly: boolean
   onToggleFavorite: () => void
   onOpen: (event: React.MouseEvent<HTMLButtonElement>) => void
   onContextMenu: (event: React.MouseEvent) => void
 }) {
-  const { t } = useLibraryRuntime()
+  const { t, settings } = useLibraryRuntime()
   const favoriteLabel = card.item.favorite ? t('unfavorite') : t('favorite')
-  const progress = card.item.duration > 0 ? Math.min(100, Math.max(0, card.item.lastPosition / card.item.duration * 100)) : 0
+  const progress = settings?.resumePlayback !== false && card.item.duration > 0 ? Math.min(100, Math.max(0, card.item.lastPosition / card.item.duration * 100)) : 0
   const extension = card.item.fileName.split('.').at(-1)?.toUpperCase() || (card.kind === 'audio' ? 'AUDIO' : 'VIDEO')
   const sourceLabel = !card.item.sourceAvailable ? t('libraryUnavailable') : card.item.protocol === 'local' ? t('libraryLocal') : card.item.sourceName || t('libraryRemote')
+  const sourceIcon = !card.item.sourceAvailable ? 'alert' : card.item.protocol === 'local' ? 'folder' : 'network'
   return (
     <div className={`library-file-card ${card.kind} ${selected ? 'selected' : ''} ${current ? 'is-current' : ''} ${!card.item.sourceAvailable ? 'is-unavailable' : ''}`} data-media-id={card.item.id} onContextMenu={onContextMenu}>
       <button type="button" className="library-file-open" onClick={onOpen} aria-label={`${selectionMode ? t('selectItem') : card.item.sourceAvailable ? t('play') : t('mediaInfo')}: ${card.title}`} aria-current={current ? 'true' : undefined} aria-pressed={selectionMode ? selected : undefined}>
         <span className={`library-file-art ${card.kind === 'audio' ? 'audio-art' : ''}`}>
-          {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} /> : card.artwork ? <img src={card.artwork} alt="" loading="lazy" decoding="async" fetchPriority="low" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>}
+          {card.kind === 'audio' ? <AudioArtwork artwork={card.artwork} seed={card.item.id} thumbnail /> : card.artwork ? <ThumbnailImage src={card.artwork} alt="" loading="lazy" decoding="async" fetchPriority="low" /> : <span className="media-artwork-fallback compact"><Icon name="video" size={31} /></span>}
           {!selectionMode && card.item.sourceAvailable && <span className="library-card-play"><Icon name="play" size={23} /></span>}
           {card.overlayDuration && <span className="library-file-duration">{card.overlayDuration}</span>}
           {selectionMode && <span className="library-card-selection"><Icon name="check" size={14} /></span>}
           {!selectionMode && current && <span className="library-playback-badge">{t('libraryPlaying')}</span>}
-          <span className={`library-source-bookmark ${!card.item.sourceAvailable ? 'unavailable' : ''}`} title={`${t('librarySourceFilter')}: ${sourceLabel}`}>
-            <Icon name={!card.item.sourceAvailable ? 'alert' : card.item.protocol === 'local' ? 'folder' : 'network'} size={13} />
-            <span>{sourceLabel}</span>
-          </span>
           {progress > 0 && <span className="library-card-progress"><span style={{ width: `${progress}%` }} /></span>}
         </span>
         <span className="library-file-copy">
-          <span className="library-file-title" title={card.title}>{card.title}</span>
-          <span className="library-file-meta" title={card.metadata}>{card.kind === 'audio' ? card.item.artist || t('unknownArtist') : extension}</span>
-
+          <span className="library-file-title" data-tooltip={card.title}>{card.title}</span>
+          <span className="library-file-meta" data-tooltip={card.metadata}>
+            <Icon name={sourceIcon} size={12} />
+            <span className="library-file-meta-source">{sourceLabel}</span>
+            <span className="library-file-meta-sep" aria-hidden="true">·</span>
+            <span className="library-file-meta-primary">{card.kind === 'audio' ? card.item.artist || t('unknownArtist') : extension}</span>
+          </span>
         </span>
         <span className="library-file-details">
           <span>{card.overlayDuration || '—'}</span>
@@ -1165,10 +1067,10 @@ function LibraryFileCard({ card, current, selected, selectionMode, favoriteOnly,
       </button>
       {!selectionMode && (
         <div className="library-card-actions">
-          <button type="button" className={`library-card-favorite ${card.item.favorite ? 'is-favorite' : ''}`} aria-label={favoriteLabel} title={favoriteLabel} aria-pressed={card.item.favorite} onClick={onToggleFavorite}>
+          <button type="button" className={`library-card-favorite ${card.item.favorite ? 'is-favorite' : ''}`} aria-label={favoriteLabel} data-tooltip={favoriteLabel} aria-pressed={card.item.favorite} onClick={onToggleFavorite}>
             {card.item.favorite ? <FilledIcon name="heartFilled" size={16} /> : <Icon name="heart" size={16} />}
           </button>
-          <button type="button" className="library-card-more" aria-label={t('libraryMoreActions', { title: card.title })} title={t('libraryMore')} aria-haspopup="menu" onClick={onContextMenu}><Icon name="more" size={16} /></button>
+          <button type="button" className="library-card-more" aria-label={t('libraryMoreActions', { title: card.title })} data-tooltip={t('libraryMore')} aria-haspopup="menu" onClick={onContextMenu}><Icon name="more" size={16} /></button>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useIsPresent } from 'motion/react'
 import { useRuntime } from '../core/runtime'
 import { Icon, type IconName } from '../core/icons'
 import { displayMediaTitle, formatTime, type TrackInfo } from '../../shared/types'
@@ -7,11 +8,11 @@ import { NetworkMediaLoader, formatNetworkSpeed } from './networkMediaLoader'
 import { playbackErrorKey } from '../core/i18n'
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
-const CHAPTER_RAIL_SIZE = 9
 type PlayerHint = { icon: IconName; value?: string }
 type PlayerMenu = 'tracks' | 'speed' | null
 
 export function VideoPlayerPage() {
+  const isPresent = useIsPresent()
   const {
     t,
     appIconUrl,
@@ -53,7 +54,8 @@ export function VideoPlayerPage() {
   const [selectedVideo, setSelectedVideo] = useState(0)
   const [selectedAudio, setSelectedAudio] = useState(0)
   const [selectedSubtitle, setSelectedSubtitle] = useState(-1)
-  const [chapterRailExpanded, setChapterRailExpanded] = useState(false)
+  const [hoveredChapterIndex, setHoveredChapterIndex] = useState<number | null>(null)
+  const [focusedChapterIndex, setFocusedChapterIndex] = useState<number | null>(null)
   const tracksOpen = openMenu === 'tracks'
   const speedOpen = openMenu === 'speed'
   const keyboardStateRef = useRef({ volume: 80, muted: false, fullscreen: false, phase: session.phase, tracksOpen: false, speedOpen: false })
@@ -86,14 +88,8 @@ export function VideoPlayerPage() {
     -1
   )
   const activeChapter = activeChapterIndex >= 0 ? chapters[activeChapterIndex] : null
-  const chapterFocusIndex = Math.max(0, activeChapterIndex)
-  const chapterRailStart = Math.min(
-    Math.max(0, chapterFocusIndex - Math.floor(CHAPTER_RAIL_SIZE / 2)),
-    Math.max(0, chapters.length - CHAPTER_RAIL_SIZE)
-  )
-  const visibleChapters = chapterRailExpanded
-    ? chapters
-    : chapters.slice(chapterRailStart, chapterRailStart + CHAPTER_RAIL_SIZE)
+  const previewChapterIndex = hoveredChapterIndex ?? focusedChapterIndex
+  const chapterFocusIndex = previewChapterIndex ?? Math.max(0, activeChapterIndex)
   const progress = duration > 0 ? Math.min(100, Math.max(0, (session.position / duration) * 100)) : 0
   const qualityFeatures = useMemo(
     () => buildQualityFeatures(tracks, selectedVideo, selectedAudio),
@@ -115,6 +111,11 @@ export function VideoPlayerPage() {
   // expose native track lists until the media is inspected, so hiding the
   // button based on the current list would make the feature unreachable.
   const hasTrackChoices = isVideo
+
+  useEffect(() => {
+    setHoveredChapterIndex(null)
+    setFocusedChapterIndex(null)
+  }, [session.mediaId])
 
   useEffect(() => {
     const defaultVideo = tracks.video.findIndex((track) => track.default)
@@ -189,11 +190,15 @@ export function VideoPlayerPage() {
   // detach() nulls container and can drop an in-flight mpv open.
   useEffect(() => {
     const stage = stageRef.current
-    if (stage && isVideo) engine.attach(stage, session.muted, session.volume, session.speed)
-    else if (!isVideo) engine.detach()
-  }, [engine, isVideo, session.muted, session.volume, session.speed])
+    if (!stage) return
+    if (isPresent && isVideo && !session.idle) engine.attach(stage, session.muted, session.volume, session.speed)
+    else engine.detach(stage)
+  }, [engine, isPresent, isVideo, session.idle, session.mediaId, session.muted, session.volume, session.speed])
 
-  useEffect(() => () => engine.detach(), [engine])
+  useEffect(() => {
+    const stage = stageRef.current
+    return () => { if (stage) engine.detach(stage) }
+  }, [engine])
 
   useEffect(() => {
     if (openMenu === null) return
@@ -303,21 +308,21 @@ export function VideoPlayerPage() {
       <div className="cinematic-window-drag" aria-hidden="true" />
 
       <div className="cinematic-window-controls" aria-label={t('windowControls')}>
-        <button type="button" className="cinematic-window-control minimize window-control-button" title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
+        <button type="button" className="cinematic-window-control minimize window-control-button" data-tooltip={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
         </button>
-        <button type="button" className="cinematic-window-control maximize window-control-button" title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        <button type="button" className="cinematic-window-control maximize window-control-button" data-tooltip={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
         </button>
-        <button type="button" className="cinematic-window-control close window-control-button" title={t('close')} aria-label={t('close')} onClick={windowClose}>
+        <button type="button" className="cinematic-window-control close window-control-button" data-tooltip={t('close')} aria-label={t('close')} onClick={windowClose}>
           <Icon name="close" size={16} />
         </button>
       </div>
 
       <header className="cinematic-identity">
         <div className="cinematic-title-row">
-          <button className="cinematic-back" type="button" aria-label={t('back')} title={t('back')} onClick={leavePlayer}>
-            <Icon name="chevronLeft" size={30} strokeWidth={1.55} />
+          <button className="page-back-button cinematic-back" type="button" aria-label={t('back')} data-tooltip={t('back')} onClick={leavePlayer}>
+            <Icon name="chevronLeft" size={19} />
           </button>
           <h1>{title}</h1>
         </div>
@@ -325,12 +330,12 @@ export function VideoPlayerPage() {
           <span>{meta}</span>
           {networkMedia && (
             <span className="cinematic-network-status">
-              <span className="cinematic-network-speed" title={t('networkSpeed')}>{formatNetworkSpeed(session.networkSpeed ?? 0)}</span>
-              <span className="cinematic-buffered" title={t('buffered')}>{t('buffered')} {formatBufferedSeconds(session.bufferedSeconds ?? 0)}</span>
+              <span className="cinematic-network-speed" data-tooltip={t('networkSpeed')}>{formatNetworkSpeed(session.networkSpeed ?? 0)}</span>
+              <span className="cinematic-buffered" data-tooltip={t('buffered')}>{t('buffered')} {formatBufferedSeconds(session.bufferedSeconds ?? 0)}</span>
             </span>
           )}
           {activeChapter && (
-            <span className="cinematic-current-chapter-name" title={activeChapter.title}>{activeChapter.title}</span>
+            <span className="cinematic-current-chapter-name" data-tooltip={activeChapter.title}>{activeChapter.title}</span>
           )}
         </div>
         {qualityFeatures.length > 0 && (
@@ -344,7 +349,7 @@ export function VideoPlayerPage() {
                   key={feature.id}
                   type="button"
                   aria-label={label}
-                  title={feature.label}
+                  data-tooltip={feature.label}
                   onClick={() => activateQualityFeature(feature)}
                 >
                   {content}
@@ -379,35 +384,36 @@ export function VideoPlayerPage() {
         </div>
       )}
 
-      {visibleChapters.length > 0 && (
+      {chapters.length > 0 && (
         <nav
-          className={`cinematic-chapter-rail ${chapterRailExpanded ? 'expanded' : ''}`}
+          className="cinematic-chapter-rail"
           aria-label={t('chapters')}
-          onMouseEnter={() => setChapterRailExpanded(true)}
-          onMouseLeave={() => setChapterRailExpanded(false)}
-          onFocusCapture={() => setChapterRailExpanded(true)}
+          onMouseLeave={() => setHoveredChapterIndex(null)}
           onBlurCapture={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setChapterRailExpanded(false)
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusedChapterIndex(null)
           }}
         >
-          {visibleChapters.map((chapter, visibleIndex) => {
-            const index = chapterRailExpanded ? visibleIndex : chapterRailStart + visibleIndex
+          {chapters.map((chapter, index) => {
             const active = index === activeChapterIndex
+            const preview = index === previewChapterIndex
             const distance = Math.abs(index - chapterFocusIndex)
-            const tickWidth = active ? 36 : distance === 1 ? 27 : distance === 2 ? 20 : distance === 3 ? 14 : 10
+            // Only the hovered/focused chapter gets the surrounding taper while browsing.
+            // The playback chapter remains a separate, long accent marker.
+            const tickWidth = active || distance === 0 ? 36 : distance === 1 ? 27 : distance === 2 ? 20 : distance === 3 ? 14 : 6
             return (
               <button
                 key={`${chapter.time}-${index}`}
                 type="button"
-                className={`cinematic-chapter-item ${active ? 'active' : ''}`}
+                className={`cinematic-chapter-item ${active ? 'active' : ''} ${preview ? 'preview' : ''}`}
                 style={{ '--chapter-tick-width': `${tickWidth}px` } as React.CSSProperties}
                 aria-current={active ? 'step' : undefined}
                 aria-label={`${t('chapter')} ${index + 1}: ${chapter.title}`}
-                title={`${chapter.title} · ${formatTime(chapter.time)}`}
+                data-tooltip={`${chapter.title} · ${formatTime(chapter.time)}`}
+                onMouseEnter={() => setHoveredChapterIndex(index)}
+                onFocus={(event) => setFocusedChapterIndex(event.currentTarget.matches(':focus-visible') ? index : null)}
                 onClick={() => seek(chapter.time)}
               >
                 <span className="cinematic-chapter-tick" aria-hidden="true" />
-                <span className="cinematic-chapter-label">{chapter.title}</span>
               </button>
             )
           })}
@@ -459,7 +465,7 @@ export function VideoPlayerPage() {
             step={0.1}
             value={Math.min(session.position, Math.max(duration, 1))}
             aria-label={t('seek')}
-            title={t('seek')}
+            data-tooltip={t('seek')}
             style={{ '--vp-progress': `${progress}%` } as React.CSSProperties}
             onPointerDown={() => { beginSeek(); setDragging(true) }}
             onPointerUp={() => { commitSeek(); setDragging(false) }}
@@ -481,7 +487,7 @@ export function VideoPlayerPage() {
                 max={100}
                 value={session.muted ? 0 : session.volume}
                 aria-label={t('volume')}
-                title={t('volume')}
+                data-tooltip={t('volume')}
                 style={{ '--vp-volume': `${session.muted ? 0 : session.volume}%` } as React.CSSProperties}
                 onPointerDown={() => setDragging(true)}
                 onPointerUp={() => setDragging(false)}
@@ -495,13 +501,13 @@ export function VideoPlayerPage() {
           </div>
 
           <div className="cinematic-transport">
-            <button className="seek-ten" type="button" aria-label={t('rewind10')} title={t('rewind10')} onClick={() => jump(-10)}>
+            <button className="seek-ten" type="button" aria-label={t('rewind10')} data-tooltip={t('rewind10')} onClick={() => jump(-10)}>
               <Icon name="rewind10" size={39} strokeWidth={1.45} />
             </button>
-            <button className="cinematic-play" type="button" aria-label={session.paused ? t('play') : t('pause')} title={session.paused ? t('play') : t('pause')} onClick={togglePlayback}>
+            <button className="cinematic-play" type="button" aria-label={session.paused ? t('play') : t('pause')} data-tooltip={session.paused ? t('play') : t('pause')} onClick={togglePlayback}>
               <Icon name={session.paused ? 'play' : 'pause'} size={29} strokeWidth={1.4} />
             </button>
-            <button className="seek-ten" type="button" aria-label={t('forward10')} title={t('forward10')} onClick={() => jump(10)}>
+            <button className="seek-ten" type="button" aria-label={t('forward10')} data-tooltip={t('forward10')} onClick={() => jump(10)}>
               <Icon name="forward10" size={39} strokeWidth={1.45} />
             </button>
           </div>
@@ -555,7 +561,7 @@ function ControlButton({ icon, label, active = false, menu, onClick }: { icon: I
       aria-expanded={menu ? active : undefined}
       aria-controls={menu === 'tracks' ? 'video-track-menu' : undefined}
       data-player-menu-trigger={menu ? menu : undefined}
-      title={label}
+      data-tooltip={label}
       onClick={onClick}
     >
       <Icon name={icon} size={23} strokeWidth={1.7} />
@@ -574,7 +580,7 @@ function SpeedControl({ speed, label, open, onClick }: { speed: number; label: s
       aria-expanded={open}
       aria-controls="video-speed-menu"
       data-player-menu-trigger="speed"
-      title={label}
+      data-tooltip={label}
     >
       <Icon name="speed" size={19} strokeWidth={1.7} />
       <span>{speed}×</span>

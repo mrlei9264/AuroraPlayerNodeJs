@@ -3,10 +3,10 @@ import { useRuntime } from '../core/runtime'
 import { Icon } from '../core/icons'
 import { I } from '../../shared/channels'
 import { formatTime, isAudioExt, type MediaAudioFeatures } from '../../shared/types'
-import { shapeAudioVisualizerSpectrum } from './audioVisualizerSpectrum'
-import { audioVisualizerPaletteForColorTheme } from './audioVisualizerThemes'
+import { AudioVisualizerDynamics, type VisualizerAudioFrame } from '../audio/spectrum'
+import { audioVisualizerPaletteForColorTheme } from '../audio/themes'
 import { NetworkMediaLoader } from './networkMediaLoader'
-import { AudioLyrics } from './audioLyrics'
+import { AudioLyrics } from '../audio/lyrics'
 import { fontFamilyStack } from '../core/appearance'
 import { playbackErrorKey } from '../core/i18n'
 import {
@@ -15,7 +15,7 @@ import {
   buildAudioTitleGlyphSpans,
   layoutAudioTitleGlyphs,
   type AudioTitleGlyphSpan
-} from './audioTitleLayout'
+} from '../audio/titleLayout'
 
 const visualizerUrl = new URL('./sonic-topography/index.html', window.location.href).toString()
 const visualizerOrigin = /^https?:/.test(visualizerUrl) ? new URL(visualizerUrl).origin : '*'
@@ -28,9 +28,10 @@ export function MusicPlayerPage() {
     windowMinimize, windowMaximizeToggle, windowClose, win
   } = useRuntime()
   const visualizerRef = useRef<HTMLIFrameElement>(null)
-  const previousVisualizerSpectrumRef = useRef<number[]>([])
-  const pendingSpectrumRef = useRef<Float32Array | null>(null)
+  const [visualizerDynamics] = useState(() => new AudioVisualizerDynamics())
+  const pendingSpectrumRef = useRef<VisualizerAudioFrame | null>(null)
   const playingRef = useRef(false)
+  const beatMotionEnabledRef = useRef(!settings.reducedMotion)
   const visualizerReadyRef = useRef(false)
   const [visualizerReady, setVisualizerReady] = useState(false)
   const [audioFeatures, setAudioFeatures] = useState<MediaAudioFeatures | null>(null)
@@ -78,8 +79,12 @@ export function MusicPlayerPage() {
   }, [theme])
 
   useEffect(() => {
-    playingRef.current = playing
-  }, [playing])
+    playingRef.current = playing && !buffering && !session.seeking && !session.muted && session.volume > 0
+  }, [playing, buffering, session.seeking, session.muted, session.volume])
+
+  useEffect(() => {
+    beatMotionEnabledRef.current = !settings.reducedMotion
+  }, [settings.reducedMotion])
 
   useEffect(() => {
     visualizerReadyRef.current = visualizerReady
@@ -87,34 +92,41 @@ export function MusicPlayerPage() {
     const frame = visualizerRef.current?.contentWindow
     const pending = pendingSpectrumRef.current
     if (frame && pending) {
-      frame.postMessage({ type: 'aurora-audio-spectrum', samples: pending }, visualizerOrigin)
+      frame.postMessage({ type: 'aurora-audio-spectrum', ...pending, beat: 0, pulse: 0 }, visualizerOrigin)
       pendingSpectrumRef.current = null
     }
   }, [visualizerReady])
 
   useEffect(() => {
+    visualizerDynamics.reset()
+    pendingSpectrumRef.current = null
+    const frame = visualizerRef.current?.contentWindow
+    frame?.postMessage({ type: 'aurora-audio-spectrum', samples: new Array(128).fill(0), beat: 0, pulse: 0 }, visualizerOrigin)
+  }, [session.mediaId, visualizerDynamics])
+
+  useEffect(() => {
     return engine.onSpectrum((samples) => {
+      const audio = visualizerDynamics.process(samples, playingRef.current)
+      if (!beatMotionEnabledRef.current) { audio.beat = 0; audio.pulse = 0 }
       const frame = visualizerRef.current?.contentWindow
       if (!frame || !visualizerReadyRef.current) {
-        pendingSpectrumRef.current = samples
+        pendingSpectrumRef.current = audio
         return
       }
-      const shaped = shapeAudioVisualizerSpectrum(samples, playingRef.current, previousVisualizerSpectrumRef.current)
-      previousVisualizerSpectrumRef.current = playingRef.current
-        ? Array.from(samples, (value) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0)))
-        : []
-      frame.postMessage({ type: 'aurora-audio-spectrum', samples: shaped }, visualizerOrigin)
+      frame.postMessage({ type: 'aurora-audio-spectrum', ...audio }, visualizerOrigin)
     })
-  }, [engine])
+  }, [engine, visualizerDynamics])
 
   useEffect(() => {
     const frame = visualizerRef.current?.contentWindow
     if (!frame) return
     const properties = {
       palette: { value: visualizerPalette }, showPlayerController: { value: false }, showAlbumCover: { value: false },
-      gridSize: { value: 160 }, audioIntensity: { value: 0.82 }, responseRange: { value: 0.86 },
+      gridSize: { value: 160 }, audioIntensity: { value: 0.95 }, responseRange: { value: 0.86 },
       cameraDistance: { value: 88 }, cameraAngleX: { value: 116 }, cameraAngleY: { value: 24 },
-      autoRotateEnabled: { value: false }, pulseEnabled: { value: true }, pulseSensitivity: { value: 0.46 }, pulseCooldown: { value: 30 }, meteorEnabled: { value: false },
+      // Beat detection is shared by both backends; disable the scene's second
+      // detector so one drum hit cannot trigger two competing ripple effects.
+      autoRotateEnabled: { value: false }, pulseEnabled: { value: false }, meteorEnabled: { value: false },
       meteorClickEnabled: { value: false }, idleWaveEnabled: { value: false }, peakColorEnabled: { value: true },
       peakColorIntensity: { value: 0.3 }
     }
@@ -164,11 +176,11 @@ export function MusicPlayerPage() {
       <div className="audio-ambient" aria-hidden="true" />
 
       <div className="audio-window-actions">
-        <button type="button" onClick={leavePlayer} aria-label={t('back')} title={t('back')}><Icon name="chevronLeft" size={21} /></button>
+        <button type="button" onClick={leavePlayer} aria-label={t('back')} data-tooltip={t('back')}><Icon name="chevronLeft" size={21} /></button>
         <div className="audio-window-spacer" />
-        <button type="button" className="audio-window-minimize window-control-button" onClick={windowMinimize} aria-label={t('minimize')} title={t('minimize')}><Icon name="minimize" size={15} /></button>
-        <button type="button" className="audio-window-maximize window-control-button" onClick={() => void windowMaximizeToggle()} aria-label={win.maximized ? t('restore') : t('maximize')} title={win.maximized ? t('restore') : t('maximize')}><Icon name={win.maximized ? 'restore' : 'maximize'} size={14} /></button>
-        <button type="button" className="audio-window-close window-control-button" onClick={windowClose} aria-label={t('close')} title={t('close')}><Icon name="close" size={16} /></button>
+        <button type="button" className="audio-window-minimize window-control-button" onClick={windowMinimize} aria-label={t('minimize')} data-tooltip={t('minimize')}><Icon name="minimize" size={15} /></button>
+        <button type="button" className="audio-window-maximize window-control-button" onClick={() => void windowMaximizeToggle()} aria-label={win.maximized ? t('restore') : t('maximize')} data-tooltip={win.maximized ? t('restore') : t('maximize')}><Icon name={win.maximized ? 'restore' : 'maximize'} size={14} /></button>
+        <button type="button" className="audio-window-close window-control-button" onClick={windowClose} aria-label={t('close')} data-tooltip={t('close')}><Icon name="close" size={16} /></button>
       </div>
 
       <div className="audio-visualizer-shell" aria-hidden="true">
@@ -237,13 +249,13 @@ export function MusicPlayerPage() {
         </div>
 
         <div className="audio-transport-controls">
-          <button type="button" className="audio-control-icon audio-skip-control" onPointerUp={releasePointerFocus} onClick={() => void playPrevious()} aria-label={t('previous')} title={t('previous')}>
+          <button type="button" className="audio-control-icon audio-skip-control" onPointerUp={releasePointerFocus} onClick={() => void playPrevious()} aria-label={t('previous')} data-tooltip={t('previous')}>
             <Icon name="prev" size={23} strokeWidth={1.55} />
           </button>
-          <button type="button" className="audio-play-control" onPointerUp={releasePointerFocus} onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} title={playing ? t('pause') : t('play')}>
+          <button type="button" className="audio-play-control" onPointerUp={releasePointerFocus} onClick={togglePlayPause} aria-label={playing ? t('pause') : t('play')} data-tooltip={playing ? t('pause') : t('play')}>
             <Icon name={playing ? 'pause' : 'play'} size={27} strokeWidth={1.45} />
           </button>
-          <button type="button" className="audio-control-icon audio-skip-control" onPointerUp={releasePointerFocus} onClick={() => void playNext()} aria-label={t('next')} title={t('next')}>
+          <button type="button" className="audio-control-icon audio-skip-control" onPointerUp={releasePointerFocus} onClick={() => void playNext()} aria-label={t('next')} data-tooltip={t('next')}>
             <Icon name="next" size={23} strokeWidth={1.55} />
           </button>
           <button
@@ -253,7 +265,7 @@ export function MusicPlayerPage() {
             onPointerUp={releasePointerFocus}
             onClick={cyclePlaybackMode}
             aria-label={playbackModeLabel}
-            title={playbackModeLabel}
+            data-tooltip={playbackModeLabel}
           >
             <Icon name={playbackMode === 'one' ? 'repeatOne' : playbackMode === 'shuffle' ? 'shuffle' : 'repeat'} size={21} strokeWidth={1.55} />
           </button>
@@ -271,7 +283,7 @@ export function MusicPlayerPage() {
             onPointerUp={releasePointerFocus}
             onClick={toggleMute}
             aria-label={session.muted ? t('unmute') : t('mute')}
-            title={session.muted ? t('unmute') : t('mute')}
+            data-tooltip={session.muted ? t('unmute') : t('mute')}
           >
             <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={22} strokeWidth={1.65} />
           </button>

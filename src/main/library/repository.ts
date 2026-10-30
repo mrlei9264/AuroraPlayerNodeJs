@@ -23,6 +23,8 @@ export interface MediaRowInput {
 }
 
 export class LibraryRepository {
+  onMediaAdded?: (mediaIds: number[]) => void
+
   constructor(private db: Db) {}
 
   insert(item: MediaRowInput): MediaItem {
@@ -52,6 +54,7 @@ export class LibraryRepository {
         item.coverPath ?? null
       )
     const id = Number(res.lastInsertRowid)
+    this.onMediaAdded?.([id])
     return this.findById(id)!
   }
 
@@ -64,9 +67,10 @@ export class LibraryRepository {
     )
     const now = Date.now()
     let inserted = 0
+    const insertedIds: number[] = []
     this.withTransaction(() => {
       for (const item of items) {
-        inserted += Number(statement.run(
+        const result = statement.run(
           item.url,
           item.fileName,
           item.isAudio ? 1 : 0,
@@ -83,9 +87,13 @@ export class LibraryRepository {
           item.duration ?? 0,
           item.fileSize ?? 0,
           item.coverPath ?? null
-        ).changes)
+        )
+        inserted += Number(result.changes)
+        if (Number(result.changes) > 0) insertedIds.push(Number(result.lastInsertRowid))
       }
     })
+    // Publish only committed insertions, including bulk folder imports.
+    if (insertedIds.length) this.onMediaAdded?.(insertedIds)
     return inserted
   }
 
@@ -221,6 +229,10 @@ export class LibraryRepository {
     this.db
       .prepare('UPDATE media SET last_position = ?, duration = ? WHERE id = ?')
       .run(position, duration, mediaId)
+  }
+
+  clearPlaybackProgress(): void {
+    this.db.prepare('UPDATE media SET last_position = 0 WHERE last_position <> 0').run()
   }
 
   updateUrl(id: number, newUrl: string): void {

@@ -1,0 +1,52 @@
+/* Structure tokens. Colors stay in theme.ts / theme-*.css. */
+:root {
+  /* control heights */
+  --control-xs: 28px;
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 44px;
+  --control-xl: 48px;
+  --control-play: 56px;
+
+  /* type scale */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 32px;
+
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* page frame */
+  --page-gutter: clamp(24px, 3vw, 48px);
+  --page-top: 62px;
+  --page-title-size: calc(32px * var(--font-scale, 1));
+  --page-subtitle-size: calc(13px * var(--font-scale, 1));
+
+  /* z-index */
+  --z-base: 0;
+  --z-content: 10;
+  --z-sticky: 20;
+  --z-player-chrome: 60;
+  --z-sidebar: 80;
+  --z-window-controls: 100;
+  --z-hud: 250;
+  --z-toast: 300;
+  --z-notification: 310;
+  --z-dialog: 400;
+  --z-menu: 500;
+  --z-portal: 600;
+  --z-tooltip: 700;
+  --z-titlebar: 90;
+}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, lazy, Suspense } from 'react'
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react'
 import { RuntimeProvider, useRuntime } from './core/runtime'
+import type { NavState, SessionState } from '../shared/types'
 import { WindowChrome, Sidebar, ToastHost, DialogHost, CtxMenuHost, HudHost, MiniPlayer, GlobalShortcuts, DragDropImporter } from './shell/shell'
 const HomePage = lazy(() => import('./pages/home').then((module) => ({ default: module.HomePage })))
 const BrowsePage = lazy(() => import('./pages/browse').then((module) => ({ default: module.BrowsePage })))
@@ -15,11 +16,12 @@ const MediaDetailsPage = lazy(() => import('./pages/mediaDetails').then((module)
 import { applyBackgroundImage, applyTypographySettings } from './core/appearance'
 import { StartupAnimation } from './shell/startupAnimation'
 const MotionLabPage = lazy(() => import('./pages/motionLab').then((module) => ({ default: module.MotionLabPage })))
-import { TahoeLighting } from './shared/tahoeLighting'
 import { CinematicBackground } from './shared/cinematicBackground'
+import { TooltipHost } from './shared/tooltip'
 
-function MainView() {
-  const { nav, session } = useRuntime()
+// AnimatePresence retains the exiting element. Keep its route in props so a
+// context update cannot mount the incoming player inside the outgoing stage.
+function MainView({ nav, playerKind }: { nav: NavState; playerKind: SessionState['kind'] }) {
   switch (nav.section) {
     case 'home':
       return <HomePage />
@@ -39,7 +41,7 @@ function MainView() {
       if (nav.mediaId != null) return <MediaDetailsPage mediaId={nav.mediaId} />
       return <LibraryPage />
     case 'player':
-      if (session.kind === 'audio' && !session.idle) return <MusicPlayerPage />
+      if (playerKind === 'audio') return <MusicPlayerPage />
       return <VideoPlayerPage />
     default:
       return <HomePage />
@@ -65,6 +67,7 @@ function ShellInner() {
     const manageGlobalKeyboardFocus = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       window.requestAnimationFrame(() => {
+        if (event.defaultPrevented) return
         const focused = document.activeElement
         if (focused instanceof HTMLElement && focused.matches('button, a[href], [role="button"], [role="tab"], [role="option"]')) focused.blur()
       })
@@ -86,6 +89,7 @@ function ShellInner() {
   const isHome = nav.section === 'home'
   const isLibrary = nav.section === 'library'
   const isNetwork = nav.section === 'remote'
+  const isNetworkWorkspace = isNetwork && ['sources', 'browser'].includes(nav.remoteTab ?? 'sources')
   const isSettings = nav.section === 'settings'
   const isCinema = !isPlayer
   const reducedMotion = settings?.reducedMotion ?? true
@@ -119,8 +123,7 @@ function ShellInner() {
 
   return (
     <MotionConfig reducedMotion={motionReduced ? 'always' : 'never'}>
-      {(isHome || isLibrary) && <CinematicBackground />}
-      <TahoeLighting enabled={true} reducedMotion={reducedMotion} reduceTransparency={settings?.reduceTransparency ?? false} routeKey={routeKey} />
+      {(isHome || isLibrary || isNetworkWorkspace) && <CinematicBackground />}
       {settings == null
         ? <div className="startup-animation" aria-hidden="true" />
         : settings.startupAnimationEnabled
@@ -131,7 +134,7 @@ function ShellInner() {
       </AnimatePresence>
       <motion.div
         layout={reducedMotion ? false : 'position'}
-        className={`shell ${isCinema ? 'home-shell' : ''} ${isHome ? 'cinema-home-shell' : ''} ${isLibrary ? 'library-shell cinema-library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}
+        className={`shell ${isCinema ? 'home-shell' : ''} ${isHome ? 'cinema-home-shell' : ''} ${isLibrary ? 'library-shell' : ''} ${isLibrary || isNetworkWorkspace ? 'cinema-library-shell' : ''} ${isNetwork ? 'network-shell' : ''} ${isSettings ? 'settings-shell' : ''}`}
         transition={routeTransition}
       >
         <AnimatePresence initial={false}>
@@ -152,7 +155,7 @@ function ShellInner() {
                 exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
                 transition={routeTransition}
               >
-                <Suspense fallback={<div className="center" role="status">{settings?.language === 'zh' ? '正在加载…' : 'Loading…'}</div>}><MainView /></Suspense>
+                <Suspense fallback={<div className="center" role="status">{settings?.language === 'zh' ? '正在加载…' : 'Loading…'}</div>}><MainView nav={nav} playerKind={session.idle ? 'video' : session.kind} /></Suspense>
               </motion.div>
             </AnimatePresence>
           )}
@@ -168,13 +171,14 @@ function ShellInner() {
       <HudHost />
       <GlobalShortcuts />
       <DragDropImporter />
+      <TooltipHost />
     </MotionConfig>
   )
 }
 
 export default function App() {
   if (new URLSearchParams(window.location.search).get('page') === 'motion-lab') {
-    return <MotionLabPage />
+    return <><MotionLabPage /><TooltipHost /></>
   }
 
   return (

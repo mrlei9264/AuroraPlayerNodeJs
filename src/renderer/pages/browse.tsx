@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useRuntime } from '../core/runtime'
-import { MediaTile, MediaRow, EmptyState, PageHeader, SearchBox, FilterChips } from '../shared/shared'
+import { MediaTile, MediaRow, EmptyState, PageHeader, SearchBox, FilterChips } from '../shared/ui'
 import { Icon } from '../core/icons'
 import { displayMediaTitle } from '../../shared/types'
 
@@ -41,14 +41,14 @@ export function BrowsePage({ kind }: { kind: BrowseKind }) {
         <SearchBox value={query} onChange={setQuery} placeholder={t('searchPlaceholder')} />
         <button
           className={`btn-icon ${view === 'grid' ? 'active' : ''}`}
-          title={t('grid')}
+          data-tooltip={t('grid')} aria-label={t('grid')}
           onClick={() => setView('grid')}
         >
           <Icon name="grid" size={17} />
         </button>
         <button
           className={`btn-icon ${view === 'list' ? 'active' : ''}`}
-          title={t('list')}
+          data-tooltip={t('list')} aria-label={t('list')}
           onClick={() => setView('list')}
         >
           <Icon name="list" size={17} />

@@ -28,6 +28,8 @@ import { LyricsService } from './media/lyrics'
 import { PlaybackIpc, makePlannerDeps, setBackgroundsDir } from './ipc'
 import { makeAppIcon } from './util'
 import { LocalMediaServer } from './media/localMediaServer'
+import { AudioSpectrumService } from './media/audioSpectrum'
+import { VideoPreviewService } from './media/videoPreviews'
 import type { AppSettingsData } from './system/settings-types'
 import { initializeAppDataPaths, type AppDataPaths } from './system/dataPaths'
 import { NotificationHistoryStore } from './system/notifications'
@@ -42,6 +44,8 @@ let isQuitting = false
 let quitCleanupComplete = false
 let quitCleanupPromise: Promise<void> | null = null
 let windowCleanupPromise: Promise<void> | null = null
+let playbackIpc: PlaybackIpc | null = null
+let audioSpectrum: AudioSpectrumService | null = null
 let bridge: ApplicationBridge
 let settingsStore: SettingsStore
 let logger: Logger
@@ -122,6 +126,7 @@ function createWindow(): void {
 
     windowCleanupPromise = (async () => {
       try {
+        await playbackIpc?.flushPlaybackBeforeClose(windowToClose)
         await mpvMain?.detachWindow(windowToClose)
       } catch (error) {
         logger.error('playback', `libmpv window shutdown failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -204,6 +209,8 @@ async function bootstrap(): Promise<void> {
   repo.migrateCoverPaths(dataPaths.covers)
   const migrated = await repo.migrateLegacyLibrary(path.join(dataPaths.database, 'library.json'))
   if (migrated) logger.info('app', `migrated ${migrated} legacy items`)
+  // Also normalize databases created before disabling resume cleared progress.
+  if (!settingsStore.get('resumePlayback')) repo.clearPlaybackProgress()
 
   const credentials = new CredentialStore(dataPaths.credentialsFile)
   const legacyProxyPassword = settingsStore.get('proxyPassword')
@@ -232,6 +239,13 @@ async function bootstrap(): Promise<void> {
     sourceUrlForItem
   )
   probe.init()
+  repo.onMediaAdded = (ids) => {
+    for (const item of repo.findByIds(ids)) {
+      if (!item.isAudio && !item.isImage && item.sourceAvailable && !item.coverPath) probe.request(item.id)
+    }
+  }
+  audioSpectrum = new AudioSpectrumService(repo, sourceUrlForItem)
+  audioSpectrum.init()
   ipcMain.handle(I.probeRegenerateCover, (_event, mediaId: number) => probe.regenerateCover(mediaId))
   library = new LibraryController(repo, logger, broadcast, (items) => {
     for (const item of items) {
@@ -240,9 +254,7 @@ async function bootstrap(): Promise<void> {
     }
     queueCtrl?.removeMediaIds(items.map((item) => item.id), false)
     playlistsCtrl?.mediaRemovedFromLibrary()
-  }, () => {
-    // Restored items are probed when first played or explicitly regenerated.
-  }, (item) => {
+  }, () => undefined, (item) => {
     probe.forgetMedia(item.id)
   }, (item) => mediaAvailable(item, remote))
   library.init()
@@ -297,13 +309,17 @@ async function bootstrap(): Promise<void> {
       remote.reloadNetworkSettings()
     }
     if (changedKeys.includes('appIcon')) tray.refreshIcon()
+    if (changedKeys.includes('resumePlayback')) {
+      if (!settings.resumePlayback) repo.clearPlaybackProgress()
+      broadcast(E.libraryChanged, library.snapshot())
+    }
   })
   appSettings.init()
 
   const diagnostics = new DiagnosticsController(logger, dataPaths.root, dataPaths.diagnosticsTemp, dataPaths.diagnostics, dataPaths.settingsFile, dataPaths.databaseFile, broadcast)
   diagnostics.init()
 
-  const playbackIpc = new PlaybackIpc({
+  playbackIpc = new PlaybackIpc({
     repo,
     library,
     playlists: playlistsCtrl,
@@ -323,6 +339,8 @@ async function bootstrap(): Promise<void> {
 
   downloads = new DownloadManager(remote, logger, broadcast, dataPaths.downloads, db)
   downloads.init()
+  new VideoPreviewService(repo, remote, logger, path.join(dataPaths.temp, 'video-previews'),
+    (item) => downloads.completedFile(item.sourceId, item.remotePath), broadcast).init()
 
   registerWindowIpc()
 
@@ -349,10 +367,12 @@ async function bootstrap(): Promise<void> {
     event.preventDefault()
     if (quitCleanupPromise) return
 
-    mediaServer.dispose()
-    settingsStore.flush()
     quitCleanupPromise = (async () => {
       try {
+        if (mainWindow) await playbackIpc?.flushPlaybackBeforeClose(mainWindow)
+        audioSpectrum?.dispose()
+        mediaServer.dispose()
+        settingsStore.flush()
         await windowCleanupPromise
         await mpvMain?.dispose()
       } catch (error) {

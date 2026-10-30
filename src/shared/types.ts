@@ -177,6 +177,9 @@ export interface TrackInfo {
 }
 
 export interface MediaTrackCatalog {
+  duration?: number
+  bitrate?: number
+  music?: AudioMetadata
   video: TrackInfo[]
   audio: TrackInfo[]
   subtitles: TrackInfo[]
@@ -192,6 +195,36 @@ export interface MediaTrackCatalog {
   colorPrimaries?: string
   bitDepth?: number
   hdrType?: string
+}
+
+export interface AudioMetadata {
+  title: string
+  artist: string
+  album: string
+  albumArtist: string
+  composer: string
+  genre: string
+  date: string
+  track: string
+  disc: string
+  publisher: string
+  copyright: string
+  comment: string
+}
+
+export interface VideoPreviewFrame {
+  time: number
+  path: string
+}
+
+export interface VideoPreviewResult {
+  mediaId: number
+  requestId: string
+  status: 'generating' | 'ready' | 'needs-download' | 'error' | 'cancelled'
+  frames: VideoPreviewFrame[]
+  imagePath?: string
+  error?: 'tool-missing' | 'read-limit' | 'range-unsupported'
+  total: number
 }
 
 export interface MediaAudioFeatures {

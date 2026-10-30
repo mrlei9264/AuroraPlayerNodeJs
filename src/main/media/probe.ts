@@ -5,17 +5,36 @@ import { app, ipcMain } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { I, E } from '../../shared/channels'
-import { cleanMediaText, type Chapter, type MediaAudioFeatures, type MediaItem, type MediaTrackCatalog, type ProbeProgress, type TrackInfo } from '../../shared/types'
+import { cleanMediaText, type AudioMetadata, type Chapter, type MediaAudioFeatures, type MediaItem, type MediaTrackCatalog, type ProbeProgress, type TrackInfo } from '../../shared/types'
 import { LibraryRepository } from '../library/repository'
 import { Logger } from '../system/diagnostics'
 import { probeTags } from './tags'
-import ffmpegStaticPath from 'ffmpeg-static'
-import { path as ffprobeStaticPath } from 'ffprobe-static'
+import { resolveMediaCommand } from './commands'
 
 const execFileAsync = promisify(execFile)
-const ffmpegCommand = bundledCommand(ffmpegStaticPath, 'ffmpeg')
-const ffprobeCommand = bundledCommand(ffprobeStaticPath, 'ffprobe')
 const PROBE_CACHE_LIMIT = 256
+
+function musicMetadata(formatTags: Record<string, string> = {}, streamTags: Record<string, string> = {}): AudioMetadata {
+  const tags = new Map<string, string>()
+  for (const source of [streamTags, formatTags]) {
+    for (const [key, value] of Object.entries(source)) {
+      const text = cleanMediaText(value)
+      if (text) tags.set(key.toLowerCase().replace(/[\s_-]/g, ''), text.slice(0, 2000))
+    }
+  }
+  const pick = (...keys: string[]) => keys.map((key) => tags.get(key)).find(Boolean) ?? ''
+  const number = (key: string, ...totalKeys: string[]) => {
+    const value = pick(key, `${key}number`)
+    const total = pick(...totalKeys)
+    return value && total && !value.includes('/') ? `${value}/${total}` : value
+  }
+  return {
+    title: pick('title'), artist: pick('artist', 'artists', 'performer', 'author'), album: pick('album'),
+    albumArtist: pick('albumartist'), composer: pick('composer'), genre: pick('genre'), date: pick('date', 'year', 'originaldate'),
+    track: number('track', 'tracktotal', 'totaltracks'), disc: number('disc', 'disctotal', 'totaldiscs'),
+    publisher: pick('publisher', 'organization', 'label'), copyright: pick('copyright'), comment: pick('comment', 'description')
+  }
+}
 
 function readLru<K, V>(cache: Map<K, V>, key: K): V | undefined {
   const value = cache.get(key)
@@ -33,14 +52,6 @@ function writeLru<K, V>(cache: Map<K, V>, key: K, value: V): void {
     if (oldest.done) break
     cache.delete(oldest.value)
   }
-}
-
-function bundledCommand(candidate: string | null | undefined, fallback: string): string {
-  if (!candidate) return fallback
-  const unpackedCandidate = app.isPackaged
-    ? candidate.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
-    : candidate
-  return fs.existsSync(unpackedCandidate) ? unpackedCandidate : fallback
 }
 
 export interface CoverRecord {
@@ -259,7 +270,7 @@ export class MediaProbeService {
     if (!item || item.isImage) return empty
     const input = item.protocol === 'local' ? item.url : this.mediaUrlFor(item)
     try {
-      const { stdout } = await execFileAsync(ffprobeCommand, [
+      const { stdout } = await execFileAsync(resolveMediaCommand('ffprobe'), [
         '-v', 'error',
         '-select_streams', 'a',
         '-show_streams',
@@ -284,7 +295,7 @@ export class MediaProbeService {
     if (!item || item.isImage) return 0
     const input = item.protocol === 'local' ? item.url : this.mediaUrlFor(item)
     try {
-      const { stdout } = await execFileAsync(ffprobeCommand, [
+      const { stdout } = await execFileAsync(resolveMediaCommand('ffprobe'), [
         '-v', 'error',
         '-show_entries', 'format=duration:stream=duration',
         '-of', 'json',
@@ -306,22 +317,23 @@ export class MediaProbeService {
     return item.duration > 0 && Number.isFinite(item.duration) ? item.duration : 0
   }
 
-  async getTracks(mediaId: number): Promise<MediaTrackCatalog> {
+  async getTracks(mediaId: number, inputOverride?: string): Promise<MediaTrackCatalog> {
     const empty: MediaTrackCatalog = { video: [], audio: [], subtitles: [], chapters: [], width: 0, height: 0, fps: 0 }
     const cached = readLru(this.trackCache, mediaId)
     if (cached) return cached
     const item = this.repo.findById(mediaId)
     if (!item || item.isImage) return empty
-    const input = item.protocol === 'local' ? item.url : this.mediaUrlFor(item)
+    const input = inputOverride ?? (item.protocol === 'local' ? item.url : this.mediaUrlFor(item))
     try {
-      const { stdout } = await execFileAsync(ffprobeCommand, [
+      const { stdout } = await execFileAsync(resolveMediaCommand('ffprobe'), [
         '-v', 'error',
         '-show_streams',
         '-show_chapters',
+        '-show_format',
         '-of', 'json',
         input
       ], { windowsHide: true, timeout: 45_000, maxBuffer: 8 * 1024 * 1024 })
-      const parsed = JSON.parse(stdout) as { streams?: FfprobeTrackStream[]; chapters?: FfprobeChapter[] }
+      const parsed = JSON.parse(stdout) as { streams?: FfprobeTrackStream[]; chapters?: FfprobeChapter[]; format?: { tags?: Record<string, string>; duration?: string; bit_rate?: string } }
       const video: TrackInfo[] = []
       const audio: TrackInfo[] = []
       const subtitles: TrackInfo[] = []
@@ -378,6 +390,9 @@ export class MediaProbeService {
       const pixelBitDepth = bitDepthFromPixelFormat(pixelFormat)
       const result: MediaTrackCatalog = {
         video, audio, subtitles, chapters, width, height, fps,
+        duration: finitePositive(parsed.format?.duration),
+        bitrate: finitePositive(parsed.format?.bit_rate),
+        music: item.isAudio ? musicMetadata(parsed.format?.tags, parsed.streams?.find((stream) => stream.codec_type === 'audio')?.tags) : undefined,
         videoCodec: cleanMediaText(primaryVideo?.codec_name),
         videoProfile: cleanMediaText(primaryVideo?.profile),
         pixelFormat,
@@ -399,7 +414,7 @@ export class MediaProbeService {
   request(mediaId: number): boolean {
     const item = this.repo.findById(mediaId)
     if (!item || item.isImage) return false
-    // Playback-triggered probing is a one-shot operation. Manual cover
+    // Import- or playback-triggered probing is a one-shot operation. Manual cover
     // regeneration resets this flag explicitly.
     if (item.metaProbed) return false
     if (this.pending.has(mediaId) || this.running === mediaId) return false
@@ -411,11 +426,13 @@ export class MediaProbeService {
 
   regenerateCover(mediaId: number): boolean {
     const item = this.repo.findById(mediaId)
-    if (!item || item.isImage) return false
+    if (!item || item.isImage || this.running === mediaId) return false
     this.forgetMedia(mediaId)
     this.removeTemporaryCover(item.coverPath)
     this.repo.updateFields(mediaId, { metaProbed: false, coverPath: null })
-    return this.request(mediaId)
+    const queued = this.request(mediaId)
+    this.emitLibrary(true)
+    return queued
   }
 
   removeTemporaryCover(coverPath: string | null): void {
@@ -471,11 +488,11 @@ export class MediaProbeService {
         } else if (item.protocol !== 'local') {
           const remote = await this.readRemoteTags(item)
           await this.finishProbe(item, remote)
-          this.emitLibrary()
+          this.emitLibrary(true)
         } else {
           const tags = await probeTags(job.url)
           await this.finishProbe(item, tags)
-          this.emitLibrary()
+          this.emitLibrary(true)
         }
       }
     } catch (err) {
@@ -501,17 +518,19 @@ export class MediaProbeService {
       // library refresh immediately starts the same expensive work again.
       metaProbed: true
     })
+    if (coverPath && item.coverPath !== coverPath) this.removeTemporaryCover(item.coverPath)
   }
 
   private async captureVideoFrame(item: MediaItem): Promise<string | null> {
-    const output = path.join(this.coverDir, `${item.id}.jpg`)
+    // A new path also invalidates failed <img> loads and decoded thumbnail URLs.
+    const output = path.join(this.coverDir, `${item.id}-${crypto.randomUUID()}.jpg`)
     const targetSeconds = item.duration > 0 ? Math.min(10, Math.max(0.2, item.duration * 0.1)) : 2
     const input = item.protocol === 'local' ? item.url : this.mediaUrlFor(item)
     try {
-      await execFileAsync(ffmpegCommand, [
+      await execFileAsync(resolveMediaCommand('ffmpeg'), [
         '-hide_banner', '-loglevel', 'error', '-y',
         '-ss', targetSeconds.toFixed(2), '-i', input,
-        '-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '3', output
+        '-frames:v', '1', '-vf', 'scale=640:-2:out_range=full,format=yuvj420p', '-color_range', 'pc', '-q:v', '3', output
       ], { windowsHide: true, timeout: 45_000, maxBuffer: 1024 * 1024 })
       if (fs.existsSync(output) && fs.statSync(output).size > 0) return output
     } catch {
@@ -520,7 +539,7 @@ export class MediaProbeService {
       // fallback instead of flooding the terminal.
     }
     try {
-      if (fs.existsSync(output) && fs.statSync(output).size === 0) fs.unlinkSync(output)
+      fs.rmSync(output, { force: true })
     } catch {
       void 0
     }
@@ -543,20 +562,20 @@ export class MediaProbeService {
     }
     updates.metaProbed = true
     this.repo.updateFields(mediaId, updates)
-    this.emitLibrary()
+    if (updates.coverPath && item.coverPath !== updates.coverPath) this.removeTemporaryCover(item.coverPath)
+    this.emitLibrary(true)
     this.setProgress({ ...this.progress, running: false, percent: 100 })
   }
 
   private saveCover(mediaId: number, data: Buffer, mime: string): string | null {
+    let file: string | null = null
     try {
       const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : mime.includes('bmp') ? 'bmp' : 'jpg'
-      const file = path.join(this.coverDir, `${mediaId}.${ext}`)
-      for (const candidateExt of ['jpg', 'png', 'webp', 'bmp']) {
-        if (candidateExt !== ext) fs.rmSync(path.join(this.coverDir, `${mediaId}.${candidateExt}`), { force: true })
-      }
+      file = path.join(this.coverDir, `${mediaId}-${crypto.randomUUID()}.${ext}`)
       fs.writeFileSync(file, data)
       return file
     } catch (err) {
+      this.removeTemporaryCover(file)
       this.logger.warn('probe', 'cover save failed', err as Error)
       return null
     }
@@ -567,7 +586,13 @@ export class MediaProbeService {
     this.broadcast(E.probeProgress, p)
   }
 
-  private emitLibrary(): void {
+  private emitLibrary(immediate = false): void {
+    if (immediate) {
+      if (this.libraryEmitTimer) clearTimeout(this.libraryEmitTimer)
+      this.libraryEmitTimer = null
+      this.broadcast(E.libraryChanged, this.repo.loadAll())
+      return
+    }
     if (this.libraryEmitTimer) return
     this.libraryEmitTimer = setTimeout(() => {
       this.libraryEmitTimer = null

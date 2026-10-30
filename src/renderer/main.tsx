@@ -4,6 +4,7 @@ import { defineMpvVideoElement } from 'electron-mpv-video/renderer'
 import App from './App'
 import '@fontsource-variable/space-grotesk'
 import '@fontsource-variable/noto-sans-sc'
+import './styles/tokens.css'
 import './styles/base.css'
 import './styles/startup.css'
 import './styles/pages.css'
@@ -15,8 +16,15 @@ import './styles/tahoe-optics.css'
 import './styles/window-controls.css'
 import './styles/cinema-chrome.css'
 import './styles/cinema-home.css'
+import './styles/network-browser.css'
+import './styles/tooltip.css'
 
 defineMpvVideoElement()
+
+// A registered custom element cannot be redefined by a hot module update.
+if (import.meta.hot) {
+  import.meta.hot.accept('electron-mpv-video/renderer', () => window.location.reload())
+}
 
 const container = document.getElementById('root')
 if (container) {

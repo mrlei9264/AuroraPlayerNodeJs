@@ -6,6 +6,9 @@ export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   base: './',
   plugins: [react()],
+  // This locally patched custom element must not outlive its dependency source
+  // in Vite's prebundle cache across development restarts.
+  optimizeDeps: { exclude: ['electron-mpv-video/renderer'] },
   server: {
     port: 5173,
     strictPort: true

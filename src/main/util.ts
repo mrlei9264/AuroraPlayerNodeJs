@@ -2,6 +2,7 @@ import { deflateSync } from 'zlib'
 import path from 'path'
 import crypto from 'crypto'
 import fs from 'fs'
+import { app } from 'electron'
 
 let seq = 0
 export function nextId(): number {
@@ -260,9 +261,7 @@ export interface AppIconOption {
 }
 
 function appIconDirectories(): string[] {
-  const external = process.env.AURORA_DEV_URL
-    ? path.join(process.cwd(), 'icon')
-    : path.join(path.dirname(process.execPath), 'icon')
+  const external = path.join(app.isPackaged ? path.dirname(process.execPath) : app.getAppPath(), 'icon')
   return [
     external,
     path.join(__dirname, '..', 'src', 'renderer', 'assets', 'icon'),

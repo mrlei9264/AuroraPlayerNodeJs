@@ -1,81 +1,62 @@
 # 软件架构
 
-Aurora Player 使用 Electron 的主进程、Preload 隔离层和 React 渲染进程组成桌面应用。播放能力由独立的 libmpv 原生模块提供，媒体库与下载状态由本地数据库持久化。
+Aurora Player 由 Electron 主进程、Preload 和 React 渲染进程组成。视频播放使用 libmpv，媒体库和下载任务使用本地 SQLite 数据库。
 
 ```mermaid
 flowchart LR
-    User[用户] --> UI[React 界面]
-
-    subgraph Renderer[渲染进程]
-        UI --> Runtime[运行时状态与路由]
-        Runtime --> PlayerUI[音视频与图片播放器]
-        Runtime --> Pages[媒体库与网络媒体页面]
-    end
-
-    subgraph Bridge[安全边界]
-        Preload[Preload API]
-        IPC[类型化 IPC 通道]
-    end
-
-    subgraph Main[Electron 主进程]
-        App[应用与窗口生命周期]
-        Library[媒体库服务]
-        Remote[网络协议服务]
-        Download[下载管理器]
-        Metadata[本地标签与技术信息探测]
-        System[设置、通知、日志与性能]
-        MpvService[libmpv 播放服务]
-    end
-
-    subgraph Storage[本地数据]
-        SQLite[(library.db)]
-        Config[(设置与连接配置)]
-        Security[(受保护凭据)]
-        Files[(封面、日志与下载文件)]
-    end
-
-    subgraph External[外部资源]
-        LocalMedia[本地媒体]
-        NetworkMedia[HTTP WebDAV SMB FTP SFTP]
-        Libmpv[libmpv 与 FFmpeg 解码能力]
-    end
-
-    Runtime --> Preload --> IPC --> App
-    App --> Library
-    App --> Remote
-    App --> Download
-    App --> Metadata
-    App --> System
-    App --> MpvService
-
-    Library <--> SQLite
-    Download <--> SQLite
-    System <--> Config
-    Remote <--> Security
-    Library --> Files
-    Download --> Files
-
-    Library --> LocalMedia
-    Remote --> NetworkMedia
-    Metadata --> LocalMedia
-    MpvService --> Libmpv
-    PlayerUI <--> MpvService
+    UI[React 页面与播放器] <--> Runtime[界面状态与播放引擎]
+    Runtime <--> Bridge[Preload / IPC]
+    Bridge <--> Main[主进程服务]
+    Main <--> DB[(SQLite / 配置 / 凭据)]
+    Main <--> Media[本地文件 / 网络来源]
+    Main --> Probe[FFprobe 探测 / FFmpeg 截帧]
+    Bridge <--> MPV[libmpv 原生播放会话]
+    MPV --> Frame[视频画面与播放事件]
+    Frame --> UI
 ```
 
-## 模块职责
+## 代码入口
 
-| 模块 | 目录 | 职责 |
-| --- | --- | --- |
-| 主进程 | `src/main` | 窗口生命周期、IPC、数据库、文件系统、网络与播放服务 |
-| Preload | `src/preload` | 仅向界面暴露经过约束的应用 API 和 libmpv API |
-| 渲染进程 | `src/renderer` | 页面、组件、主题、用户交互和播放界面 |
-| 共享层 | `src/shared` | 主进程和渲染进程共用的数据类型与 IPC 名称 |
-| 播放运行时 | `electron-mpv-video` | libmpv 原生会话、共享纹理或软件渲染管线 |
-| 数据层 | `data` | SQLite 数据库、配置、凭据、日志、下载与临时文件 |
+| 路径 | 负责内容 |
+| --- | --- |
+| `src/main/index.ts` | 应用启动、窗口、服务装配与 IPC 注册 |
+| `src/main/library/` | 媒体记录、播放历史、队列和数据库 |
+| `src/main/remote/` | 网络协议访问与远程流代理 |
+| `src/main/media/` | 媒体探测、封面生成、本地文件服务 |
+| `src/main/playback/` | 播放计划与来源可用性处理 |
+| `src/main/system/` | 设置、数据目录、通知、日志与更新检查 |
+| `src/preload/` | 向界面暴露受限 API，转发请求和事件 |
+| `src/renderer/core/runtime.tsx` | 界面共享状态、导航与主进程订阅 |
+| `src/renderer/core/player.ts` | 播放引擎和 libmpv 元素协调 |
+| `src/renderer/pages/` | Library、网络媒体、设置和播放器页面 |
+| `src/shared/` | IPC 通道及双方共用的数据类型 |
+| `scripts/tool.mjs` | 开发、构建、补丁、差分包和发布工具 |
 
-## 主要数据流
+## 播放与封面
 
-1. 界面通过 Preload 暴露的 API 发起操作，不直接访问 Node.js。
-2. 主进程通过 IPC 分发请求到媒体库、网络、下载、媒体探测或系统服务。
-3. 视频播放由主进程中的 libmpv 服务管理，渲染进程负责显示画面和播放器 UI。
-4. 媒体库、播放历史和下载任务写入 SQLite；设置与网络连接信息分别保存到配置和安全凭据文件。
+- 视频由 `electron-mpv-video` 调用 libmpv 播放；界面负责控制和画面呈现。音频可使用浏览器音频元素，或回退到 libmpv。
+- 本地媒体通过回环文件服务提供 URL，远程媒体由来源访问与代理服务提供。播放时不通过 FFmpeg CLI 转码。
+- FFprobe 读取轨道等技术信息；FFmpeg 截取视频封面，失败时尝试渲染进程截图。
+- 封面、轨道、频谱和拼接图通过 `media/commands.ts` 统一查找工具：开发版使用依赖目录，打包版使用 `resources/app.asar.unpacked/`，再尝试系统 `PATH`；不依赖开发者的磁盘路径。
+- 封面路径写入媒体记录后，主进程通知界面更新。重新生成会使用新文件名，避免复用旧图片缓存；Library 的缩略图解码另有数量和内存限制。
+- 媒体信息页从 FFprobe 标签显示音频专辑、歌手等信息。视频预览缓存于 `temp/video-previews/`，合成为 3 行、10 列的单张拼接图，显示在媒体信息页顶部右侧；远程取帧限制读取量，无法按需完成时仅在用户确认后下载完整文件。
+- 远程拼接图在采样点附近取帧，每次最多读取 256 MiB 且不超过文件大小的 1/4，内存块缓存上限 32 MiB。达到限额或来源不支持范围读取时提示确认下载；网络和编码错误允许直接重试。
+
+## 数据位置
+
+数据根目录由 `src/main/system/dataPaths.ts` 定义：开发版为工程根目录下的 `data/`，打包版为 EXE 所在目录下的 `data/`。
+
+| 相对路径 | 内容 |
+| --- | --- |
+| `config/settings.json` | 界面与播放设置 |
+| `config/remote-sources.json` | 网络连接配置 |
+| `database/library.db` | 媒体库、队列、播放列表与下载任务 |
+| `security/credentials.bin` | 受保护的网络凭据 |
+| `temp/` | 生成的封面与临时文件 |
+| `downloads/` | 下载文件 |
+| `logs/aurora.log` | 应用日志 |
+| `backgrounds/`、`diagnostics/`、`runtime/` | 背景图、诊断导出、Electron 运行缓存 |
+
+原始媒体保留在原位置。数据库使用 WAL；完整备份应在退出应用后复制整个 `data/`，避免遗漏尚未合并的数据库记录。
+
+环境配置见 [开发环境配置](libmpv-runtime.md)，构建和分发见 [工程工具](tooling.md)。

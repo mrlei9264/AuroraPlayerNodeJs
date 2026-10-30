@@ -229,7 +229,7 @@ function DemoRail({ effect, replay }: { effect: EffectDefinition; replay: number
                 className={`lab-nav-button ${isActive ? 'is-active' : ''} ${isPrevious ? 'is-previous' : ''}`}
                 aria-label={item.label}
                 aria-pressed={isActive}
-                title={item.label}
+                data-tooltip={item.label}
                 onClick={() => choose(index)}
                 initial={effect.id === 'magnetic' && isActive && !reduced ? magneticButtonInitial(direction) : false}
                 animate={effect.id === 'magnetic' && isActive && !reduced ? magneticButtonAnimate(direction) : { y: 0, scale: 1 }}

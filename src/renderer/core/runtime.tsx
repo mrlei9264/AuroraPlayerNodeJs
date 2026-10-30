@@ -279,7 +279,7 @@ export function RuntimeProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogRequest | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const toastTimersRef = useRef<Map<number, ToastTimer>>(new Map())
-  const libraryProgressRef = useRef({ mediaId: null as number | null, paused: true })
+  const libraryProgressRef = useRef({ mediaId: null as number | null, playing: false })
   const playRequestEpochRef = useRef(0)
   const sessionRef = useRef(session)
   const libraryRef = useRef(library)
@@ -460,6 +460,13 @@ const playRequest = useCallback(
         return plan
       }
       if (request.mediaIds.length > 1) lastPlayListRef.current = request.mediaIds
+      if (plan.item) {
+        const item = plan.item
+        const startedAt = Date.now()
+        setLibrary((items) => items.map((entry) => entry.id === item.id
+          ? { ...entry, lastPlayedAt: startedAt, lastPosition: settingsRef.current?.resumePlayback !== false ? plan.resumePosition : 0, duration: item.duration || entry.duration }
+          : entry))
+      }
       engine.load(plan, sessionRef.current.volume, sessionRef.current.muted, sessionRef.current.speed)
       if (navigateToPlayer) navigate({ section: 'player' })
       return plan
@@ -994,8 +1001,22 @@ const playRequest = useCallback(
 // ---- engine wiring ----
   useEffect(() => {
     const persist = () => engine.persistPlaybackProgress()
+    const unsubscribe = window.aurora.on(E.sessionFlushRequested, (requestId: number) => {
+      const state = engine.persistPlaybackProgress()
+      if (state?.loaded && state.mediaId != null) {
+        setLibrary((items) => items.map((item) => item.id === state.mediaId
+          ? { ...item, lastPlayedAt: Date.now(), lastPosition: settingsRef.current?.resumePlayback !== false ? state.position : 0, duration: state.duration || item.duration }
+          : item))
+      }
+      // The main process waits for this acknowledgement before destroying mpv
+      // or closing the database, including tray Quit and system window close.
+      void p(I.sessionFlush, requestId, state).catch((error) => console.warn('[Runtime] Failed to flush playback on close', error))
+    })
     window.addEventListener('pagehide', persist)
-    return () => window.removeEventListener('pagehide', persist)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('pagehide', persist)
+    }
   }, [engine])
 
   // Core callbacks that must always be active (session, tracks, errors, ended)
@@ -1009,10 +1030,12 @@ const playRequest = useCallback(
           const now = Date.now()
           const progress = libraryProgressRef.current
           const mediaChanged = progress.mediaId !== s.mediaId
-          const justPaused = s.paused && !progress.paused
-          progress.paused = s.paused
-          if (mediaChanged || justPaused) {
-            progress.mediaId = s.mediaId
+          const playing = s.loaded && !s.paused && s.phase !== 'error'
+          const justStarted = playing && (mediaChanged || !progress.playing)
+          progress.mediaId = s.mediaId
+          progress.playing = playing
+          if (justStarted) {
+            e.persistPlaybackProgress()
             setLibrary((prev) => {
               const index = prev.findIndex((item) => item.id === s.mediaId)
               if (index < 0) return prev
@@ -1020,7 +1043,7 @@ const playRequest = useCallback(
               next[index] = {
                 ...prev[index],
                 lastPlayedAt: now,
-                lastPosition: s.position,
+                lastPosition: settingsRef.current?.resumePlayback !== false ? s.position : 0,
                 duration: s.duration || prev[index].duration
               }
               return next
@@ -1028,7 +1051,7 @@ const playRequest = useCallback(
           }
         } else {
           libraryProgressRef.current.mediaId = null
-          libraryProgressRef.current.paused = s.paused
+          libraryProgressRef.current.playing = false
         }
       },
       onTracks: setTracks,

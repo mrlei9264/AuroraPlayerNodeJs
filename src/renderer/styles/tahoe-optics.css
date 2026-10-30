@@ -1,31 +1,22 @@
-/* Optical depth without changing Aurora's geometry. Material edges and a
-   contrasting scene communicate glass; restrained shadows only ground it. */
+/* Static glass materials and edges. */
 :root[data-color-theme='classic'] {
-  --tahoe-glass: linear-gradient(118deg, #ffffff80, #ffffff12 28%, #d9edff12 62%, #ffffff52), #f4faff24;
-  --tahoe-glass-control: linear-gradient(145deg, #ffffffb3, #ffffff24 42%, #cde5ff24 70%, #ffffff7a);
-  --tahoe-edge: #ffffffe6;
+  --tahoe-glass: linear-gradient(118deg, color-mix(in srgb, var(--fg0) 5%, transparent), color-mix(in srgb, var(--surface) 82%, transparent) 45%, color-mix(in srgb, var(--accent) 4%, transparent)), color-mix(in srgb, var(--surface) 72%, transparent);
+  --tahoe-glass-control: linear-gradient(145deg, color-mix(in srgb, var(--fg0) 8%, transparent), color-mix(in srgb, var(--surface2) 62%, transparent) 55%, color-mix(in srgb, var(--accent) 3%, transparent));
+  --tahoe-glass-raised: linear-gradient(135deg, color-mix(in srgb, var(--surface2) 96%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
+  --tahoe-glass-media: linear-gradient(135deg, color-mix(in srgb, var(--surface2) 95%, transparent), color-mix(in srgb, var(--bg0) 94%, transparent));
+  --tahoe-panel-fill: color-mix(in srgb, var(--surface) 66%, transparent);
+  --tahoe-control-fill: color-mix(in srgb, var(--surface2) 85%, transparent);
+  --tahoe-solid: var(--surface2);
+  --tahoe-edge: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+  --tahoe-edge-soft: color-mix(in srgb, var(--accent) 20%, var(--border));
+  --tahoe-edge-active: color-mix(in srgb, var(--accent) 60%, transparent);
+  --tahoe-edge-light: inset 0 1px 0 color-mix(in srgb, var(--fg0) 22%, transparent), inset 1px 0 0 color-mix(in srgb, var(--accent) 8%, transparent), inset 0 -1px 0 #0004;
+  --tahoe-floating-shadow: 0 10px 32px #0007;
+  --tahoe-grounding: 0 4px 20px #0003;
   --tahoe-blur: blur(20px) saturate(155%);
-  --tahoe-edge-light: inset 0 1px 0 #fff, inset 1px 0 0 #ffffffad, inset -1px 0 0 #b7d7ef6b, inset 0 -2px 1px #719cc526;
-  --tahoe-grounding: 0 2px 4px #456b8f0a, 0 8px 24px #5894bf12;
 }
 
-/* The scene is a single composited layer; its gentle parallax never moves UI.
-   Distinct pale ribbons remain visible through the blurred glass surfaces. */
 :root[data-color-theme='classic'] #root { isolation: isolate; }
-.tahoe-light-scene { position: fixed; inset: -16px; z-index: -1; overflow: hidden; pointer-events: none; contain: strict; }
-.tahoe-light-scene i { position: absolute; display: block; border-radius: 50%; pointer-events: none; }
-.tahoe-light-scene i:nth-child(1) {
-  width: 105%; height: 46%; left: -28%; top: 14%; rotate: -30deg;
-  background: linear-gradient(180deg, transparent 8%, #acd9ff66 30%, #8dc8f88c 48%, #e6f6ffcc 51%, #ffffff94 54%, #cbe5fa4d 68%, transparent 86%);
-}
-.tahoe-light-scene i:nth-child(2) {
-  width: 90%; height: 57%; right: -36%; top: -10%; rotate: 35deg;
-  background: linear-gradient(180deg, transparent 12%, #bcbff05c 35%, #e1e3ff94 48%, #ffffffbd 50%, #dcf3ff94 55%, #badfec4d 72%, transparent 88%);
-}
-.tahoe-light-scene i:nth-child(3) {
-  width: 96%; height: 43%; right: -12%; bottom: -9%; rotate: -18deg;
-  background: linear-gradient(180deg, transparent 8%, #a9e1d84d 33%, #c5eee480 48%, #ffffffc7 50%, #eefbff80 56%, #b6dff75c 72%, transparent 94%);
-}
 :root[data-color-theme='classic'] .shell:not(.home-shell) .main,
 :root[data-color-theme='classic'] .immersive-audio-player { background: transparent; }
 
@@ -33,13 +24,13 @@
    mask draws only the edge, so light never covers labels or intercepts clicks.
    https://developer.mozilla.org/en-US/docs/Web/CSS/mask-composite */
 :root[data-color-theme='classic'] :is(
-  .settings-category-panel, .settings-detail-panel, .network-source-section,
-  .network-config-form-v2, .network-protocol-rail, .network-source-card,
+  .settings-category-panel, .settings-detail-panel,
+  .network-config-form-v2, .network-protocol-rail,
   .media-details-panel
 ) { position: relative; }
 :root[data-color-theme='classic'] :is(
-  .nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section,
-  .network-config-form-v2, .network-protocol-rail, .network-source-card,
+  .nav-list, .settings-category-panel, .settings-detail-panel,
+  .network-config-form-v2, .network-protocol-rail,
   .media-details-panel
 )::before {
   content: '';
@@ -48,7 +39,7 @@
   inset: 0;
   padding: 1.5px;
   border-radius: inherit;
-  background: conic-gradient(from 125deg at var(--glass-x, 28%) var(--glass-y, 15%), #85b7d75c, #ffffffed 15%, #ffffff47 27%, #80afe13d 43%, #fff 64%, #c5f1ffad 74%, #ffffff52 89%, #85b7d75c);
+  background: conic-gradient(from 125deg at 28% 15%, #85b7d75c, #ffffffed 15%, #ffffff47 27%, #80afe13d 43%, #fff 64%, #c5f1ffad 74%, #ffffff52 89%, #85b7d75c);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
@@ -57,108 +48,48 @@
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-list,
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-status,
 :root[data-color-theme='classic'] :is(
-  .settings-category-panel, .settings-detail-panel, .network-source-section,
+  .settings-category-panel, .settings-detail-panel,
   .network-config-form-v2, .network-protocol-rail, .media-details-panel,
   .audio-transport-controls
 ) { box-shadow: var(--tahoe-edge-light), var(--tahoe-grounding) !important; }
-:root[data-color-theme='classic'] .network-source-card {
-  background: var(--tahoe-glass-control);
-  border-color: var(--tahoe-edge);
-  box-shadow: var(--tahoe-edge-light) !important;
-}
 
-/* The lighting controller supplies local coordinates and eases energy. It
-   changes only the nearest panel and control, never the whole DOM tree. */
-:root[data-color-theme='classic'] [data-glass-lit] { --glass-resting-surface: var(--tahoe-glass); }
-:root[data-color-theme='classic'] :is(.nav-item, .network-source-card, .home-playback-toggle, .audio-play-control)[data-glass-lit] { --glass-resting-surface: var(--tahoe-glass-control); }
-:root[data-color-theme='classic'] :is(.theme-settings-popover, .dialog)[data-glass-lit] { --glass-resting-surface: var(--tahoe-glass-raised); }
-:root[data-color-theme='classic'] [data-glass-lit]:not(.library-file-art):not(.cinema-card-image):not(.cinematic-console):not(.cinematic-play) {
-  background:
-    radial-gradient(ellipse 240px 170px at var(--glass-x, 50%) var(--glass-y, 15%), rgb(255 255 255 / calc(var(--glass-energy, 0) * var(--glass-highlight, .3))), transparent 76%),
-    linear-gradient(118deg, transparent 32%, rgb(255 255 255 / calc(var(--glass-energy, 0) * .16)) 48%, transparent 65%),
-    var(--glass-resting-surface) !important;
-  box-shadow: var(--tahoe-edge-light), var(--glass-shadow-x, 0px) 7px 20px #5b98c41c !important;
-}
-
-/* Separate rotate/translate properties compose with Motion's existing
-   transform animations. Only decorative children, artwork and play buttons
-   tilt. Parent hit targets and all form fields/timelines stay stationary. */
-:root[data-color-theme='classic'] :is(
-  .nav-item, .network-source-card, .home-playback-toggle,
-  .library-file-open, .cinema-card, .cinematic-transport, .audio-transport-controls
-) { perspective: 850px; }
-:root[data-color-theme='classic'] [data-glass-depth] {
-  rotate: var(--glass-axis-x, 0) var(--glass-axis-y, 1) 0 var(--glass-angle, 0deg);
-  translate: 0 var(--glass-lift, 0px);
-}
-:root[data-color-theme='classic'] .library-workspace .library-file-art[data-glass-depth],
-:root[data-color-theme='classic'] .cinema-card-image[data-glass-depth] {
-  border-color: #ffffffeb;
-  box-shadow: inset 0 1px 0 #fff, var(--glass-shadow-x, 0px) 6px 15px #5586ab24 !important;
-}
 :root[data-color-theme='classic'] .audio-play-control { box-shadow: var(--tahoe-edge-light), 0 3px 7px #557b9e14 !important; }
 @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
-  :root[data-color-theme='classic']:not(.reduce-motion) .network-source-card:active .network-source-symbol,
   :root[data-color-theme='classic']:not(.reduce-motion) .audio-play-control:active { translate: 0 1px; }
 }
 
-/* Solid-material and motion preferences still take precedence over optics. */
-:root[data-color-theme='classic'].reduce-transparency { --tahoe-glass: #f5f9fe; --tahoe-glass-control: #f1f6fc; --tahoe-blur: none; }
-:root[data-color-theme='classic'].reduce-transparency .tahoe-light-scene { opacity: .2; }
-:root[data-color-theme='classic'].reduce-motion .tahoe-light-scene,
-:root[data-color-theme='classic'].reduce-motion [data-glass-depth] { transform: none !important; rotate: none !important; translate: none !important; }
-@media (prefers-reduced-motion: reduce) {
-  .tahoe-light-scene { transform: none !important; }
-  :root[data-color-theme='classic'] [data-glass-depth] { rotate: none !important; translate: none !important; }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root[data-color-theme='classic'] { --tahoe-glass: #f5f9fe; --tahoe-glass-control: #f1f6fc; --tahoe-blur: none; }
-  .tahoe-light-scene { opacity: .2; }
-}
-@supports not (mask-composite: exclude) {
-  :root[data-color-theme='classic'] :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-source-card, .media-details-panel)::before { display: none; }
-}
-@supports not (backdrop-filter: blur(1px)) {
-  :root[data-color-theme='classic'] { --tahoe-glass: #f5f9fe; --tahoe-glass-control: #f1f6fc; }
-}
-/* Shared materials, with fixed palettes for dark and light appearance. */
-:root {
-  --theme-primary-fill: linear-gradient(165deg, #1672d4, #0758b6);
-}
-
-:root[data-color-theme='classic'] {
-  --tahoe-glass: linear-gradient(118deg, #bddfff0d, #14233580 45%, #8ec8ff0a), #152333ba;
-  --tahoe-glass-control: linear-gradient(145deg, #b8dfff14, #23394c9c 55%, #9bceff0c);
-  --tahoe-glass-raised: linear-gradient(135deg, #24374bf5, #162536f5);
-  --tahoe-glass-media: linear-gradient(135deg, #1c3045f2, #101e2ff0);
-  --tahoe-panel-fill: #21364ba8;
-  --tahoe-control-fill: #38526bd9;
-  --tahoe-solid: #1b2c3e;
-  --tahoe-edge: #c5e1ff45;
-  --tahoe-edge-soft: #aacbec47;
-  --tahoe-edge-active: #8cc8ff99;
-  --tahoe-edge-light: inset 0 1px 0 #d8ecff33, inset 1px 0 0 #a4d0ff14, inset 0 -1px 0 #0004;
-  --tahoe-floating-shadow: 0 10px 32px #0007;
-  --tahoe-grounding: 0 4px 20px #0003;
-  --glass-highlight: .1;
-}
-:root[data-color-theme='classic'] .tahoe-light-scene { opacity: .12; }
-:root[data-color-theme='classic'] :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-source-section, .network-config-form-v2, .network-protocol-rail, .network-source-card, .media-details-panel)::before { opacity: .28; }
-:root[data-color-theme='classic'] .settings-switch { background: #52677e; }
-:root[data-color-theme='classic'] .settings-switch.on { background: #247bd2; }
-:root[data-color-theme='classic'] .settings-segmented { background: #10213399; }
+:root[data-color-theme='classic'] :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-config-form-v2, .network-protocol-rail, .media-details-panel)::before { opacity: .28; }
+:root[data-color-theme='classic'] .settings-switch { background: var(--surface2); }
+:root[data-color-theme='classic'] .settings-switch.on { background: var(--accent); }
+:root[data-color-theme='classic'] .settings-segmented { background: color-mix(in srgb, var(--bg0) 60%, transparent); }
 :root[data-color-theme='classic'] :is(input, select, textarea) { color: var(--fg0); }
 :root[data-color-theme='classic'] input::placeholder { color: var(--fg3); opacity: 1; }
+
+/* Solid-material preferences take precedence over transparency. */
 :root[data-color-theme='classic'].reduce-transparency {
-  --tahoe-glass: #192737; --tahoe-glass-control: #23364a; --tahoe-glass-raised: #23364a;
-  --tahoe-glass-media: #192737; --tahoe-panel-fill: #192737; --tahoe-control-fill: #304960; --tahoe-blur: none;
+  --tahoe-glass: var(--surface); --tahoe-glass-control: var(--surface2);
+  --tahoe-glass-raised: var(--surface2); --tahoe-glass-media: var(--surface);
+  --tahoe-panel-fill: var(--surface); --tahoe-control-fill: var(--surface2);
+  --tahoe-blur: none;
 }
 @media (prefers-reduced-transparency: reduce) {
-  :root[data-color-theme='classic'] { --tahoe-glass: #192737; --tahoe-glass-control: #23364a; --tahoe-glass-raised: #23364a; --tahoe-glass-media: #192737; --tahoe-panel-fill: #192737; --tahoe-control-fill: #304960; --tahoe-blur: none; }
+  :root[data-color-theme='classic'] {
+    --tahoe-glass: var(--surface); --tahoe-glass-control: var(--surface2);
+    --tahoe-glass-raised: var(--surface2); --tahoe-glass-media: var(--surface);
+    --tahoe-panel-fill: var(--surface); --tahoe-control-fill: var(--surface2); --tahoe-blur: none;
+  }
 }
 @supports not (backdrop-filter: blur(1px)) {
-  :root[data-color-theme='classic'] { --tahoe-glass: #192737; --tahoe-glass-control: #23364a; --tahoe-glass-raised: #23364a; --tahoe-glass-media: #192737; --tahoe-panel-fill: #192737; --tahoe-control-fill: #304960; }
+  :root[data-color-theme='classic'] {
+    --tahoe-glass: var(--surface); --tahoe-glass-control: var(--surface2);
+    --tahoe-glass-raised: var(--surface2); --tahoe-glass-media: var(--surface);
+    --tahoe-panel-fill: var(--surface); --tahoe-control-fill: var(--surface2); --tahoe-blur: none;
+  }
 }
+@supports not (mask-composite: exclude) {
+  :root[data-color-theme='classic'] :is(.nav-list, .settings-category-panel, .settings-detail-panel, .network-config-form-v2, .network-protocol-rail, .media-details-panel)::before { display: none; }
+}
+
 /* The hero is part of the wallpaper, with no rectangular surface boundary. */
 :root[data-color-theme='classic'] .cinema-hero {
   background: transparent;
@@ -166,7 +97,3 @@
   outline: none;
   box-shadow: none !important;
 }
-:root[data-color-theme='classic'] .cinema-hero > :is(.cinema-hero-image, .cinema-audio-artwork, .media-artwork-fallback, .cinema-hero-shade, .cinema-ambient-light) {
-  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
-}
-:root[data-color-theme='classic'] .cinema-hero > .cinema-film-reveal { background: transparent; }

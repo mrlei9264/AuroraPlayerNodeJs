@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useRuntime } from '../core/runtime'
-import { EmptyState } from '../shared/shared'
+import { EmptyState } from '../shared/ui'
 import { Icon } from '../core/icons'
 import type { DownloadTask } from '../../shared/types'
 import { formatBytes, formatBps } from '../../shared/types'
@@ -146,26 +146,26 @@ export function DownloadsPage({ networkContext = false, onBack }: { networkConte
               </span>
               <div className="dl-actions">
                 {task.status === 'completed' && (
-                  <button className="btn-icon" title={t('openFolder')} onClick={() => void openDownloadFolder(task.id)}>
+                  <button className="btn-icon" data-tooltip={t('openFolder')} aria-label={t('openFolder')} onClick={() => void openDownloadFolder(task.id)}>
                     <Icon name="folder" size={16} />
                   </button>
                 )}
                 {(task.status === 'error' || task.status === 'cancelled') && (
-                  <button className="btn-icon" title={t('retry')} onClick={() => void retryDownload(task.id)}>
+                  <button className="btn-icon" data-tooltip={t('retry')} aria-label={t('retry')} onClick={() => void retryDownload(task.id)}>
                     <Icon name="refresh" size={16} />
                   </button>
                 )}
                 {(task.status === 'running' || task.status === 'queued') && (
-                  <button className="btn-icon" title={t('pauseDownload')} onClick={() => void pauseDownload(task.id)}>
+                  <button className="btn-icon" data-tooltip={t('pauseDownload')} aria-label={t('pauseDownload')} onClick={() => void pauseDownload(task.id)}>
                     <Icon name="pause" size={16} />
                   </button>
                 )}
                 {task.status === 'paused' && (
-                  <button className="btn-icon" title={t('resumeDownload')} onClick={() => void resumeDownload(task.id)}>
+                  <button className="btn-icon" data-tooltip={t('resumeDownload')} aria-label={t('resumeDownload')} onClick={() => void resumeDownload(task.id)}>
                     <Icon name="play" size={16} />
                   </button>
                 )}
-                <button className="btn-icon dl-delete-button" title={t('deleteDownloadRecord')} onClick={() => requestDelete(task)}>
+                <button className="btn-icon dl-delete-button" data-tooltip={t('deleteDownloadRecord')} aria-label={t('deleteDownloadRecord')} onClick={() => requestDelete(task)}>
                   <Icon name="trash" size={16} />
                 </button>
               </div>
@@ -197,14 +197,12 @@ export function DownloadsPage({ networkContext = false, onBack }: { networkConte
   if (!networkContext) return <><div className="col gap-12" style={{ maxWidth: 860 }}>{content}</div>{deleteDialog}</>
 
   return (
-    <main className="network-page network-v2 network-download-page" aria-labelledby="network-download-title">
-      <header className="network-v2-header network-download-header">
-        <div className="network-v2-heading">
-          {onBack && <button type="button" className="network-back-button-v2" onClick={onBack}><Icon name="chevronLeft" size={17} />{t('backToConnections')}</button>}
-          <h1 id="network-download-title">{t('downloads')}</h1>
-          <p>{t('downloadsDescription')}</p>
-        </div>
-      </header>
+    <main className="network-page network-v2 network-download-page" aria-label={t('downloads')}>
+      {onBack && <header className="network-v2-header">
+        <button type="button" className="page-back-button" aria-label={t('backToConnections')} data-tooltip={t('backToConnections')} onClick={onBack}>
+          <Icon name="chevronLeft" size={19} />
+        </button>
+      </header>}
       <section className="network-download-shell">{content}</section>
       {deleteDialog}
     </main>

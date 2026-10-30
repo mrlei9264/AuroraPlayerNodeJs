@@ -1,9 +1,5 @@
-import { COLOR_THEMES, colorThemeAt, type ColorThemeId } from '../../shared/colorThemes'
+import { colorThemeAt, type ColorThemeId } from '../../shared/colorThemes'
 import type { AppSettingsData } from '../../main/system/settings-types'
-
-export type Accent = { name: string; start: string; end: string }
-
-export const ACCENTS: Accent[] = COLOR_THEMES.map(({ name, start, end }) => ({ name, start, end }))
 
 export interface Theme {
   id: ColorThemeId
@@ -32,10 +28,7 @@ export interface Theme {
     warning: string
     info: string
     overlay: string
-    projection: string
     neonCyan: string
-    neonGold: string
-    archiveViolet: string
     shadow: string
   }
   radii: { sm: string; md: string; lg: string; xl: string; pill: string }
@@ -44,15 +37,15 @@ export interface Theme {
   richEffectsEnabled: boolean
 }
 
-export function buildTheme(_accentIndex: number, _variant: Theme['variant'] = 'classic'): Theme {
-  const resolvedIndex = 1
+export function buildTheme(accentIndex: number, variant: Theme['variant'] = 'classic'): Theme {
+  const resolvedIndex = Number.isFinite(accentIndex) ? accentIndex : 1
   const definition = colorThemeAt(resolvedIndex)
   const base = definition.palette
   const theme: Theme = {
     id: definition.id,
     accentIndex: resolvedIndex,
     isDark: !definition.isLight,
-    variant: 'classic',
+    variant,
     colors: {
       ...base,
       fg1: `color-mix(in srgb, ${base.fg1} 90%, ${base.fg0})`,
@@ -73,10 +66,7 @@ export function buildTheme(_accentIndex: number, _variant: Theme['variant'] = 'c
       success: '#a3c4ad',
       warning: '#d7bc8d',
       info: '#9bbfd9',
-      projection: definition.end,
-      neonCyan: definition.start,
-      neonGold: definition.end,
-      archiveViolet: definition.start
+      neonCyan: definition.start
     },
     radii: { sm: '6px', md: '10px', lg: '16px', xl: '24px', pill: '999px' },
     motion: { fast: '120ms', normal: '240ms', slow: '420ms' },
@@ -112,10 +102,7 @@ export function injectThemeVars(theme: Theme): void {
   set('--success', c.success)
   set('--warning', c.warning)
   set('--info', c.info)
-  set('--projection', c.projection)
   set('--neon-cyan', c.neonCyan)
-  set('--neon-gold', c.neonGold)
-  set('--archive-violet', c.archiveViolet)
   set('--shadow', c.shadow)
   set('--overlay', c.overlay)
   set('--r-sm', theme.radii.sm)

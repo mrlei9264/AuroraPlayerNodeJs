@@ -3,13 +3,13 @@
 :root {
   --cinema-navy: var(--bg0);
   --cinema-deep: color-mix(in srgb, var(--bg0) 92%, black 8%);
-  --cinema-ice: #7bcbff;
-  --cinema-cyan: #4ccbff;
-  --cinema-champagne: #f4d38a;
-  --cinema-white: #f5f8ff;
-  --cinema-edge: rgb(157 211 248 / .46);
-  --cinema-glass: linear-gradient(155deg, rgb(37 71 100 / .54), rgb(7 22 38 / .64) 55%, rgb(25 48 69 / .5));
-  --cinema-rim: inset 0 1px 0 #ffffff2b, inset 1px 0 0 #b4e6ff24, inset 0 -1px 0 #b4d8f51a;
+  --cinema-ice: var(--accent-end);
+  --cinema-cyan: var(--accent);
+  --cinema-champagne: var(--accent-end);
+  --cinema-white: var(--fg0);
+  --cinema-edge: color-mix(in srgb, var(--accent) 46%, var(--border));
+  --cinema-glass: linear-gradient(155deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--surface) 64%, transparent) 55%, color-mix(in srgb, var(--accent) 12%, transparent));
+  --cinema-rim: inset 0 1px 0 color-mix(in srgb, var(--fg0) 16%, transparent), inset 1px 0 0 color-mix(in srgb, var(--accent) 12%, transparent), inset 0 -1px 0 color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* Geometry comes from the existing responsive navigation in base.css. */
@@ -18,7 +18,7 @@
   background: var(--cinema-glass);
   border: 1px solid var(--cinema-edge);
   backdrop-filter: blur(10px) saturate(120%);
-  box-shadow: var(--cinema-rim), 0 0 24px #32aaff16 !important;
+  box-shadow: var(--cinema-rim), 0 0 24px color-mix(in srgb, var(--accent) 8%, transparent) !important;
 }
 #root .shell.home-shell .sidebar .nav-list::before {
   content: '';
@@ -26,7 +26,7 @@
   inset: -1px;
   padding: 1px;
   border-radius: inherit;
-  background: linear-gradient(162deg, #c7ecffaa, #7bcbff12 24%, transparent 56%, #f4d38a70 79%, #8ccfff22);
+  background: linear-gradient(162deg, color-mix(in srgb, var(--fg0) 60%, transparent), color-mix(in srgb, var(--accent) 7%, transparent) 24%, transparent 56%, color-mix(in srgb, var(--accent-end) 44%, transparent) 79%, color-mix(in srgb, var(--accent) 13%, transparent));
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask-composite: exclude;
   pointer-events: none;
@@ -39,17 +39,23 @@
   object-fit: contain;
 }
 #root .shell.home-shell .sidebar .nav-items .nav-item {
-  color: #ecf4ff;
+  color: var(--fg1);
   border: 1px solid transparent;
   background: transparent !important;
   box-shadow: none !important;
-  transition: color 180ms ease;
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
 }
-#root .shell.home-shell .sidebar .nav-items .nav-item:not(.active):hover {
-  color: inherit;
-  border-color: transparent;
-  background: transparent !important;
-  box-shadow: none !important;
+#root .shell.home-shell .sidebar .nav-items .nav-item:not(.active):hover,
+#root .shell.home-shell .sidebar .nav-items .nav-item:not(.active):focus-visible {
+  color: var(--fg0);
+  border-color: rgb(150 220 255 / .16);
+  background: rgb(120 190 255 / .08) !important;
+}
+#root .shell.home-shell .sidebar .nav-items .nav-item.active {
+  color: var(--accent-end);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent) !important;
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--accent) 8%, transparent), inset 0 1px 0 color-mix(in srgb, var(--fg0) 25%, transparent) !important;
 }
 #root .shell.home-shell .sidebar .nav-items .nav-item.active {
   color: #86e6ff;
@@ -59,14 +65,14 @@
 }
 #root .shell.home-shell .sidebar .nav-active-motion { background: transparent; border: 0; }
 #root .shell.home-shell .sidebar .home-playback-status {
-  background: linear-gradient(145deg, #43749b70, #122a4099) !important;
-  border: 1px solid #a8daff85;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 28%, transparent), color-mix(in srgb, var(--surface) 60%, transparent)) !important;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, transparent);
   backdrop-filter: none;
-  box-shadow: var(--cinema-rim), 0 4px 14px #0002 !important;
+  box-shadow: var(--cinema-rim), 0 4px 14px color-mix(in srgb, var(--shadow) 50%, transparent) !important;
 }
 #root .shell.home-shell .sidebar .home-playback-toggle {
   background: transparent !important;
-  color: #82ddff;
+  color: var(--accent-end);
   box-shadow: none !important;
 }
 #root .shell.home-shell .sidebar .home-playback-toggle:hover:not(:disabled) { background: transparent !important; color: inherit; }
@@ -95,50 +101,42 @@
   min-height: 40px;
   gap: 0;
   padding: 0 17px;
-  color: var(--cinema-white);
-  background: rgb(8 25 43 / .7);
-  border: 1px solid rgb(120 205 255 / .55);
+  color: var(--fg0);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 24px;
   backdrop-filter: blur(18px);
-  box-shadow: var(--cinema-rim), 0 0 22px #50beff19 !important;
+  box-shadow: var(--cinema-rim), 0 0 22px color-mix(in srgb, var(--accent) 8%, transparent) !important;
   font-size: var(--hud-font-size, 12px);
 }
-#root .hud .hud-panel::before { width: 6px; height: 6px; background: #66daff; box-shadow: 0 0 8px #66daff44 !important; }
+#root .hud .hud-panel::before { width: 6px; height: 6px; background: var(--accent-end); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 27%, transparent) !important; }
 #root .hud .hud-row { gap: 5px; padding: 0 10px; }
 #root .hud .hud-row + .hud-row::before { display: none; }
-#root .hud .hud-row .k { color: #9cdfff; font-size: .96em; font-weight: 400; letter-spacing: 0; }
-#root .hud .hud-row .v { color: #f5f8ff; font-weight: 600; }
+#root .hud .hud-row .k { color: color-mix(in srgb, var(--accent-end) 80%, var(--fg0)); font-size: .96em; font-weight: 400; letter-spacing: 0; }
+#root .hud .hud-row .v { color: var(--fg0); font-weight: 600; }
 
 #root .notification-center-toggle {
-  color: #f0f6ff;
-  border: 1px solid #acdcffa6;
-  background: linear-gradient(145deg, #315e828c, #091d32bd);
-  box-shadow: var(--cinema-rim), 0 8px 20px #0003 !important;
+  color: var(--fg0);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 32%, transparent), color-mix(in srgb, var(--surface) 72%, transparent));
+  box-shadow: var(--cinema-rim), 0 8px 20px color-mix(in srgb, var(--shadow) 60%, transparent) !important;
   backdrop-filter: blur(18px);
 }
 #root .notification-center-toggle:hover {
-  color: #f0f6ff;
-  border-color: #acdcffa6;
-  background: linear-gradient(145deg, #315e828c, #091d32bd);
-}
-#root .notification-center-toggle.active { color: #a3e9ff; border-color: #bbecff; }
-#root .notification-center-toggle > span { background: #94dfff; color: #082039; border-color: #b8ecff; }
-#root .notification-center-panel {
-  --fg0: #f5f8ff;
-  --fg1: #d7e7f5;
-  --fg2: #adbdce;
-  --fg3: #90a8bb;
-  --accent: #7bcbff;
-  --accent-end: #9de4ff;
-  --accent-soft: #7bcbff14;
-  --border: #91d2ff26;
   color: var(--fg0);
-  border-color: #91d2ff66;
-  background: #0c2035f0;
-  box-shadow: var(--cinema-rim), 0 18px 42px #0005 !important;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 32%, transparent), color-mix(in srgb, var(--surface) 72%, transparent));
+}
+#root .notification-center-toggle.active { color: var(--accent-end); border-color: var(--accent-end); }
+#root .notification-center-toggle > span { background: var(--accent-end); color: var(--bg0); border-color: var(--fg0); }
+#root .notification-center-panel {
+  color: var(--fg0);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: var(--cinema-rim), 0 18px 42px color-mix(in srgb, var(--shadow) 70%, transparent) !important;
 }
 #root :is(.sidebar button, .notification-center button, .window-control-button):focus-visible {
-  outline: 2px solid #a3e8ff !important;
+  outline: 2px solid var(--accent) !important;
   outline-offset: 4px !important;
 }
 
@@ -146,7 +144,7 @@
   #root .hud .hud-panel { min-height: 34px; padding: 0 9px; font-size: 10px; }
   #root .hud .hud-row { padding: 0 6px; }
 }
-html.reduce-transparency #root :is(.sidebar .nav-list, .sidebar .home-playback-status, .hud-panel, .notification-center-toggle, .notification-center-panel) { backdrop-filter: none !important; background: #112a40 !important; }
+html.reduce-transparency #root :is(.sidebar .nav-list, .sidebar .home-playback-status, .hud-panel, .notification-center-toggle, .notification-center-panel) { backdrop-filter: none !important; background: var(--surface) !important; }
 @media (prefers-reduced-transparency: reduce) {
-  #root :is(.sidebar .nav-list, .sidebar .home-playback-status, .hud-panel, .notification-center-toggle, .notification-center-panel) { backdrop-filter: none !important; background: #112a40 !important; }
+  #root :is(.sidebar .nav-list, .sidebar .home-playback-status, .hud-panel, .notification-center-toggle, .notification-center-panel) { backdrop-filter: none !important; background: var(--surface) !important; }
 }

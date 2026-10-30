@@ -20,8 +20,7 @@ import {
 } from '../core/navigationMotion'
 
 export function WindowChrome() {
-  const { t, win, windowMinimize, windowMaximizeToggle, windowClose, navigate, settings, appIconUrl } = useRuntime()
-  const [hover, setHover] = useState(false)
+  const { t, win, windowMinimize, windowMaximizeToggle, windowClose, settings, appIconUrl } = useRuntime()
 
   const reducedMotion = settings?.reducedMotion ?? false
 
@@ -32,34 +31,19 @@ export function WindowChrome() {
       animate={{ opacity: 1, y: 0 }}
       exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
       transition={reducedMotion ? { duration: 0.08 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
     >
       <div className="tb-brand">
         <img className="logo" src={appIconUrl ?? bundledAppIconUrl} alt="Aurora Player" />
-        {settings && settings.language === 'zh' ? 'Aurora Player' : 'Aurora Player'}
+        Aurora Player
       </div>
-      <AnimatePresence initial={false}>
-        {hover && (
-          <motion.div
-            className="tb-title"
-            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
-            transition={{ duration: reducedMotion ? 0.08 : 0.16 }}
-          >
-            {t('appName')}
-          </motion.div>
-        )}
-      </AnimatePresence>
       <div className="tb-controls">
-        <motion.button className="tb-btn minimize window-control-button" whileTap={{ scale: 0.92 }} title={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
+        <motion.button className="tb-btn minimize window-control-button" whileTap={{ scale: 0.92 }} data-tooltip={t('minimize')} aria-label={t('minimize')} onClick={windowMinimize}>
           <Icon name="minimize" size={15} />
         </motion.button>
-        <motion.button className="tb-btn maximize window-control-button" whileTap={{ scale: 0.92 }} title={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
+        <motion.button className="tb-btn maximize window-control-button" whileTap={{ scale: 0.92 }} data-tooltip={win.maximized ? t('restore') : t('maximize')} aria-label={win.maximized ? t('restore') : t('maximize')} onClick={() => void windowMaximizeToggle()}>
           <Icon name={win.maximized ? 'restore' : 'maximize'} size={14} />
         </motion.button>
-        <motion.button className="tb-btn close window-control-button" whileTap={{ scale: 0.92 }} title={t('close')} aria-label={t('close')} onClick={windowClose}>
+        <motion.button className="tb-btn close window-control-button" whileTap={{ scale: 0.92 }} data-tooltip={t('close')} aria-label={t('close')} onClick={windowClose}>
           <Icon name="close" size={16} />
         </motion.button>
       </div>
@@ -126,7 +110,8 @@ export function Sidebar() {
                 type="button"
                 key={item.section}
                 data-section={item.section}
-                data-label={label}
+                data-tooltip={label}
+                data-tooltip-side="right"
                 className={`nav-item ${active ? 'active' : ''}`}
                 onClick={() => navigate({ section: item.section })}
                 onKeyDown={(event) => activateFromKeyboard(event, () => navigate({ section: item.section }))}
@@ -232,7 +217,7 @@ function HomePlaybackStatus() {
           runAction(secondaryAction)
         }}
         disabled={idle && !previewItem}
-        title={`${primaryTitle}; ${t('rightClick')}: ${secondaryTitle}`}
+        data-tooltip={`${primaryTitle}; ${t('rightClick')}: ${secondaryTitle}`}
         aria-label={`${stateLabel}. ${primaryTitle}. ${t('rightClick')}: ${secondaryTitle}`}
         whileTap={{ scale: 0.96 }}
       >
@@ -285,7 +270,7 @@ export function ToastHost({ showNotificationCenter = true }: { showNotificationC
           type="button"
           className={`notification-center-toggle ${historyOpen ? 'active' : ''}`}
           onClick={() => setHistoryOpen((open) => !open)}
-          title={t('notifications')}
+          data-tooltip={t('notifications')}
           aria-label={t('notifications')}
           aria-expanded={historyOpen}
         >
@@ -307,7 +292,7 @@ export function ToastHost({ showNotificationCenter = true }: { showNotificationC
                     <span>{record.message}</span>
                     <time dateTime={new Date(record.createdAt).toISOString()}>{dateFormatter.format(record.createdAt)}</time>
                   </span>
-                  <button type="button" className="notification-history-delete" title={t('deleteNotification')} aria-label={t('deleteNotification')} onClick={() => void removeNotification(record.id)}><Icon name="trash" size={14} /></button>
+                  <button type="button" className="notification-history-delete" data-tooltip={t('deleteNotification')} aria-label={t('deleteNotification')} onClick={() => void removeNotification(record.id)}><Icon name="trash" size={14} /></button>
                 </article>
               )) : <div className="notification-history-empty">{t('noNotifications')}</div>}
             </div>
@@ -524,11 +509,11 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
           <div className="mp-sub">{artist || t('unknown')}</div>
         </div>
         <div className="mp-controls">
-          <button className="btn-icon" onClick={() => void playPrevious()} title={t('previous')}><Icon name="prev" size={17} /></button>
-          <button className="btn-icon" onClick={toggle} title={session.paused ? t('play') : t('pause')}>
+          <button className="btn-icon" onClick={() => void playPrevious()} data-tooltip={t('previous')} aria-label={t('previous')}><Icon name="prev" size={17} /></button>
+          <button className="btn-icon" onClick={toggle} data-tooltip={session.paused ? t('play') : t('pause')} aria-label={session.paused ? t('play') : t('pause')}>
             <Icon name={session.paused ? 'play' : 'pause'} size={22} />
           </button>
-          <button className="btn-icon" onClick={() => void playNext()} title={t('next')}><Icon name="next" size={17} /></button>
+          <button className="btn-icon" onClick={() => void playNext()} data-tooltip={t('next')} aria-label={t('next')}><Icon name="next" size={17} /></button>
         </div>
         <div className="mp-slider">
           <span className="mp-time">{formatTime(position)}</span>
@@ -536,7 +521,7 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
           <span className="mp-time">{formatTime(duration)}</span>
         </div>
         <div className="mp-extra">
-          <button className="btn-icon" onClick={toggleMute} title={t('mute')}>
+          <button className="btn-icon" onClick={toggleMute} data-tooltip={t('mute')} aria-label={t('mute')}>
             <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={16} />
           </button>
           <input
@@ -547,13 +532,13 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
             style={{ '--volume-progress': `${session.volume}%` } as React.CSSProperties}
             onChange={(e) => setVolume(Number(e.target.value))}
           />
-          <button className="btn-icon" onClick={() => navigate({ section: 'playlists' })} title={t('playlists')}>
+          <button className="btn-icon" onClick={() => navigate({ section: 'playlists' })} data-tooltip={t('playlists')} aria-label={t('playlists')}>
             <Icon name="playlist" size={18} />
           </button>
-          <button className="btn-icon" onClick={() => navigate({ section: 'player' })} title={t('subtitleTracks')}>
+          <button className="btn-icon" onClick={() => navigate({ section: 'player' })} data-tooltip={t('subtitleTracks')} aria-label={t('subtitleTracks')}>
             <Icon name="subtitle" size={17} />
           </button>
-          <button className="btn-icon" onClick={() => void setFullscreen(!win.fullscreen)} title={t('fullscreen')}>
+          <button className="btn-icon" onClick={() => void setFullscreen(!win.fullscreen)} data-tooltip={t('fullscreen')} aria-label={t('fullscreen')}>
             <Icon name="fullscreen" size={17} />
           </button>
         </div>
@@ -571,11 +556,11 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
         <div className="mp-sub">{artist || t('unknown')}</div>
       </div>
       <div className="mp-controls">
-        <button className="btn-icon" onClick={() => void playPrevious()} title={t('previous')}><Icon name="prev" size={17} /></button>
-        <button className="btn-icon" onClick={toggle} title={session.paused ? t('play') : t('pause')}>
+        <button className="btn-icon" onClick={() => void playPrevious()} data-tooltip={t('previous')} aria-label={t('previous')}><Icon name="prev" size={17} /></button>
+        <button className="btn-icon" onClick={toggle} data-tooltip={session.paused ? t('play') : t('pause')} aria-label={session.paused ? t('play') : t('pause')}>
           <Icon name={session.paused ? 'play' : 'pause'} size={19} />
         </button>
-        <button className="btn-icon" onClick={() => void playNext()} title={t('next')}><Icon name="next" size={17} /></button>
+        <button className="btn-icon" onClick={() => void playNext()} data-tooltip={t('next')} aria-label={t('next')}><Icon name="next" size={17} /></button>
       </div>
       <div className="mp-slider">
         <span className="mp-time">{formatTime(position)}</span>
@@ -583,14 +568,14 @@ export function MiniPlayer({ surface = false }: { surface?: boolean } = {}) {
         <span className="mp-time">{formatTime(duration)}</span>
       </div>
       <div className="mp-extra">
-        <button className="btn-icon" onClick={toggleMute} title={t('mute')}>
+        <button className="btn-icon" onClick={toggleMute} data-tooltip={t('mute')} aria-label={t('mute')}>
           <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={16} />
         </button>
         <input type="range" min={0} max={100} value={session.volume} onChange={(e) => setVolume(Number(e.target.value))} />
-        <button className="btn-icon" onClick={() => void setFullscreen(!win.fullscreen)} title={t('fullscreen')}>
+        <button className="btn-icon" onClick={() => void setFullscreen(!win.fullscreen)} data-tooltip={t('fullscreen')} aria-label={t('fullscreen')}>
           <Icon name="fullscreen" size={16} />
         </button>
-        <button className="btn-icon" onClick={stopPlayback} title={t('stop')}>
+        <button className="btn-icon" onClick={stopPlayback} data-tooltip={t('stop')} aria-label={t('stop')}>
           <Icon name="stop" size={16} />
         </button>
       </div>

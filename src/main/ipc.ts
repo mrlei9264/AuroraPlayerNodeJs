@@ -1,12 +1,13 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { I } from '../shared/channels'
-import type { SessionState, PlayRequest, PlayPlan, MediaItem } from '../shared/types'
+import { I, E } from '../shared/channels'
+import type { SessionState, PlayRequest, PlayPlan, MediaItem, MediaTrackCatalog } from '../shared/types'
 import { LibraryRepository } from './library/repository'
 import { LibraryController } from './library/controller'
 import { PlaylistController } from './playback/queue'
 import { PlaybackLaunchPlanner, type PlannerDeps } from './playback/planner'
 import { RemoteSourceManager } from './remote/manager'
 import { MediaProbeService } from './media/probe'
+import { openPreviewInput } from './media/previewInput'
 import { SettingsStore } from './system/settings'
 import { Logger } from './system/diagnostics'
 import { listAppIcons } from './util'
@@ -26,6 +27,10 @@ export class PlaybackIpc {
   /** The plan most recently accepted by the renderer-facing playback API. */
   private activeMediaId: number | null = null
   private playRequestEpoch = 0
+  private lastSessionMediaId: number | null = null
+  private wasPlaying = false
+  private closeFlushSequence = 0
+  private pendingCloseFlush: { id: number; senderId: number; promise: Promise<void>; finish: () => void } | null = null
 
   constructor(
     private deps: {
@@ -67,10 +72,39 @@ export class PlaybackIpc {
     ipcMain.on(I.sessionSync, (_e, state: unknown) => {
       this.syncSession(state)
     })
+    ipcMain.handle(I.sessionFlush, (event, requestId: number, state: unknown) => {
+      const pending = this.pendingCloseFlush
+      if (!pending || pending.id !== requestId || pending.senderId !== event.sender.id) return
+      try {
+        if (state != null) {
+          this.syncSession(state)
+          const snapshot = normalizeSessionState(state)
+          if (snapshot?.loaded && snapshot.mediaId != null) this.deps.repo.touchPlayed(snapshot.mediaId)
+        }
+      } finally {
+        pending.finish()
+      }
+    })
 
     ipcMain.handle(I.mediaAudioFeatures, (_e, mediaId: number) => this.deps.probe.getAudioFeatures(mediaId))
     ipcMain.handle(I.mediaPlaybackDuration, (_e, mediaId: number) => this.deps.probe.getPlaybackDuration(mediaId))
-    ipcMain.handle(I.mediaTracks, (_e, mediaId: number) => this.deps.probe.getTracks(mediaId))
+    ipcMain.handle(I.mediaTracks, async (_e, mediaId: number, detailsOnly?: boolean) => {
+      const item = this.deps.repo.findById(mediaId)
+      if (detailsOnly !== true || !item || item.protocol === 'local') return this.deps.probe.getTracks(mediaId)
+      // The information page must not silently read an entire remote file for tags.
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 45000)
+      let input: Awaited<ReturnType<typeof openPreviewInput>> | null = null
+      try {
+        input = await openPreviewInput(this.deps.remote, item, controller.signal)
+        return await this.deps.probe.getTracks(mediaId, input.url)
+      } catch {
+        return { video: [], audio: [], subtitles: [], chapters: [], width: 0, height: 0, fps: 0 } satisfies MediaTrackCatalog
+      } finally {
+        clearTimeout(timer)
+        input?.close()
+      }
+    })
     ipcMain.handle(I.mediaChapters, (_e, mediaId: number) => this.deps.probe.getChapters(mediaId))
 
     ipcMain.handle(I.dialogsOpenMedia, async (e) => {
@@ -118,11 +152,41 @@ export class PlaybackIpc {
     })
   }
 
+  async flushPlaybackBeforeClose(window: BrowserWindow): Promise<void> {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) return
+    if (this.pendingCloseFlush) return this.pendingCloseFlush.promise
+    const id = ++this.closeFlushSequence
+    let complete!: () => void
+    const promise = new Promise<void>((resolve) => { complete = resolve })
+    // An unresponsive renderer must not prevent the application from quitting.
+    const timeout = setTimeout(() => {
+      this.deps.logger.error('playback', 'Timed out waiting for shutdown playback progress; keeping the last saved record')
+      complete()
+    }, 1500)
+    const pending = { id, senderId: window.webContents.id, promise, finish: () => { clearTimeout(timeout); complete() } }
+    this.pendingCloseFlush = pending
+    try {
+      window.webContents.send(E.sessionFlushRequested, id)
+      await promise
+    } catch (error) {
+      this.deps.logger.error('playback', `Could not request shutdown playback progress: ${errorMessage(error)}`)
+    } finally {
+      pending.finish()
+      if (this.pendingCloseFlush === pending) this.pendingCloseFlush = null
+    }
+  }
+
   private acceptPlan(plan: PlayPlan, request: PlayRequest): void {
     this.activeMediaId = plan.item?.id ?? null
     this.deps.onPlay(plan, request)
     if (!plan.item) return
+    // Commit the accepted playback action before any probe can publish another
+    // library snapshot, so it cannot overwrite the renderer's new history.
     this.deps.repo.touchPlayed(plan.item.id)
+    if (this.deps.settings.get('resumePlayback')) {
+      this.deps.repo.updatePlaybackProgress(plan.item.id, plan.resumePosition, plan.item.duration)
+    }
+    this.deps.broadcast(E.libraryChanged, this.deps.library.snapshot())
     this.deps.probe.request(plan.item.id)
   }
 
@@ -133,13 +197,19 @@ export class PlaybackIpc {
       return
     }
     this.deps.logger.debug('session', `state=${state.phase} media=${state.mediaId} pos=${state.position.toFixed(1)}${state.phase === 'error' && state.error ? ` error=${state.error}` : ''}`)
-    if (this.deps.settings.get('rememberPlaybackPosition') && state.mediaId != null && state.duration > 0) {
+    if (this.deps.settings.get('resumePlayback') && state.mediaId != null && state.duration > 0) {
       this.deps.repo.updatePlaybackProgress(state.mediaId, state.position, state.duration)
     }
     // Renderer invokes are asynchronous. Keep a late update for the old item
     // in its own history, but never let it overwrite the current session sent
     // to the UI or platform integrations.
     if (state.mediaId !== null && this.activeMediaId !== null && state.mediaId !== this.activeMediaId) return
+    const playing = state.loaded && !state.paused && state.phase !== 'error' && !state.idle
+    if (playing && state.mediaId != null && (this.lastSessionMediaId !== state.mediaId || !this.wasPlaying)) {
+      this.deps.repo.touchPlayed(state.mediaId)
+    }
+    this.lastSessionMediaId = state.mediaId
+    this.wasPlaying = playing
     if (state.idle) this.activeMediaId = null
     else if (state.mediaId !== null) this.activeMediaId = state.mediaId
   }
@@ -157,7 +227,6 @@ export function makePlannerDeps(deps: {
     fileExists: deps.fileExists,
     sourceAvailable: (sourceId) => deps.remote.sourceAvailable(sourceId),
     resumePlayback: () => deps.settings.get('resumePlayback'),
-    rememberPlaybackPosition: () => deps.settings.get('rememberPlaybackPosition'),
     urlFor: deps.urlFor
   }
 }

@@ -56,7 +56,7 @@ export function TransportButton({ icon, onClick, title, size, active }: { icon: 
     <button
       className={`btn-icon ${active ? 'active' : ''}`}
       onClick={onClick}
-      title={title}
+      data-tooltip={title} aria-label={title}
     >
       <Icon name={icon as any} size={size ?? 18} />
     </button>
@@ -67,7 +67,7 @@ export function VolumeControl() {
   const { t, session, setVolume, toggleMute } = useRuntime()
   return (
     <div className="row gap-8">
-      <button className="btn-icon" onClick={toggleMute} title={t('mute')}>
+      <button className="btn-icon" onClick={toggleMute} data-tooltip={t('mute')} aria-label={t('mute')}>
         <Icon name={session.muted || session.volume === 0 ? 'volumeMute' : 'volume'} size={16} />
       </button>
       <input

@@ -14,6 +14,16 @@ class RangeUnsupportedError extends Error {}
 const MIN_SEGMENT_BYTES = 8 * 1024 * 1024
 
 export class DownloadManager {
+  completedFile(sourceId: number | null, remotePath: string | null): string | null {
+    const task = this.tasks.find((candidate) => {
+      if (candidate.sourceId !== sourceId || candidate.remotePath !== remotePath || candidate.status !== 'completed') return false
+      try {
+        const stat = fs.statSync(candidate.localPath)
+        return stat.isFile() && (candidate.bytesTotal <= 0 || stat.size === candidate.bytesTotal)
+      } catch { return false }
+    })
+    return task?.localPath ?? null
+  }
   private tasks: DownloadTask[] = []
   private running = new Set<number>()
   private active = new Map<number, Set<ActivePart>>()

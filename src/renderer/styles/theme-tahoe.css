@@ -2,22 +2,8 @@
 .theme-settings-button:focus-visible,
 .theme-settings-heading button:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 3px !important; }
 
-/* Both appearances share translucent surfaces over a tinted backing scene. */
-:root[data-color-theme='classic'] {
-  --tahoe-glass: linear-gradient(135deg, #ffffff66, #ffffff14 46%, #ffffff38), #ffffff24;
-  --tahoe-glass-control: linear-gradient(150deg, #ffffff75, #ffffff26);
-  --tahoe-glass-raised: linear-gradient(135deg, #ffffffb8, #ffffff8c), #f5faff8c;
-  --tahoe-glass-media: linear-gradient(135deg, #ffffffe6, #f4f9ffd1);
-  --tahoe-panel-fill: #ffffff40;
-  --tahoe-control-fill: #ffffff52;
-  --tahoe-solid: #f5f9fe;
-  --tahoe-edge: #ffffffbd;
-  --tahoe-edge-soft: #6382a326;
-  --tahoe-edge-active: #0071e354;
-  --tahoe-blur: blur(18px) saturate(135%);
-  --tahoe-edge-light: inset 0 1px 0 #ffffffcc, inset 0 -1px 0 #6286ae14;
-  --tahoe-floating-shadow: 0 5px 18px #3d5e8014;
-}
+/* Glass variables live in tahoe-optics.css, which loads after this file.
+   The block that used to sit here was fully overridden and is dead code. */
 
 /* Remove inherited elevation everywhere in this skin, including hover and
    pseudo-elements. Only the explicit glass rims and floating overlays below
@@ -62,10 +48,10 @@
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-list,
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-status,
 :root[data-color-theme='classic'] :is(
-  .settings-category-panel, .settings-detail-panel, .network-source-section,
-  .network-protocol-rail, .network-config-form-v2, .network-source-tree,
-  .network-browser-shell, .network-download-shell, .network-links-panel,
-  .network-config-panel, .library-overview, .media-details-panel, .playlist-hero
+  .settings-category-panel, .settings-detail-panel,
+  .network-protocol-rail, .network-config-form-v2,
+  .network-download-shell, .network-links-panel,
+  .network-config-panel, .media-details-panel, .playlist-hero
 ) {
   background: var(--tahoe-glass);
   border-color: var(--tahoe-edge);
@@ -73,29 +59,28 @@
   backdrop-filter: var(--tahoe-blur);
 }
 :root[data-color-theme='classic'] :is(
-  .network-source-card, .network-link-card, .network-option-v2, .settings-toggle-card,
+  .network-link-card, .network-option-v2, .settings-toggle-card,
   .settings-data-root, .dl-row, .network-download-row, .download-delete-local-option
 ) { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); backdrop-filter: none; }
-:root[data-color-theme='classic'] .library-workspace .library-collection.expanded { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); backdrop-filter: none; }
-:root[data-color-theme='classic'] :is(.network-source-card:hover, .network-link-card:hover) { border-color: var(--tahoe-edge-active); }
-:root[data-color-theme='classic'] :is(.network-file-head, .network-browser-summary, .network-browser-toolbar, .settings-row) { background-color: transparent; border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] .network-link-card:hover { border-color: var(--tahoe-edge-active); }
+:root[data-color-theme='classic'] .settings-row { background-color: transparent; border-color: var(--tahoe-edge-soft); }
 
 /* The existing circular rail stays airy rather than resembling raised buttons. */
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-items .nav-item { color: var(--fg1); background: transparent; border-color: transparent; }
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-items .nav-item:hover { color: inherit; background: transparent; border-color: transparent; box-shadow: none; }
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .nav-items .nav-item.active { color: var(--accent); background: var(--accent-soft); border-color: var(--tahoe-edge); }
-:root[data-color-theme='classic'] :is(.nav-active-motion, .settings-category-active-motion, .network-protocol-active-motion, .library-type-tab-active-motion) {
+:root[data-color-theme='classic'] :is(.nav-active-motion, .settings-category-active-motion, .network-protocol-active-motion) {
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge);
   box-shadow: var(--tahoe-edge-light) !important;
 }
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-toggle { color: var(--accent); background: var(--tahoe-glass-control); }
 :root[data-color-theme='classic'] .shell.home-shell .sidebar .home-playback-toggle:disabled { color: var(--fg3); background: transparent; }
-:root[data-color-theme='classic'] :is(.settings-category.active svg, .library-type-tabs button.active) { color: var(--accent); }
+:root[data-color-theme='classic'] .settings-category.active svg { color: var(--accent); }
 
 /* Transparent controls use a fine rim; selected/primary actions retain contrast. */
 :root[data-color-theme='classic'] .audio-window-actions > button:not(.window-control-button),
-:root[data-color-theme='classic'] :is(.theme-settings-button, .btn, .settings-button, .network-secondary-action, .network-toolbar-button) {
+:root[data-color-theme='classic'] :is(.theme-settings-button, .btn, .settings-button, .network-secondary-action) {
   color: var(--fg1);
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge-soft);
@@ -105,26 +90,25 @@
 }
 :root[data-color-theme='classic'] .titlebar .tb-btn:hover { color: var(--accent); }
 :root[data-color-theme='classic'] .audio-window-actions > button:not(.window-control-button):hover { color: var(--accent); background: var(--tahoe-control-fill); }
-:root[data-color-theme='classic'] :is(.theme-settings-button:hover, .settings-button:hover, .network-secondary-action:hover, .network-toolbar-button:hover) { color: var(--accent); }
+:root[data-color-theme='classic'] :is(.theme-settings-button:hover, .settings-button:hover, .network-secondary-action:hover) { color: var(--accent); }
 :root[data-color-theme='classic'] .titlebar .tb-btn.close:hover,
 :root[data-color-theme='classic'] .audio-window-actions .audio-window-close:hover { color: var(--danger); }
 :root[data-color-theme='classic'] .library-workspace .library-action:not(.primary):not(.subtle):not(.play):not(.locate),
 :root[data-color-theme='classic'] .library-workspace :is(.library-source-filter, .library-sort-select, .library-view-toggle, .library-query-field),
-:root[data-color-theme='classic'] :is(.cinema-search, .library-search, .network-browser-search, .settings-select, .settings-input, .settings-font-select-trigger, .network-password-input-v2),
+:root[data-color-theme='classic'] :is(.settings-select, .settings-input, .settings-font-select-trigger, .network-password-input-v2),
 :root[data-color-theme='classic'] .network-field-v2 > :is(input, select) {
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge-soft);
   backdrop-filter: none;
 }
-:root[data-color-theme='classic'] :is(.cinema-search, .network-browser-search, .library-query-field):focus-within { border-color: var(--accent); }
-:root[data-color-theme='classic'] .library-workspace :is(.library-category-nav button.active, .library-view-toggle button.active),
-:root[data-color-theme='classic'] .network-filter-strip > button.active { color: var(--accent); background: var(--accent-soft); border-color: var(--tahoe-edge-active); }
+:root[data-color-theme='classic'] :is(.library-query-field):focus-within { border-color: var(--accent); }
+:root[data-color-theme='classic'] :is(.library-workspace, .settings-page) :is(.library-tab-dock button.active, .library-view-toggle button.active),
 :root[data-color-theme='classic'] .library-workspace .library-action.primary,
 :root[data-color-theme='classic'] :is(.settings-button-primary, .btn-primary, .cinema-resume, .network-primary-action, .network-save-button-v2, .network-save-button, .network-add-fab, .media-details-play) {
-  color: #fff;
-  background: var(--theme-primary-fill);
-  border-color: #0066db33;
-  box-shadow: inset 0 1px 0 #ffffff57 !important;
+  color: var(--bg0);
+  background: var(--accent-gradient);
+  border-color: color-mix(in srgb, var(--accent-end) 60%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg0) 24%, transparent) !important;
 }
 :root[data-color-theme='classic'] .btn-danger { color: var(--danger); background: transparent; border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 :root[data-color-theme='classic'] .btn-danger:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
@@ -142,13 +126,12 @@
 :root[data-color-theme='classic'] :is(.media-details-kicker span, .media-details-badges span, .media-details-spec, .media-details-track-group span, .media-details-locate) { color: var(--fg1); background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); }
 :root[data-color-theme='classic'] .media-details-file-grid button:not(:disabled) { color: var(--accent); }
 :root[data-color-theme='classic'] .media-details-backdrop { opacity: .1; }
-:root[data-color-theme='classic'] .cinema-hero-shade { background: linear-gradient(90deg, var(--bg0) 0%, color-mix(in srgb, var(--bg0) 95%, transparent) 18%, color-mix(in srgb, var(--bg0) 68%, transparent) 32%, transparent 65%), linear-gradient(0deg, var(--bg0), color-mix(in srgb, var(--bg0) 20%, transparent) 34%, transparent 65%); }
-:root[data-color-theme='classic'] :is(.library-workspace .library-file-art, .library-workspace .library-collection-art, .cinema-card-image, .media-details-art) { border-color: var(--tahoe-edge-soft); }
+:root[data-color-theme='classic'] :is(.cinema-card-image, .media-details-art) { border-color: var(--tahoe-edge-soft); }
 :root[data-color-theme='classic'] .dialog-overlay { background: var(--overlay); backdrop-filter: blur(5px) saturate(110%); }
 :root[data-color-theme='classic'] :is(
   .theme-settings-popover, .floating-menu-layer.library-popover, .settings-font-menu,
   .context-menu, .dialog, .toast, .notification-center-panel, .hud .hud-panel,
-  .download-thread-menu, .network-selection-bar, .cinematic-speed-menu, .cinematic-track-drawer
+  .download-thread-menu, .cinematic-speed-menu, .cinematic-track-drawer
 ) {
   color: var(--fg0);
   background: var(--tahoe-glass-raised);
@@ -163,7 +146,7 @@
 /* On dark video, use glass only for compact labels and the mini player. Do
    not stack a panel behind the transport controls or alter media pixels. */
 :root[data-color-theme='classic'] .home-shell .cinema-mini-player,
-:root[data-color-theme='classic'] :is(.cinematic-back, .cinematic-quality-badge, .cinematic-chapter-label) {
+:root[data-color-theme='classic'] .cinematic-quality-badge {
   color: var(--fg1);
   background: var(--tahoe-glass-media);
   border-color: var(--tahoe-edge);
@@ -199,7 +182,8 @@
 :root[data-color-theme='classic'] .cinematic-quality-badge.active { color: var(--accent); border-color: var(--tahoe-edge-active); }
 :root[data-color-theme='classic'] .cinematic-player .vp-error { --fg0: #fff; --fg1: #ddd; }
 :root[data-color-theme='classic'] .cinematic-chapter-tick { background: #ffffff80; }
-:root[data-color-theme='classic'] .cinematic-chapter-item.active .cinematic-chapter-tick { background: #fff; }
+:root[data-color-theme='classic'] .cinematic-chapter-item.preview .cinematic-chapter-tick { background: #fff; }
+:root[data-color-theme='classic'] .cinematic-chapter-item.active .cinematic-chapter-tick { background: var(--accent); }
 :root[data-color-theme='classic'] .immersive-audio-player { background: var(--bg0); }
 :root[data-color-theme='classic'] .audio-ambient { background: transparent; }
 :root[data-color-theme='classic'] .audio-ambient::after { background: none; }

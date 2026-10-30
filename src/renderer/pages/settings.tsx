@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'motion/react'
-import type { AppSettingsData } from '../../main/system/settings-types'
+import { DEFAULT_APP_SETTINGS, type AppSettingsData } from '../../shared/settings'
 import { Icon, type IconName } from '../core/icons'
 import { p, useRuntime } from '../core/runtime'
 import { I } from '../../shared/channels'
@@ -8,6 +8,7 @@ import { applyTypographySettings } from '../core/appearance'
 import bundledAppIconUrl from '../assets/icon/app_icon.png'
 import { MEDIA_AUDIO_EXTS, MEDIA_VIDEO_EXTS, type UpdateStatus } from '../../shared/types'
 import { FloatingMenu } from '../shared/floatingMenu'
+import { TabHighlight, TAB_CONTENT_TRANSITION, TAB_CONTENT_VISIBLE, tabContentEnter, tabContentExit } from '../shared/tabMotion'
 
 type SettingsCategory = 'general' | 'proxy' | 'appearance' | 'about'
 type DraftUpdater<T> = (update: (draft: T) => T) => void
@@ -21,7 +22,6 @@ interface GeneralDraft {
   autoplayNextMedia: boolean
   navigationPlayPrimaryAction: AppSettingsData['navigationPlayPrimaryAction']
   resumePlayback: boolean
-  rememberPlaybackPosition: boolean
   performanceHudEnabled: boolean
 }
 
@@ -67,7 +67,7 @@ const SETTINGS_COPY = {
     openPlayerAndResume: 'Open player',
     togglePlayback: 'Play / Pause',
     resumePlayback: 'Resume playback',
-    rememberPosition: 'Remember playback position',
+    resumePlaybackDescription: 'Save playback progress and resume from it next time. Turning this off clears all saved positions and stops saving new progress. Recent playback history is kept.',
     performanceHud: 'Performance HUD',
     performanceHudDescription: 'Show CPU, GPU, memory usage in MB, and the application rendering refresh rate.',
     enableProxy: 'Enable proxy',
@@ -158,7 +158,7 @@ const SETTINGS_COPY = {
     openPlayerAndResume: '打开播放器',
     togglePlayback: '播放 / 暂停',
     resumePlayback: '继续上次播放',
-    rememberPosition: '记住播放位置',
+    resumePlaybackDescription: '保存播放进度，下次打开时从上次位置继续。关闭时立即清除全部已保存进度，并停止保存新进度；最近播放记录仍保留。',
     performanceHud: '性能指标 HUD',
     performanceHudDescription: '显示 CPU、GPU、内存占用（MB）和程序实时渲染刷新率。',
     enableProxy: '启用代理',
@@ -240,35 +240,9 @@ const SETTINGS_COPY = {
 
 type SettingsCopy = (typeof SETTINGS_COPY)[keyof typeof SETTINGS_COPY]
 
-const defaultGeneral: GeneralDraft = {
-  language: 'zh',
-  autoplayNextMedia: true,
-  navigationPlayPrimaryAction: 'open-player',
-  resumePlayback: true,
-  rememberPlaybackPosition: true,
-  performanceHudEnabled: true
-}
-
-const defaultProxy: ProxyDraft = {
-  enabled: false,
-  type: 'http',
-  server: '',
-  port: '',
-  username: '',
-  password: '',
-  bypassLocal: true
-}
-
-const defaultAppearance: AppearanceDraft = {
-  appIcon: 'app_icon.png',
-  fontFamily: 'Space Grotesk Variable',
-  fontSize: 13,
-  startupAnimationEnabled: true,
-  reducedMotion: false,
-  reduceTransparency: false,
-  backgroundImageEnabled: false,
-  backgroundImage: ''
-}
+const defaultGeneral = generalFrom(DEFAULT_APP_SETTINGS)
+const defaultProxy = proxyFrom(DEFAULT_APP_SETTINGS)
+const defaultAppearance = appearanceFrom(DEFAULT_APP_SETTINGS)
 
 function generalFrom(settings: AppSettingsData): GeneralDraft {
   return {
@@ -276,7 +250,6 @@ function generalFrom(settings: AppSettingsData): GeneralDraft {
     autoplayNextMedia: settings.autoplayNextMedia,
     navigationPlayPrimaryAction: settings.navigationPlayPrimaryAction,
     resumePlayback: settings.resumePlayback,
-    rememberPlaybackPosition: settings.rememberPlaybackPosition,
     performanceHudEnabled: settings.performanceHudEnabled
   }
 }
@@ -361,7 +334,6 @@ export function SettingsPage() {
       autoplayNextMedia: next.autoplayNextMedia,
       navigationPlayPrimaryAction: next.navigationPlayPrimaryAction,
       resumePlayback: next.resumePlayback,
-      rememberPlaybackPosition: next.rememberPlaybackPosition,
       performanceHudEnabled: next.performanceHudEnabled
     }, copy.generalError)
   }
@@ -451,32 +423,39 @@ export function SettingsPage() {
       >
       <div className="settings-workspace">
         <LayoutGroup id="settings-category-selection">
-          <nav className="settings-category-panel" aria-label={copy.categoriesLabel}>
+          <nav className="settings-tabs library-tab-dock has-tab-motion" role="tablist" aria-label={copy.categoriesLabel}>
             {CATEGORIES.map((item) => (
               <button
                 type="button"
                 key={item.key}
-                className={`settings-category ${category === item.key ? 'active' : ''}`}
-                title={copy.categories[item.key]}
+                className={`settings-tab ${category === item.key ? 'active' : ''}`}
+                role="tab"
+                id={`settings-tab-${item.key}`}
+                aria-controls={`settings-panel-${item.key}`}
+                aria-selected={category === item.key}
+                tabIndex={category === item.key ? 0 : -1}
+                onKeyDown={(event) => {
+                  const index = CATEGORIES.findIndex((candidate) => candidate.key === item.key)
+                  const nextIndex = event.key === 'ArrowRight' ? (index + 1) % CATEGORIES.length
+                    : event.key === 'ArrowLeft' ? (index - 1 + CATEGORIES.length) % CATEGORIES.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? CATEGORIES.length - 1 : -1
+                  if (nextIndex < 0) return
+                  event.preventDefault()
+                  const next = CATEGORIES[nextIndex].key
+                  selectCategory(next)
+                  document.getElementById(`settings-tab-${next}`)?.focus()
+                }}
                 onClick={() => selectCategory(item.key)}
-                aria-current={category === item.key ? 'page' : undefined}
               >
-                {category === item.key && (
-                  <motion.span
-                    className="settings-category-active-motion"
-                    layoutId="settings-category-active"
-                    transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 390, damping: 34, mass: 0.74 }}
-                    aria-hidden="true"
-                  />
-                )}
-                <Icon name={item.icon} size={32} strokeWidth={1.65} />
+                {category === item.key && <TabHighlight reducedMotion={!!reduceMotion} />}
+                <Icon name={item.icon} size={16} strokeWidth={1.8} />
                 <span>{copy.categories[item.key]}</span>
               </button>
             ))}
           </nav>
         </LayoutGroup>
 
-        <section className="settings-detail-panel" aria-labelledby="settings-panel-title">
+        <section className="settings-detail-panel" role="tabpanel" id={`settings-panel-${category}`} aria-labelledby={`settings-tab-${category}`} tabIndex={0}>
           <div className="settings-panel-title">
             <Icon name={category === 'general' ? 'settings' : panel.icon} size={38} strokeWidth={1.55} />
             <h2 id="settings-panel-title">{panelTitle}</h2>
@@ -487,10 +466,10 @@ export function SettingsPage() {
               className={`settings-detail-content ${restoreCycle > 0 && restoreCategory === category ? `settings-restore-${restoreCycle % 2 ? 'a' : 'b'}` : ''}`}
               key={category}
               data-direction={categoryDirection > 0 ? 'forward' : 'back'}
-              initial={reduceMotion ? false : { opacity: 0, x: categoryDirection * 14, scale: 0.994 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={reduceMotion ? { opacity: 1 } : { opacity: 0, x: categoryDirection * -8, scale: 0.997 }}
-              transition={reduceMotion ? { duration: 0 } : { duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              initial={reduceMotion ? false : tabContentEnter(categoryDirection)}
+              animate={TAB_CONTENT_VISIBLE}
+              exit={reduceMotion ? { opacity: 1 } : tabContentExit(categoryDirection)}
+              transition={reduceMotion ? { duration: 0 } : TAB_CONTENT_TRANSITION}
             >
               {category === 'general' && <GeneralPanel value={general} onChange={updateGeneral} copy={copy} />}
               {category === 'proxy' && (
@@ -566,11 +545,8 @@ function GeneralPanel({ value, onChange, copy }: { value: GeneralDraft; onChange
           onSelect={(selected) => onChange((draft) => ({ ...draft, navigationPlayPrimaryAction: selected as AppSettingsData['navigationPlayPrimaryAction'] }))}
         />
       </SettingRow>
-      <SettingRow label={copy.resumePlayback}>
+      <SettingRow label={copy.resumePlayback} description={copy.resumePlaybackDescription}>
         <SettingsSwitch checked={value.resumePlayback} label={copy.resumePlayback} onChange={(checked) => onChange((draft) => ({ ...draft, resumePlayback: checked }))} />
-      </SettingRow>
-      <SettingRow label={copy.rememberPosition}>
-        <SettingsSwitch checked={value.rememberPlaybackPosition} label={copy.rememberPosition} onChange={(checked) => onChange((draft) => ({ ...draft, rememberPlaybackPosition: checked }))} />
       </SettingRow>
       <SettingRow label={copy.performanceHud} description={copy.performanceHudDescription}>
         <SettingsSwitch checked={value.performanceHudEnabled} label={copy.performanceHud} onChange={(checked) => onChange((draft) => ({ ...draft, performanceHudEnabled: checked }))} />
@@ -621,7 +597,7 @@ function ProxyPanel({
       <SettingRow label={copy.password}>
         <div className="settings-password-field">
           <input className="settings-input" aria-label={copy.password} type={showPassword ? 'text' : 'password'} placeholder={copy.optional} value={value.password} onChange={(event) => field('password', event.target.value)} />
-          <button type="button" onClick={onTogglePassword} aria-label={showPassword ? copy.hidePassword : copy.showPassword} title={showPassword ? copy.hidePassword : copy.showPassword}>
+          <button type="button" onClick={onTogglePassword} aria-label={showPassword ? copy.hidePassword : copy.showPassword} data-tooltip={showPassword ? copy.hidePassword : copy.showPassword}>
             <Icon name="eye" size={21} />
           </button>
         </div>
@@ -772,7 +748,6 @@ function AppearancePanel({ value, onChange, copy }: { value: AppearanceDraft; on
 interface SettingsSelectOption {
   value: string
   label: string
-  swatch?: [string, string, string]
   fontFamily?: string
   image?: string
   imageOnly?: boolean
@@ -835,7 +810,7 @@ function SettingsSelect({
         className="settings-font-select-trigger"
         disabled={disabled}
         aria-label={label}
-        title={label}
+        data-tooltip={label}
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((visible) => !visible)}
@@ -848,7 +823,6 @@ function SettingsSelect({
         }}
       >
         <span className="settings-select-option-main">
-          {selected?.swatch && <ColorThemeSwatch colors={selected.swatch} />}
           {selected?.image && <img className="settings-select-image-preview" src={selected.image} alt="" />}
           {!selected?.imageOnly && <span style={selected?.fontFamily ? { fontFamily: selected.fontFamily } : undefined}>{selected?.label ?? ''}</span>}
         </span>
@@ -861,7 +835,7 @@ function SettingsSelect({
         className={`settings-font-menu settings-select-menu ${className}`.trim()}
         role="listbox"
         ariaLabel={label}
-        maxHeight={className.includes('settings-color-theme-control') ? 304 : 224}
+        maxHeight={224}
       >
           {options.map((option, index) => (
             <button
@@ -870,7 +844,7 @@ function SettingsSelect({
               role="option"
               aria-selected={value === option.value}
               aria-label={option.label}
-              title={option.label}
+              data-tooltip={option.label}
               className={value === option.value ? 'selected' : ''}
               key={option.value}
               onClick={() => choose(option.value)}
@@ -883,7 +857,6 @@ function SettingsSelect({
               }}
             >
               <span className="settings-select-option-main">
-                {option.swatch && <ColorThemeSwatch colors={option.swatch} />}
                 {option.image && <img className="settings-select-image-preview" src={option.image} alt="" />}
                 {!option.imageOnly && <span style={option.fontFamily ? { fontFamily: option.fontFamily } : undefined}>{option.label}</span>}
               </span>
@@ -893,10 +866,6 @@ function SettingsSelect({
       </FloatingMenu>
     </div>
   )
-}
-
-function ColorThemeSwatch({ colors }: { colors: [string, string, string] }) {
-  return <span className="settings-color-theme-swatch" aria-hidden="true" style={{ background: `linear-gradient(110deg, ${colors[0]} 0% 38%, ${colors[1]} 38% 67%, ${colors[2]} 67% 100%)` }} />
 }
 
 function FontFamilySelect({ fonts, value, onChange, copy }: { fonts: string[]; value: string; onChange: (font: string) => void; copy: SettingsCopy }) {
@@ -1035,7 +1004,7 @@ function AboutPanel({
         </div>
         <div className="settings-data-root">
           <span>{copy.dataRoot}</span>
-          <code title={dataRoot}>{dataRoot || '-'}</code>
+          <code data-tooltip={dataRoot}>{dataRoot || '-'}</code>
         </div>
         <div className="settings-data-list">
           {dataDirectories && (Object.keys(copy.dataDirectories) as (keyof typeof copy.dataDirectories)[]).map((key) => (
@@ -1044,7 +1013,7 @@ function AboutPanel({
                 <strong>{copy.dataDirectories[key][0]}</strong>
                 <span>{copy.dataDirectories[key][1]}</span>
               </div>
-              <code title={dataDirectories[key]}>{`data/${key}`}</code>
+              <code data-tooltip={dataDirectories[key]}>{`data/${key}`}</code>
             </div>
           ))}
         </div>
@@ -1089,10 +1058,9 @@ function SettingRow({ label, description, children }: { label: string; descripti
 function SettingsHelp({ label, description }: { label: string; description: string }) {
   return (
     <span className="settings-help">
-      <button type="button" className="settings-help-trigger" aria-label={`${label}: ${description}`}>
+      <button type="button" className="settings-help-trigger" aria-label={label} data-tooltip={description}>
         <Icon name="help" size={16} strokeWidth={1.8} />
       </button>
-      <span className="settings-help-tooltip" role="tooltip">{description}</span>
     </span>
   )
 }
@@ -1114,7 +1082,7 @@ function SettingsSwitch({ checked, label, onChange }: { checked: boolean; label:
       role="switch"
       aria-checked={checked}
       aria-label={label}
-      title={label}
+      data-tooltip={label}
       onClick={() => onChange(!checked)}
     >
       <span />
@@ -1126,7 +1094,7 @@ function SegmentedControl({ label, options, selected, onSelect }: { label: strin
   return (
     <div className="settings-segmented" role="group" aria-label={label}>
       {options.map((option) => (
-        <button type="button" key={option.value} className={selected === option.value ? 'active' : ''} aria-pressed={selected === option.value} title={option.label} onClick={() => onSelect(option.value)}>
+        <button type="button" key={option.value} className={selected === option.value ? 'active' : ''} aria-pressed={selected === option.value} data-tooltip={option.label} aria-label={option.label} onClick={() => onSelect(option.value)}>
           {option.label}
         </button>
       ))}

@@ -5,11 +5,16 @@ import { Icon } from '../core/icons'
 import { coverUrl } from '../core/player'
 import { p, useRuntime } from '../core/runtime'
 import { AudioArtwork } from './mediaArtwork'
+import { MediaVideoPreviews } from './mediaVideoPreviews'
 
 const COPY = {
   en: {
     back: 'Back to library', play: 'Play', technical: 'Technical details', tracks: 'Tracks', file: 'File information',
     audio: 'Audio', video: 'Video',
+    music: 'Music information', songTitle: 'Title', artist: 'Artist', album: 'Album', albumArtist: 'Album artist',
+    composer: 'Composer', genre: 'Genre', date: 'Release date / year', track: 'Track number', disc: 'Disc number',
+    publisher: 'Label / publisher', copyright: 'Copyright', comment: 'Comment', notProvided: 'Not provided', readingTags: 'Reading audio tags…',
+    audioCodec: 'Audio codec', sampleRate: 'Sample rate', bitDepth: 'Bit depth', bitrate: 'Bitrate', channels: 'Channels',
     duration: 'Duration', resolution: 'Resolution', frameRate: 'Frame rate', videoCodec: 'Video codec', hdr: 'HDR',
     audioTracks: 'Audio', subtitleTracks: 'Subtitles', chapters: 'Chapters', none: 'None',
     fileName: 'File name', location: 'Location', fileSize: 'File size', protocol: 'Protocol', unavailable: 'Source unavailable'
@@ -17,6 +22,10 @@ const COPY = {
   zh: {
     back: '返回媒体库', play: '播放', technical: '技术规格', tracks: '轨道信息', file: '文件信息',
     audio: '音频', video: '视频',
+    music: '音乐信息', songTitle: '标题', artist: '歌手', album: '专辑', albumArtist: '专辑歌手',
+    composer: '作曲者', genre: '流派', date: '发行日期 / 年份', track: '曲目号', disc: '碟号',
+    publisher: '唱片公司 / 发行方', copyright: '版权', comment: '备注', notProvided: '未提供', readingTags: '正在读取音频标签…',
+    audioCodec: '音频编码', sampleRate: '采样率', bitDepth: '位深', bitrate: '码率', channels: '声道',
     duration: '时长', resolution: '分辨率', frameRate: '帧率', videoCodec: '视频编码', hdr: 'HDR',
     audioTracks: '音频', subtitleTracks: '字幕', chapters: '章节', none: '无',
     fileName: '文件名', location: '位置', fileSize: '文件大小', protocol: '协议', unavailable: '媒体来源不可用'
@@ -27,43 +36,64 @@ export function MediaDetailsPage({ mediaId }: { mediaId: number }) {
   const { settings, library, navigate, play, openPath } = useRuntime()
   const copy = COPY[settings.language]
   const item = library.find((candidate) => candidate.id === mediaId)
-  const [tracks, setTracks] = useState<MediaTrackCatalog | null>(null)
+  const [trackState, setTrackState] = useState<{ mediaId: number; catalog: MediaTrackCatalog } | null>(null)
+  const [loadingTracks, setLoadingTracks] = useState(true)
+  const tracks = trackState?.mediaId === mediaId ? trackState.catalog : null
 
   useEffect(() => {
     let active = true
-    setTracks(null)
-    void p<MediaTrackCatalog>(I.mediaTracks, mediaId)
-      .then((result) => { if (active) setTracks(result) })
-      .catch(() => { if (active) setTracks(null) })
+    setTrackState(null)
+    setLoadingTracks(true)
+    void p<MediaTrackCatalog>(I.mediaTracks, mediaId, true)
+      .then((result) => { if (active) setTrackState({ mediaId, catalog: result }) })
+      .catch(() => { if (active) setTrackState(null) })
+      .finally(() => { if (active) setLoadingTracks(false) })
     return () => { active = false }
   }, [mediaId])
 
-  const title = item ? displayMediaTitle(item.title, item.fileName) : ''
+  const music = item?.isAudio ? tracks?.music : undefined
+  const title = item ? displayMediaTitle(music?.title || item.title, item.fileName) : ''
+  const artist = music?.artist || item?.artist || ''
+  const album = music?.album || item?.album || ''
   const artwork = item?.coverPath ? coverUrl(item.coverPath) : ''
+  const backButton = <button type="button" className="page-back-button" aria-label={copy.back} data-tooltip={copy.back} onClick={() => navigate({ section: 'library' })}><Icon name="chevronLeft" size={19} /></button>
 
   if (!item) {
-    return <main className="media-details-page"><button className="media-details-back" onClick={() => navigate({ section: 'library' })}><Icon name="chevronLeft" />{copy.back}</button></main>
+    return <main className="media-details-page"><header className="media-details-toolbar">{backButton}</header></main>
   }
 
   const resolution = tracks?.width && tracks.height ? `${tracks.width} × ${tracks.height}` : '—'
   const audioTracks = tracks?.audio ?? []
   const subtitleTracks = tracks?.subtitles ?? []
+  const primaryAudio = audioTracks.find((track) => track.default) ?? audioTracks[0]
+  const audioBitrate = primaryAudio?.bitrate || tracks?.bitrate
+  const duration = tracks?.duration || item.duration
+  const musicFields = [
+    { label: copy.songTitle, value: title },
+    { label: copy.artist, value: artist },
+    { label: copy.album, value: album },
+    { label: copy.albumArtist, value: music?.albumArtist ?? '' },
+    ...([
+      ['composer', copy.composer], ['genre', copy.genre], ['date', copy.date], ['track', copy.track], ['disc', copy.disc],
+      ['publisher', copy.publisher], ['copyright', copy.copyright], ['comment', copy.comment]
+    ] as const).filter(([key]) => music?.[key]).map(([key, label]) => ({ label, value: music?.[key] ?? '' }))
+  ]
 
   return (
     <main className="media-details-page">
       <div className="media-details-backdrop" style={artwork ? { backgroundImage: `url("${artwork}")` } : undefined} />
       <header className="media-details-toolbar">
-        <button className="media-details-back" onClick={() => navigate({ section: 'library' })}><Icon name="chevronLeft" size={18} />{copy.back}</button>
+        {backButton}
       </header>
 
-      <section className="media-details-hero">
+      <section className={`media-details-hero ${!item.isAudio && !item.isImage ? 'has-preview' : ''}`}>
         <div className={`media-details-art ${item.isAudio ? 'audio' : ''}`}>
-          {item.isAudio ? <AudioArtwork artwork={artwork || null} /> : artwork ? <img src={artwork} alt="" /> : <div className="media-details-art-fallback"><Icon name="video" size={46} /></div>}
+          {item.isAudio ? <AudioArtwork artwork={artwork || null} seed={item.id} /> : artwork ? <img src={artwork} alt="" /> : <div className="media-details-art-fallback"><Icon name="video" size={46} /></div>}
         </div>
         <div className="media-details-heading">
           <div className="media-details-kicker"><span>{item.protocol}</span></div>
           <h1>{title}</h1>
-          {item.artist && <p className="media-details-byline">{item.artist}{item.album ? ` · ${item.album}` : ''}</p>}
+          {(artist || album) && <p className="media-details-byline">{[artist, album].filter(Boolean).join(' · ')}</p>}
           <div className="media-details-badges">
             <span><Icon name={item.isAudio ? 'music' : 'video'} size={14} />{item.isAudio ? copy.audio : copy.video}</span>
           </div>
@@ -72,13 +102,28 @@ export function MediaDetailsPage({ mediaId }: { mediaId: number }) {
           </div>
           {!item.sourceAvailable && <div className="media-details-unavailable"><Icon name="alert" size={16} />{copy.unavailable}</div>}
         </div>
+        {!item.isAudio && !item.isImage && <MediaVideoPreviews key={item.id} item={item} />}
       </section>
 
       <section className="media-details-content">
+        {item.isAudio && <article className="media-details-panel wide">
+          <h2>{copy.music}</h2>
+          {loadingTracks && <p className="media-details-metadata-status" role="status">{copy.readingTags}</p>}
+          <dl className="media-details-music-grid">
+            {musicFields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value || copy.notProvided}</dd></div>)}
+          </dl>
+        </article>}
         <article className="media-details-panel wide">
           <h2>{copy.technical}</h2>
           <div className="media-details-specs">
-            <DetailSpec icon="clock" label={copy.duration} value={formatTime(item.duration)} />
+            <DetailSpec icon="clock" label={copy.duration} value={formatTime(duration)} />
+            {item.isAudio && <>
+              <DetailSpec icon="music" label={copy.audioCodec} value={[primaryAudio?.codec?.toUpperCase(), primaryAudio?.profile].filter(Boolean).join(' · ') || '—'} />
+              <DetailSpec icon="speed" label={copy.sampleRate} value={primaryAudio?.sampleRate ? `${primaryAudio.sampleRate / 1000} kHz` : '—'} />
+              <DetailSpec icon="sliders" label={copy.bitDepth} value={primaryAudio?.bitDepth ? `${primaryAudio.bitDepth} bit` : '—'} />
+              <DetailSpec icon="network" label={copy.bitrate} value={audioBitrate ? `${Math.round(audioBitrate / 1000)} kbps` : '—'} />
+              <DetailSpec icon="volume" label={copy.channels} value={primaryAudio?.channels ? `${primaryAudio.channels}${primaryAudio.channelLayout ? ` · ${primaryAudio.channelLayout}` : ''}` : '—'} />
+            </>}
             {!item.isAudio && <DetailSpec icon="image" label={copy.resolution} value={resolution} />}
             {!item.isAudio && <DetailSpec icon="speed" label={copy.frameRate} value={tracks?.fps ? `${tracks.fps.toFixed(2)} fps` : '—'} />}
             {!item.isAudio && <DetailSpec icon="video" label={copy.videoCodec} value={[tracks?.videoCodec, tracks?.videoProfile].filter(Boolean).join(' · ') || '—'} />}

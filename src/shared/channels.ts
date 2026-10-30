@@ -43,6 +43,7 @@ export const I = {
   playlistMoveEntry: 'playlists:moveEntry',
   playPlan: 'play:plan',
   sessionSync: 'session:sync',
+  sessionFlush: 'session:flush',
   sourcesList: 'sources:list',
   sourceSave: 'sources:save',
   sourceRemove: 'sources:remove',
@@ -76,9 +77,13 @@ export const I = {
   backgroundsPick: 'backgrounds:pick',
   networkStats: 'network:stats',
   mediaTracks: 'media:tracks',
+  mediaVideoPreviews: 'media:videoPreviews',
+  mediaVideoPreviewsCancel: 'media:videoPreviewsCancel',
   mediaChapters: 'media:chapters',
   mediaBase: 'media:baseUrl',
   mediaAudioFeatures: 'media:audioFeatures',
+  mediaAudioSpectrum: 'media:audioSpectrum',
+  mediaAudioSpectrumCancel: 'media:audioSpectrumCancel',
   mediaPlaybackDuration: 'media:playbackDuration',
   notificationsList: 'notifications:list',
   notificationsAppend: 'notifications:append',
@@ -89,6 +94,7 @@ export const I = {
 export type InvokeChannel = (typeof I)[keyof typeof I]
 
 export const E = {
+  sessionFlushRequested: 'ev:sessionFlushRequested',
   settingsChanged: 'ev:settings',
   libraryChanged: 'ev:library',
   queueChanged: 'ev:queue',
@@ -98,6 +104,7 @@ export const E = {
   folderScanProgress: 'ev:folderScanProgress',
   probeProgress: 'ev:probeProgress',
   probeFrameRequested: 'ev:probeFrameRequested',
+  mediaVideoPreviewsProgress: 'ev:videoPreviewsProgress',
   downloadsChanged: 'ev:downloads',
   notify: 'ev:notify',
   hudStats: 'ev:hudStats',
