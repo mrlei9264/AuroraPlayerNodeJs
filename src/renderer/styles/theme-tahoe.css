@@ -85,7 +85,7 @@
   background: var(--tahoe-glass-control);
   border-color: var(--tahoe-edge-soft);
 }
-:root[data-color-theme='classic'] :is(.titlebar .tb-btn, .cinematic-window-control) {
+:root[data-color-theme='classic'] .titlebar .tb-btn {
   color: var(--fg1);
 }
 :root[data-color-theme='classic'] .titlebar .tb-btn:hover { color: var(--accent); }
@@ -131,7 +131,7 @@
 :root[data-color-theme='classic'] :is(
   .theme-settings-popover, .floating-menu-layer.library-popover, .settings-font-menu,
   .context-menu, .dialog, .toast, .notification-center-panel, .hud .hud-panel,
-  .download-thread-menu, .cinematic-speed-menu, .cinematic-track-drawer
+  .download-thread-menu
 ) {
   color: var(--fg0);
   background: var(--tahoe-glass-raised);
@@ -143,10 +143,7 @@
 :root[data-color-theme='classic'] .startup-atmosphere { background: radial-gradient(ellipse at 50% 48%, #bedbff38, transparent 65%); }
 :root[data-color-theme='classic'] .startup-wordmark span { color: var(--fg2); }
 
-/* On dark video, use glass only for compact labels and the mini player. Do
-   not stack a panel behind the transport controls or alter media pixels. */
-:root[data-color-theme='classic'] .home-shell .cinema-mini-player,
-:root[data-color-theme='classic'] .cinematic-quality-badge {
+:root[data-color-theme='classic'] .home-shell .cinema-mini-player {
   color: var(--fg1);
   background: var(--tahoe-glass-media);
   border-color: var(--tahoe-edge);
@@ -154,36 +151,10 @@
   backdrop-filter: var(--tahoe-blur);
   text-shadow: none;
 }
-:root[data-color-theme='classic'] .cinematic-console {
-  color: var(--fg1);
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none !important;
-  backdrop-filter: none;
-  text-shadow: none;
-}
 :root[data-color-theme='classic'] .cinematic-console { border-radius: var(--r-xl); }
-:root[data-color-theme='classic'] .cinematic-vignette { background: none; }
-:root[data-color-theme='classic'] .cinematic-bottom-shade { background: none; }
 :root[data-color-theme='classic'] .cinematic-window-control.close:hover { color: var(--danger); }
-:root[data-color-theme='classic'] :is(.cinematic-time, .cinematic-buffered, .cinematic-network-speed, .cinematic-speed-menu button) { color: var(--fg1); text-shadow: none; }
-:root[data-color-theme='classic'] .cinematic-speed-menu button:hover,
-:root[data-color-theme='classic'] .cinematic-speed-menu button.active { color: var(--accent); background: var(--accent-soft); }
-:root[data-color-theme='classic'] .cinematic-track-drawer :is(.vd-head, .vd-item, .vd-section-title) { color: var(--fg1); border-color: var(--tahoe-edge-soft); }
-:root[data-color-theme='classic'] .cinematic-track-drawer :is(.vd-sub, .vd-section-count, .vd-empty) { color: var(--fg2); }
-:root[data-color-theme='classic'] .cinematic-track-drawer .vd-track-section { background: var(--tahoe-panel-fill); border-color: var(--tahoe-edge-soft); }
-:root[data-color-theme='classic'] .cinematic-track-drawer .vd-item:hover { color: var(--accent); background: var(--tahoe-control-fill); }
-:root[data-color-theme='classic'] .cinematic-track-drawer .vd-item.active { color: var(--accent); background: var(--accent-soft); }
-:root[data-color-theme='classic'] .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten) { color: var(--fg1); text-shadow: none; }
-:root[data-color-theme='classic'] .cinematic-console :is(.cinematic-control-btn, .cinematic-speed-control, .seek-ten):hover { color: var(--accent); background: transparent; border-color: transparent; box-shadow: none !important; }
-:root[data-color-theme='classic'] .cinematic-play { color: var(--accent); background: transparent; box-shadow: none !important; }
 :root[data-color-theme='classic'] :is(.audio-play-control, .audio-play-control:hover) { color: var(--accent); background: var(--tahoe-glass-control); }
-:root[data-color-theme='classic'] .cinematic-title-row h1 { color: #fff; text-shadow: 0 1px 4px #0006; }
-:root[data-color-theme='classic'] .cinematic-quality-badge.active { color: var(--accent); border-color: var(--tahoe-edge-active); }
 :root[data-color-theme='classic'] .cinematic-player .vp-error { --fg0: #fff; --fg1: #ddd; }
-:root[data-color-theme='classic'] .cinematic-chapter-tick { background: #ffffff80; }
-:root[data-color-theme='classic'] .cinematic-chapter-item.preview .cinematic-chapter-tick { background: #fff; }
-:root[data-color-theme='classic'] .cinematic-chapter-item.active .cinematic-chapter-tick { background: var(--accent); }
 :root[data-color-theme='classic'] .immersive-audio-player { background: var(--bg0); }
 :root[data-color-theme='classic'] .audio-ambient { background: transparent; }
 :root[data-color-theme='classic'] .audio-ambient::after { background: none; }

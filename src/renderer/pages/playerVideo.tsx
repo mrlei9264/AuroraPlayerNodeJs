@@ -9,7 +9,17 @@ import { playbackErrorKey } from '../core/i18n'
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 type PlayerHint = { icon: IconName; value?: string }
-type PlayerMenu = 'tracks' | 'speed' | null
+type TrackKind = 'video' | 'audio' | 'subtitle'
+type PlayerMenu = TrackKind | 'speed'
+
+interface TrackMenuConfig {
+  kind: TrackKind
+  icon: IconName
+  label: string
+  tracks: TrackInfo[]
+  selected: number
+  onSelect: (index: number) => void
+}
 
 export function VideoPlayerPage() {
   const isPresent = useIsPresent()
@@ -42,23 +52,22 @@ export function VideoPlayerPage() {
 
   const stageRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
-  const trackDrawerRef = useRef<HTMLElement>(null)
-  const speedMenuRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const hintTimerRef = useRef<number | null>(null)
   const [hint, setHint] = useState<PlayerHint | null>(null)
   const [controlsHover, setControlsHover] = useState(false)
   const [topHover, setTopHover] = useState(false)
   const [focusWithin, setFocusWithin] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [openMenu, setOpenMenu] = useState<PlayerMenu>(null)
+  const [openMenu, setOpenMenu] = useState<PlayerMenu | null>(null)
   const [selectedVideo, setSelectedVideo] = useState(0)
   const [selectedAudio, setSelectedAudio] = useState(0)
   const [selectedSubtitle, setSelectedSubtitle] = useState(-1)
   const [hoveredChapterIndex, setHoveredChapterIndex] = useState<number | null>(null)
   const [focusedChapterIndex, setFocusedChapterIndex] = useState<number | null>(null)
-  const tracksOpen = openMenu === 'tracks'
   const speedOpen = openMenu === 'speed'
-  const keyboardStateRef = useRef({ volume: 80, muted: false, fullscreen: false, phase: session.phase, tracksOpen: false, speedOpen: false })
+  const toggleMenu = (menu: PlayerMenu) => setOpenMenu((current) => current === menu ? null : menu)
+  const keyboardStateRef = useRef({ volume: 80, muted: false, fullscreen: false, phase: session.phase, menuOpen: false })
   const keyboardActionsRef = useRef<{
     togglePlayback: () => void
     jump: (seconds: number) => void
@@ -107,10 +116,34 @@ export function VideoPlayerPage() {
   }, [selectAudioTrack, selectVideoTrack])
   const uiLocked = openMenu !== null || focusWithin || dragging
   const showChrome = controlsHover || uiLocked
-  // Keep the entry point visible for every video. Some Chromium builds do not
-  // expose native track lists until the media is inspected, so hiding the
-  // button based on the current list would make the feature unreachable.
-  const hasTrackChoices = isVideo
+  // Keep the controls visible while the player is still discovering tracks.
+  const trackMenus: TrackMenuConfig[] = isVideo ? [
+    {
+      kind: 'video',
+      icon: 'video',
+      label: t('videoTracks'),
+      tracks: tracks.video,
+      selected: selectedVideo,
+      onSelect: (index) => { setSelectedVideo(index); selectVideoTrack(index) }
+    },
+    {
+      kind: 'audio',
+      icon: 'music',
+      label: t('audioTracks'),
+      tracks: tracks.audio,
+      selected: selectedAudio,
+      onSelect: (index) => { setSelectedAudio(index); selectAudioTrack(index) }
+    },
+    {
+      kind: 'subtitle',
+      icon: 'subtitle',
+      label: t('subtitleTracks'),
+      tracks: tracks.subtitles,
+      selected: selectedSubtitle,
+      onSelect: (index) => { setSelectedSubtitle(index); selectSubtitleTrack(index) }
+    }
+  ] : []
+  const trackMenu = trackMenus.find((menu) => menu.kind === openMenu)
 
   useEffect(() => {
     setHoveredChapterIndex(null)
@@ -173,8 +206,7 @@ export function VideoPlayerPage() {
     muted: session.muted,
     fullscreen: win.fullscreen,
     phase: session.phase,
-    tracksOpen,
-    speedOpen
+    menuOpen: openMenu !== null
   }
   keyboardActionsRef.current = {
     togglePlayback,
@@ -205,7 +237,7 @@ export function VideoPlayerPage() {
     const closeFromOutside = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Element)) return
-      if (trackDrawerRef.current?.contains(target) || speedMenuRef.current?.contains(target) || target.closest('[data-player-menu-trigger]')) return
+      if (menuRef.current?.contains(target) || target.closest('[data-player-menu-trigger]')) return
       setOpenMenu(null)
     }
     window.addEventListener('pointerdown', closeFromOutside, true)
@@ -244,8 +276,9 @@ export function VideoPlayerPage() {
         actions.showHint(nextVolume > 0 ? 'volume' : 'volumeMute', `${nextVolume}%`)
         return
       }
-      const focusedButton = Boolean((event.target as HTMLElement | null)?.closest('button'))
+      const focusedButton = (event.target as HTMLElement | null)?.closest('button')
       if (focusedButton && key === ' ') return
+      if (key === 'Enter' && focusedButton?.closest('[data-player-menu-trigger], .cinematic-menu')) return
       if ((key === ' ' || key.toLowerCase() === 'k') && !event.repeat) {
         event.preventDefault()
         actions.togglePlayback()
@@ -260,7 +293,7 @@ export function VideoPlayerPage() {
         actions.toggleMute()
       } else if (key === 'Escape') {
         event.preventDefault()
-        if (state.tracksOpen || state.speedOpen) setOpenMenu(null)
+        if (state.menuOpen) setOpenMenu(null)
         else if (state.fullscreen) void actions.setFullscreen(false)
         else if (state.phase === 'error') actions.stopPlayback()
       }
@@ -514,31 +547,29 @@ export function VideoPlayerPage() {
 
           <div className="cinematic-right-cluster">
             <div className="cinematic-utility-group">
-              {hasTrackChoices && <ControlButton icon="track" label={t('tracks')} active={tracksOpen} menu="tracks" onClick={() => setOpenMenu((current) => current === 'tracks' ? null : 'tracks')} />}
-              <SpeedControl speed={session.speed} label={t('speed')} open={speedOpen} onClick={() => setOpenMenu((current) => current === 'speed' ? null : 'speed')} />
+              {trackMenus.map(({ kind, icon, label }) => (
+                <ControlButton key={kind} icon={icon} label={label} active={openMenu === kind} menu={kind} onClick={() => toggleMenu(kind)} />
+              ))}
+              <SpeedControl speed={session.speed} label={t('speed')} open={speedOpen} onClick={() => toggleMenu('speed')} />
               <ControlButton icon={win.fullscreen ? 'fullscreenExit' : 'fullscreen'} label={win.fullscreen ? t('exitFullscreen') : t('fullscreen')} onClick={() => void setFullscreen(!win.fullscreen)} />
             </div>
           </div>
         </div>
       </div>
 
-      {tracksOpen && hasTrackChoices && (
-        <TrackDrawer
-          drawerRef={trackDrawerRef}
-          tracks={tracks}
-          selectedVideo={selectedVideo}
-          selectedAudio={selectedAudio}
-          selectedSubtitle={selectedSubtitle}
-          onVideo={(index) => { setSelectedVideo(index); selectVideoTrack(index) }}
-          onAudio={(index) => { setSelectedAudio(index); selectAudioTrack(index) }}
-          onSubtitle={(index) => { setSelectedSubtitle(index); selectSubtitleTrack(index) }}
-          t={t}
+      {trackMenu && (
+        <TrackMenu
+          key={trackMenu.kind}
+          menuRef={menuRef}
+          menu={trackMenu}
+          emptyLabel={t('noTracks')}
+          offLabel={t('off')}
         />
       )}
 
       {speedOpen && (
         <SpeedMenu
-          menuRef={speedMenuRef}
+          menuRef={menuRef}
           speed={session.speed}
           label={t('speed')}
           onSelect={(nextSpeed) => {
@@ -551,7 +582,7 @@ export function VideoPlayerPage() {
   )
 }
 
-function ControlButton({ icon, label, active = false, menu, onClick }: { icon: IconName; label: string; active?: boolean; menu?: Exclude<PlayerMenu, null>; onClick?: () => void }) {
+function ControlButton({ icon, label, active = false, menu, onClick }: { icon: IconName; label: string; active?: boolean; menu?: TrackKind; onClick?: () => void }) {
   return (
     <button
       className={`cinematic-control-btn ${active ? 'active' : ''}`}
@@ -559,7 +590,7 @@ function ControlButton({ icon, label, active = false, menu, onClick }: { icon: I
       aria-label={label}
       aria-pressed={active}
       aria-expanded={menu ? active : undefined}
-      aria-controls={menu === 'tracks' ? 'video-track-menu' : undefined}
+      aria-controls={menu ? `video-${menu}-tracks-menu` : undefined}
       data-player-menu-trigger={menu ? menu : undefined}
       data-tooltip={label}
       onClick={onClick}
@@ -590,7 +621,7 @@ function SpeedControl({ speed, label, open, onClick }: { speed: number; label: s
 
 function SpeedMenu({ menuRef, speed, label, onSelect }: { menuRef: React.RefObject<HTMLDivElement | null>; speed: number; label: string; onSelect: (speed: number) => void }) {
   return (
-    <div ref={menuRef} id="video-speed-menu" className="cinematic-speed-menu" role="menu" aria-label={label}>
+    <div ref={menuRef} id="video-speed-menu" className="cinematic-menu cinematic-speed-menu" role="menu" aria-label={label}>
       {SPEEDS.map((option) => {
         const selected = option === speed
         return (
@@ -604,66 +635,51 @@ function SpeedMenu({ menuRef, speed, label, onSelect }: { menuRef: React.RefObje
   )
 }
 
-function TrackDrawer({
-  drawerRef,
-  tracks,
-  selectedVideo,
-  selectedAudio,
-  selectedSubtitle,
-  onVideo,
-  onAudio,
-  onSubtitle,
-  t
-}: {
-  drawerRef: React.RefObject<HTMLElement | null>
-  tracks: { video: TrackInfo[]; audio: TrackInfo[]; subtitles: TrackInfo[] }
-  selectedVideo: number
-  selectedAudio: number
-  selectedSubtitle: number
-  onVideo: (index: number) => void
-  onAudio: (index: number) => void
-  onSubtitle: (index: number) => void
-  t: (key: string) => string
+function TrackMenu({ menuRef, menu, emptyLabel, offLabel }: {
+  menuRef: React.RefObject<HTMLDivElement | null>
+  menu: TrackMenuConfig
+  emptyLabel: string
+  offLabel: string
 }) {
-  return (
-    <aside ref={drawerRef} id="video-track-menu" className="vp-drawer cinematic-track-drawer" aria-label={t('tracks')}>
-      <div className="vd-body">
-        <TrackSection icon="video" kind="video" title={t('videoTracks')} tracks={tracks.video} selected={selectedVideo} emptyLabel={t('noTracks')} onSelect={onVideo} />
-        <TrackSection icon="music" kind="audio" title={t('audioTracks')} tracks={tracks.audio} selected={selectedAudio} emptyLabel={t('noTracks')} onSelect={onAudio} />
-        <section className="vd-track-section">
-          <div className="vd-section-title"><span className="vd-section-icon"><Icon name="subtitle" size={17} /></span><span>{t('subtitleTracks')}</span><span className="vd-section-count">{tracks.subtitles.length}</span></div>
-          <div className="vd-options">
-            <TrackOption active={selectedSubtitle < 0} label={t('off')} onClick={() => onSubtitle(-1)} />
-            {tracks.subtitles.map((track, index) => <TrackOption key={`subtitle-${track.id}`} active={selectedSubtitle === index} label={track.title || `${t('subtitleTracks')} ${index + 1}`} detail={formatTrackDetail(track, 'subtitle')} onClick={() => onSubtitle(index)} />)}
-          </div>
-        </section>
-      </div>
-    </aside>
-  )
-}
+  const { kind, icon, label, tracks, selected, onSelect } = menu
 
-function TrackSection({ icon, kind, title, tracks, selected, emptyLabel, onSelect }: { icon: IconName; kind: 'video' | 'audio'; title: string; tracks: TrackInfo[]; selected: number; emptyLabel: string; onSelect: (index: number) => void }) {
   return (
-    <section className="vd-track-section">
-      <div className="vd-section-title"><span className="vd-section-icon"><Icon name={icon} size={17} /></span><span>{title}</span><span className="vd-section-count">{tracks.length}</span></div>
-      <div className="vd-options">
-        {tracks.length > 0
-          ? tracks.map((track, index) => <TrackOption key={`${title}-${track.id}`} active={selected === index} label={track.title || `${title} ${index + 1}`} detail={formatTrackDetail(track, kind)} onClick={() => onSelect(index)} />)
-          : <TrackEmpty label={emptyLabel} />}
+    <div ref={menuRef} id={`video-${kind}-tracks-menu`} className="cinematic-menu cinematic-track-menu" role="group" aria-label={label}>
+      <div className="vd-section-title">
+        <span className="vd-section-icon"><Icon name={icon} size={17} /></span>
+        <span>{label}</span>
+        <span className="vd-section-count">{tracks.length}</span>
       </div>
-    </section>
+      <div className="vd-options">
+        {kind === 'subtitle' && <TrackOption active={selected < 0} label={offLabel} onClick={() => onSelect(-1)} />}
+        {tracks.map((track, index) => (
+          <TrackOption
+            key={track.id}
+            active={selected === index}
+            label={track.title || `${label} ${index + 1}`}
+            detail={formatTrackDetail(track, kind)}
+            onClick={() => onSelect(index)}
+          />
+        ))}
+        {kind !== 'subtitle' && tracks.length === 0 && <div className="vd-empty">{emptyLabel}</div>}
+      </div>
+    </div>
   )
 }
 
 function TrackOption({ active, label, detail, onClick }: { active: boolean; label: string; detail?: string; onClick: () => void }) {
-  return <button className={`vd-item ${active ? 'active' : ''}`} type="button" aria-pressed={active} onClick={onClick}><span className="vd-copy"><span className="vd-main">{label}</span>{detail && <span className="vd-sub">{detail}</span>}</span><span className="vd-selection-indicator" aria-hidden="true">{active && <Icon name="check" size={17} />}</span></button>
+  return (
+    <button className={`vd-item ${active ? 'active' : ''}`} type="button" aria-pressed={active} onClick={onClick}>
+      <span className="vd-copy">
+        <span className="vd-main">{label}</span>
+        {detail && <span className="vd-sub">{detail}</span>}
+      </span>
+      <span className="vd-selection-indicator" aria-hidden="true">{active && <Icon name="check" size={17} />}</span>
+    </button>
+  )
 }
 
-function TrackEmpty({ label }: { label: string }) {
-  return <div className="vd-empty">{label}</div>
-}
-
-function formatTrackDetail(track: TrackInfo, kind: 'video' | 'audio' | 'subtitle'): string {
+function formatTrackDetail(track: TrackInfo, kind: TrackKind): string {
   const parts: string[] = []
   if (track.language) parts.push(track.language.toUpperCase())
   if (track.codec) parts.push(track.codec.toUpperCase())

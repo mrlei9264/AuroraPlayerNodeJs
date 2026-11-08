@@ -110,34 +110,8 @@
 :root[data-accent-theme] .network-select:focus { border-color: color-mix(in srgb, var(--accent) 74%, transparent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
 :root[data-accent-theme] .network-checkbox { color: var(--bg0); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
 
-/* Video player chrome. The stage itself intentionally remains neutral so media stays color-accurate. */
-:root[data-accent-theme] .cinematic-player {
-  --solar-amber: var(--accent);
-  --solar-amber-hi: var(--accent-end);
-  --solar-glass: color-mix(in srgb, var(--surface) 76%, transparent);
-  --solar-white: var(--fg0);
-}
-:root[data-accent-theme] .cinematic-back:hover { color: var(--accent-end); }
-:root[data-accent-theme] .cinematic-atmos { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: inset 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent); }
-:root[data-accent-theme] .cinematic-console {
-  color: var(--fg0);
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-:root[data-accent-theme] input[type='range'].cinematic-seek { background: linear-gradient(90deg, var(--accent) 0%, var(--accent-end) var(--vp-progress), color-mix(in srgb, var(--fg0) 19%, transparent) var(--vp-progress), color-mix(in srgb, var(--fg0) 11%, transparent) 100%); }
-:root[data-accent-theme] input.cinematic-seek::-webkit-slider-thumb { background: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 64%, transparent); }
-:root[data-accent-theme] .cinematic-time { color: color-mix(in srgb, var(--fg0) 78%, transparent); }
 :root[data-accent-theme] .cinematic-buffered,
 :root[data-accent-theme] .cinematic-network-speed { color: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); }
-:root[data-accent-theme] .cinematic-transport::before { display: none; }
-:root[data-accent-theme] .cinematic-control-btn.active { color: var(--accent-end); background: transparent; border-color: transparent; }
-:root[data-accent-theme] .cinematic-speed-control:hover { color: var(--accent-end); }
-:root[data-accent-theme] .cinematic-speed-control.active { color: var(--accent-end); background: transparent; border-color: transparent; }
-:root[data-accent-theme] .seek-ten:hover { color: var(--accent-end); }
-:root[data-accent-theme] .cinematic-play { color: var(--fg0); background: transparent; box-shadow: none; }
-:root[data-accent-theme] input[type='range'].cinematic-volume { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 86%, transparent) 0%, color-mix(in srgb, var(--accent-end) 86%, transparent) var(--vp-volume), color-mix(in srgb, var(--fg0) 15%, transparent) var(--vp-volume), color-mix(in srgb, var(--fg0) 15%, transparent) 100%); }
-:root[data-accent-theme] input.cinematic-volume::-webkit-slider-thumb { background: color-mix(in srgb, var(--accent-end) 72%, var(--fg0)); box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 44%, transparent); }
 :root[data-accent-theme] .cinematic-player .vp-big-buffer .ring { border-top-color: var(--accent-end); }
 :root[data-accent-theme] .cinematic-player .vp-center-hint { color: var(--accent-end); border-color: color-mix(in srgb, var(--accent) 28%, transparent); background: color-mix(in srgb, var(--surface) 78%, transparent); }
 
